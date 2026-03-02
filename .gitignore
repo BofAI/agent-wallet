@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+.env
+
+# TypeScript
+node_modules/
+dist/
+coverage/
+npm-debug.log
+.DS_Store
