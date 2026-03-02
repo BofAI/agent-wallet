@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.env
+.keystore.json
+.keystore*.json
+package-lock.json

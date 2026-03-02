@@ -2,6 +2,9 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from tronpy import AsyncTron
 from wallet.tron_provider import TronProvider
+from keystore.keystore import Keystore
+import os
+import tempfile
 
 @pytest.fixture
 def mock_tron_client(mocker):
@@ -12,17 +15,28 @@ def mock_tron_client(mocker):
 
 @pytest.fixture
 def provider(mock_tron_client):
-    # Mock AsyncHTTPProvider to avoid network calls during init
-    with pytest.MonkeyPatch.context() as m:
-        m.setattr("wallet.tron_provider.AsyncHTTPProvider", MagicMock())
-        # Mock PrivateKey to avoid errors with dummy key
-        m.setattr("wallet.tron_provider.PrivateKey", MagicMock())
-        p = TronProvider(private_key="00" * 32)
-        # Manually set the client to our mock because __init__ creates a new instance
-        p.client = mock_tron_client
-        p._key = MagicMock()
-        p.address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
-        return p
+    d = tempfile.mkdtemp(prefix="tron-provider-ks-")
+    try:
+        # Mock AsyncHTTPProvider to avoid network calls during init
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr("wallet.tron_provider.AsyncHTTPProvider", MagicMock())
+            # Mock PrivateKey to avoid errors with dummy key
+            m.setattr("wallet.tron_provider.PrivateKey", MagicMock())
+
+            fp = os.path.join(d, "Keystore")
+            Keystore.to_file(fp, {"privateKey": "00" * 32})
+            p = TronProvider(keystore_path=fp)
+            # Manually set the client to our mock because __init__ creates a new instance
+            p.client = mock_tron_client
+            p._key = MagicMock()
+            p.address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+            yield p
+    finally:
+        try:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
 
 @pytest.mark.asyncio
 async def test_get_balance(provider, mock_tron_client):
@@ -64,8 +78,35 @@ async def test_send_transaction(provider, mock_tron_client):
     mock_txn.sign.return_value = mock_signed_txn
 
     result = await provider.send_transaction("recipient_addr", 50.0)
-    
-    assert result['result'] is True
-    assert result['txid'] == '123'
-    # Verify chain calls
+
+    assert result["result"] is True
+    assert result["txid"] == "123"
     mock_tron_client.trx.transfer.assert_called_with(provider.address, "recipient_addr", 50.0)
+
+
+@pytest.mark.asyncio
+async def test_get_account_info(provider):
+    info = await provider.get_account_info()
+    assert info == {"address": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"}
+
+
+@pytest.mark.asyncio
+async def test_sign_tx(provider):
+    mock_txn = MagicMock()
+    mock_signed = MagicMock()
+    mock_signed._signature = ["sig-hex"]
+    mock_txn.sign.return_value = mock_signed
+    result = await provider.sign_tx(mock_txn)
+    assert result["signed_tx"] is mock_signed
+    assert result["signature"] == "sig-hex"
+
+
+@pytest.mark.asyncio
+async def test_sign_message(provider):
+    class _Sig:
+        def hex(self):
+            return "msg-sig-hex"
+
+    provider._key.sign_msg_hash.return_value = _Sig()
+    sig = await provider.sign_message(b"hello")
+    assert sig == "msg-sig-hex"

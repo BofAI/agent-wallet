@@ -1,5 +1,14 @@
-import { TronProvider } from './tron_provider';
+import { TronProvider, type TronProviderOptions } from './tron_provider';
 import { TronWeb } from 'tronweb';
+
+export interface FlashProviderOptions extends TronProviderOptions {
+  flashNode?: string;
+  /** Optional full node override for FlashProvider only */
+  fullNode?: string;
+  privyAppId?: string;
+  privyAppSecret?: string;
+  walletId?: string;
+}
 
 export class FlashProvider extends TronProvider {
   protected flashTronWeb: any;
@@ -7,54 +16,107 @@ export class FlashProvider extends TronProvider {
   protected privyAppSecret: string;
   protected walletId: string;
 
-  /**
-   * Initialize FlashProvider
-   * @param fullNode Standard full node URL
-   * @param flashNode High-speed/Private node URL for flash transactions
-   * @param privateKey Private key (optional if using Privy)
-   * @param apiKey TronGrid API Key (optional)
-   * @param privyAppId Privy App ID (optional, defaults to env)
-   * @param privyAppSecret Privy App Secret (optional, defaults to env)
-   * @param walletId Privy Wallet ID / Address (optional, defaults to env)
-   */
-  constructor(
-    fullNode: string = process.env.TRON_RPC_URL || 'https://api.trongrid.io',
-    flashNode: string = process.env.TRON_FLASH_RPC_URL || fullNode,
-    privateKey: string = process.env.TRON_PRIVATE_KEY || '',
-    apiKey: string = process.env.TRON_GRID_API_KEY || '',
-    privyAppId: string = process.env.PRIVY_APP_ID || '',
-    privyAppSecret: string = process.env.PRIVY_APP_SECRET || '',
-    walletId: string = process.env.PRIVY_WALLET_ID || ''
-  ) {
-    super(fullNode, fullNode, fullNode, privateKey, apiKey);
+  constructor(opts: FlashProviderOptions = {}) {
+    super(opts);
 
-    this.privyAppId = privyAppId;
-    this.privyAppSecret = privyAppSecret;
-    this.walletId = walletId;
+    // privyAppId/privyAppSecret/walletId come from keystore (or explicit opts), not from env.
+    this.privyAppId = opts.privyAppId || '';
+    this.privyAppSecret = opts.privyAppSecret || '';
+    this.walletId = opts.walletId || '';
 
-    // If walletId provided, use it as address
+    // Load missing Privy credentials from keystore in constructor (best-effort).
+    if (typeof (this.keystore as any).getSync === 'function') {
+      const ksPrivyAppId = (this.keystore as any).getSync('privyAppId') as string | undefined;
+      const ksPrivyAppSecret = (this.keystore as any).getSync('privyAppSecret') as string | undefined;
+      const ksWalletId = (this.keystore as any).getSync('walletId') as string | undefined;
+      if (!this.privyAppId && ksPrivyAppId) this.privyAppId = ksPrivyAppId;
+      if (!this.privyAppSecret && ksPrivyAppSecret) this.privyAppSecret = ksPrivyAppSecret;
+      if (!this.walletId && ksWalletId) this.walletId = ksWalletId;
+    }
+
     if (this.walletId) {
       this.address = this.walletId;
     }
 
+    const flashNode = opts.flashNode || process.env.TRON_FLASH_RPC_URL || opts.fullNode || 'https://api.trongrid.io';
+    const fullNode = opts.fullNode || 'https://api.trongrid.io';
+
     if (flashNode !== fullNode) {
-      const options: any = {
+      const ksPrivateKey =
+        typeof (this.keystore as any).getSync === 'function'
+          ? ((this.keystore as any).getSync('privateKey') as string | undefined)
+          : undefined;
+      const tronOpts: any = {
         fullHost: flashNode,
-        privateKey: privateKey || undefined
+        privateKey: opts.privateKey || ksPrivateKey || undefined,
       };
-      if (apiKey) {
-        options.headers = { "TRON-PRO-API-KEY": apiKey };
-      }
-      this.flashTronWeb = new TronWeb(options);
+      this.flashTronWeb = new TronWeb(tronOpts);
     } else {
       this.flashTronWeb = this.tronWeb;
     }
   }
 
   /**
-   * Sign transaction using Privy API
-   * @param transaction Transaction object
+   * Load additional Privy credentials from keystore.
+   * Keystore keys: privyAppId, privyAppSecret, walletId
    */
+  async init(): Promise<this> {
+    // Compatibility: constructor already loads credentials from keystore when possible.
+    // Still read again to support custom keystore implementations.
+    await super.init();
+    return this;
+  }
+
+  /**
+   * Factory: create and init a FlashProvider in one step.
+   */
+  static async create(opts: FlashProviderOptions = {}): Promise<FlashProvider> {
+    const provider = new FlashProvider(opts);
+    await provider.init();
+    return provider;
+  }
+
+  override async signMessage(message: Uint8Array): Promise<string> {
+    // If Privy not configured, fall back to local signing (TronProvider)
+    if (!this.privyAppId || !this.privyAppSecret || !this.walletId) {
+      return super.signMessage(message);
+    }
+
+    const msgHex = Buffer.from(message).toString("hex");
+    const url = `https://auth.privy.io/api/v1/wallets/${encodeURIComponent(this.walletId)}/sign`;
+    const auth = btoa(`${this.privyAppId}:${this.privyAppSecret}`);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        "privy-app-id": this.privyAppId,
+      },
+      body: JSON.stringify({
+        method: "raw_sign",
+        params: {
+          message: msgHex,
+          encoding: "hex",
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      throw new Error(
+        `Privy signing failed (${response.status}): ${errBody || response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    const signature = data.signature;
+    if (!signature) {
+      throw new Error("Privy signing response did not contain a signature");
+    }
+    return signature;
+  }
+
   async sign(transaction: any): Promise<any> {
     if (!this.privyAppId || !this.privyAppSecret || !this.walletId) {
       return super.sign(transaction);
@@ -62,8 +124,7 @@ export class FlashProvider extends TronProvider {
 
     const txID = transaction.txID;
 
-    // Prepare Privy API call
-    const url = `https://auth.privy.io/api/v1/wallets/${this.walletId}/sign`;
+    const url = `https://auth.privy.io/api/v1/wallets/${encodeURIComponent(this.walletId)}/sign`;
     const auth = btoa(`${this.privyAppId}:${this.privyAppSecret}`);
 
     const response = await fetch(url, {
@@ -83,44 +144,31 @@ export class FlashProvider extends TronProvider {
     });
 
     if (!response.ok) {
-      throw new Error(`Privy signing failed: ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Privy signing failed (${response.status}): ${errBody || response.statusText}`);
     }
 
     const data = await response.json();
     const signature = data.signature;
 
-    // Add signature to transaction
-    if (signature) {
-      // TronWeb transaction structure usually has signature array
-      if (!transaction.signature) {
-        transaction.signature = [];
-      }
-      transaction.signature.push(signature);
+    if (!signature) {
+      throw new Error('Privy signing response did not contain a signature');
     }
 
-    return transaction;
+    const signedTx = JSON.parse(JSON.stringify(transaction));
+    if (!signedTx.signature) {
+      signedTx.signature = [];
+    }
+    signedTx.signature.push(signature);
+
+    return signedTx;
   }
 
-  /**
-   * Send a flash transaction with higher fee limit or via private node
-   * @param toAddress Recipient
-   * @param amount Amount in SUN
-   * @param priorityFee Additional fee limit in SUN
-   */
-  async sendTransaction(toAddress: string, amount: number, priorityFee: number = 1000): Promise<any> {
-    // Use flashTronWeb for broadcasting
+  async sendTransaction(toAddress: string, amount: number): Promise<any> {
+    if (!this.address) throw new Error("Address not available for signing");
     try {
-      // Build transaction
-      const tradeobj = await this.flashTronWeb.transactionBuilder.sendTrx(
-        toAddress,
-        amount,
-        this.address
-      );
-
-      // Sign with Privy
+      const tradeobj = await this.flashTronWeb.transactionBuilder.sendTrx(toAddress, amount, this.address);
       const signedtxn = await this.sign(tradeobj);
-
-      // Broadcast
       const receipt = await this.flashTronWeb.trx.sendRawTransaction(signedtxn);
       return receipt;
     } catch (error) {
