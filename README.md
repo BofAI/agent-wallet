@@ -82,11 +82,11 @@ signature = await wallet.sign_message(b"Hello from agent-wallet!")
 ### TypeScript
 
 ```bash
-npm install agent-wallet
+npm install @bankofai/agent-wallet
 ```
 
 ```typescript
-import { WalletFactory } from "agent-wallet";
+import { WalletFactory } from "@bankofai/agent-wallet";
 
 const provider = WalletFactory({
   secretsDir: "~/.agent-wallet",
@@ -157,6 +157,7 @@ Both Python and TypeScript implementations produce identical outputs:
 | Example | Python | TypeScript |
 |---|---|---|
 | Sign & broadcast TRON tx | [tron_sign_and_broadcast.py](./packages/python/examples/tron_sign_and_broadcast.py) | [tron-sign-and-broadcast.ts](./packages/typescript/examples/tron-sign-and-broadcast.ts) |
+| Sign & broadcast BSC tx | [bsc_sign_and_broadcast.py](./packages/python/examples/bsc_sign_and_broadcast.py) | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts) |
 | EIP-712 typed data (x402) | [x402_sign_typed_data.py](./packages/python/examples/x402_sign_typed_data.py) | [x402-sign-typed-data.ts](./packages/typescript/examples/x402-sign-typed-data.ts) |
 
 ## Contributing

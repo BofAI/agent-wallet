@@ -10,9 +10,9 @@ Signing-only by design: handles key storage and signing locally, with no RPC or 
 ## Install
 
 ```bash
-npm install agent-wallet
+npm install @bankofai/agent-wallet
 # or
-pnpm add agent-wallet
+pnpm add @bankofai/agent-wallet
 ```
 
 **Requires Node.js ≥ 18**
@@ -20,7 +20,7 @@ pnpm add agent-wallet
 ## Quick Start
 
 ```typescript
-import { WalletFactory } from "agent-wallet";
+import { WalletFactory } from "@bankofai/agent-wallet";
 
 // Initialize provider (decrypts keys, then discards password)
 const provider = WalletFactory({
@@ -31,7 +31,7 @@ const provider = WalletFactory({
 // List available wallets
 const wallets = await provider.listWallets();
 for (const w of wallets) {
-  console.log(`${w.id} (${w.type}, ${w.chainId})`);
+  console.log(`${w.id} (${w.type})`);
 }
 
 // Get a wallet and sign
@@ -47,7 +47,7 @@ const signature = await wallet.signMessage(
 ### WalletFactory
 
 ```typescript
-import { WalletFactory } from "agent-wallet";
+import { WalletFactory } from "@bankofai/agent-wallet";
 
 // Local mode — keys stored on disk, encrypted with Keystore V3
 const provider = WalletFactory({
@@ -138,7 +138,7 @@ const sig = await wallet.signTypedData({ /* ... */ });
 You can also use wallet adapters directly without the provider layer:
 
 ```typescript
-import { EvmWallet, TronWallet } from "agent-wallet";
+import { EvmWallet, TronWallet } from "@bankofai/agent-wallet";
 
 // EVM wallet from raw private key
 const evmWallet = new EvmWallet(privateKeyBytes);
@@ -156,7 +156,7 @@ import {
   WalletNotFoundError,
   SigningError,
   DecryptionError,
-} from "agent-wallet";
+} from "@bankofai/agent-wallet";
 
 try {
   const wallet = await provider.getWallet("nonexistent");
@@ -179,18 +179,12 @@ WalletError
 └── UnsupportedOperationError
 ```
 
-## Supported Chains
+## Supported Wallet Types
 
-| Chain | Type | Chain ID |
+| Type | Chains | Signing Library |
 |---|---|---|
-| Ethereum | `evm_local` | `eip155:1` |
-| BSC | `evm_local` | `eip155:56` |
-| Polygon | `evm_local` | `eip155:137` |
-| Base | `evm_local` | `eip155:8453` |
-| Arbitrum | `evm_local` | `eip155:42161` |
-| TRON Mainnet | `tron_local` | `tron:mainnet` |
-| TRON Nile | `tron_local` | `tron:nile` |
-| TRON Shasta | `tron_local` | `tron:shasta` |
+| `evm_local` | Ethereum, BSC, Polygon, Base, Arbitrum, any EVM | viem |
+| `tron_local` | TRON Mainnet, Nile, Shasta | @noble/curves + bs58check |
 
 ## Dependencies
 
@@ -204,6 +198,7 @@ WalletError
 ## Examples
 
 - [tron-sign-and-broadcast.ts](./examples/tron-sign-and-broadcast.ts) — Build tx via TronGrid, sign with SDK, broadcast
+- [bsc-sign-and-broadcast.ts](./examples/bsc-sign-and-broadcast.ts) — Build BSC testnet tx, sign with SDK, broadcast
 - [x402-sign-typed-data.ts](./examples/x402-sign-typed-data.ts) — EIP-712 typed data signing for x402 PaymentPermit
 
 ## Security

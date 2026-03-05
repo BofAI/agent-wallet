@@ -34,7 +34,7 @@ async def main():
     # List available wallets
     wallets = await provider.list_wallets()
     for w in wallets:
-        print(f"{w.id} ({w.type}, {w.chain_id})")
+        print(f"{w.id} ({w.type})")
 
     # Get a wallet and sign
     wallet = await provider.get_wallet("my-wallet")
@@ -50,7 +50,7 @@ asyncio.run(main())
 # Initialize secrets directory with master password
 agent-wallet init
 
-# Add a wallet (interactive — choose type, chain, enter private key)
+# Add a wallet (interactive — choose type, enter private key)
 agent-wallet add
 
 # List all wallets
@@ -172,22 +172,17 @@ WalletError
 └── UnsupportedOperationError
 ```
 
-## Supported Chains
+## Supported Wallet Types
 
-| Chain | Type | Chain ID |
+| Type | Chains | Signing Library |
 |---|---|---|
-| Ethereum | `evm_local` | `eip155:1` |
-| BSC | `evm_local` | `eip155:56` |
-| Polygon | `evm_local` | `eip155:137` |
-| Base | `evm_local` | `eip155:8453` |
-| Arbitrum | `evm_local` | `eip155:42161` |
-| TRON Mainnet | `tron_local` | `tron:mainnet` |
-| TRON Nile | `tron_local` | `tron:nile` |
-| TRON Shasta | `tron_local` | `tron:shasta` |
+| `evm_local` | Ethereum, BSC, Polygon, Base, Arbitrum, any EVM | eth-account |
+| `tron_local` | TRON Mainnet, Nile, Shasta | tronpy |
 
 ## Examples
 
 - [tron_sign_and_broadcast.py](./examples/tron_sign_and_broadcast.py) — Build tx via TronGrid, sign with SDK, broadcast
+- [bsc_sign_and_broadcast.py](./examples/bsc_sign_and_broadcast.py) — Build BSC testnet tx, sign with SDK, broadcast
 - [x402_sign_typed_data.py](./examples/x402_sign_typed_data.py) — EIP-712 typed data signing for x402 PaymentPermit
 
 ## Security

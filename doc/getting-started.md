@@ -78,21 +78,17 @@ The interactive prompt will ask:
 
 1. **Wallet name** — A unique identifier (e.g. `my-tron-wallet`)
 2. **Wallet type** — `evm_local` or `tron_local`
-3. **Chain ID** — Select from common chains or enter a custom one
-4. **Private key** — Generate a new key or import an existing one (hex)
-5. **API Key** (TRON only) — Optional TronGrid API key
+3. **Private key** — Generate a new key or import an existing one (hex)
 
 ```
 Master password: ********
 Wallet name: my-tron-wallet
 > Wallet type: tron_local
-> Chain ID: tron:nile
 > Private key: import
 Paste private key (hex): ********
 Imported private key.
   Address: TJRabPrwbZy45sbavfcjinPJC18kjpRTv8
   Saved:   id_my-tron-wallet.json
-TronGrid API Key (optional, press enter to skip):
 Wallet 'my-tron-wallet' added. Config updated.
 ```
 
@@ -104,12 +100,12 @@ agent-wallet list
 
 ```
               Wallets
-┌──────────────────┬────────────┬─────────────┬──────────────────┐
-│ Name             │ Type       │ Chain       │ Address          │
-├──────────────────┼────────────┼─────────────┼──────────────────┤
-│ my-tron-wallet   │ tron_local │ tron:nile   │ TJRabPrw...RTv8  │
-│ my-evm-wallet    │ evm_local  │ eip155:1    │ 0x8c71...4fe3    │
-└──────────────────┴────────────┴─────────────┴──────────────────┘
+┌──────────────────┬────────────┬──────────────────┐
+│ Name             │ Type       │ Address          │
+├──────────────────┼────────────┼──────────────────┤
+│ my-tron-wallet   │ tron_local │ TJRabPrw...RTv8  │
+│ my-evm-wallet    │ evm_local  │ 0x8c71...4fe3    │
+└──────────────────┴────────────┴──────────────────┘
 ```
 
 ## 5. Inspect a Wallet
@@ -121,7 +117,6 @@ agent-wallet inspect my-tron-wallet
 ```
 Wallet      my-tron-wallet
 Type        tron_local
-Chain       tron:nile
 Address     TJRabPrwbZy45sbavfcjinPJC18kjpRTv8
 Identity    id_my-tron-wallet.json ✓
 Credential  —
@@ -207,7 +202,7 @@ After setup, your secrets directory looks like this:
 ```
 ~/.agent-wallet/
 ├── master.json              # Password verification sentinel
-├── wallets_config.json      # Wallet configuration (names, types, chains)
+├── wallets_config.json      # Wallet configuration (names, types, addresses)
 ├── id_my-tron-wallet.json   # Encrypted private key (Keystore V3)
 ├── id_my-evm-wallet.json    # Encrypted private key (Keystore V3)
 └── cred_my-tron-wallet.json # Encrypted API key (optional)
@@ -219,4 +214,5 @@ All `id_*.json` and `cred_*.json` files are encrypted with Keystore V3 (scrypt +
 
 - Use the SDK programmatically — see the [Python README](../packages/python/README.md#quick-start)
 - Build and sign TRON transactions — see [tron_sign_and_broadcast.py](../packages/python/examples/tron_sign_and_broadcast.py)
+- Build and sign BSC transactions — see [bsc_sign_and_broadcast.py](../packages/python/examples/bsc_sign_and_broadcast.py)
 - Sign EIP-712 data for x402 — see [x402_sign_typed_data.py](../packages/python/examples/x402_sign_typed_data.py)
