@@ -53,6 +53,36 @@ DEFAULT_DIR = os.environ.get(
     os.path.join(Path.home(), ".agent-wallet"),
 )
 
+# Display aliases for chain IDs (CLI-only, not part of core SDK)
+CHAIN_ALIASES: dict[str, str] = {
+    "eip155:1": "Ethereum Mainnet",
+    "eip155:11155111": "Ethereum Sepolia",
+    "eip155:56": "BNB Smart Chain",
+    "eip155:97": "BSC Testnet",
+    "eip155:137": "Polygon",
+    "eip155:80002": "Polygon Amoy",
+    "eip155:8453": "Base",
+    "eip155:84532": "Base Sepolia",
+    "eip155:42161": "Arbitrum One",
+    "eip155:421614": "Arbitrum Sepolia",
+    "tron:mainnet": "TRON Mainnet",
+    "tron:nile": "TRON Nile",
+    "tron:shasta": "TRON Shasta",
+}
+
+
+def _chain_display(chain_id: str) -> str:
+    """Format chain ID for display: 'Ethereum Mainnet (eip155:1)'."""
+    alias = CHAIN_ALIASES.get(chain_id)
+    return f"{alias} ({chain_id})" if alias else chain_id
+
+
+def _chain_from_display(display: str) -> str:
+    """Extract chain ID from display string, e.g. 'Ethereum Mainnet (eip155:1)' → 'eip155:1'."""
+    if "(" in display and display.endswith(")"):
+        return display[display.rindex("(") + 1 : -1]
+    return display
+
 
 # --- Helpers ---
 
@@ -147,14 +177,24 @@ def add(
     wallet_conf: dict = {"type": wallet_type.value}
 
     if wallet_type in (WalletType.EVM_LOCAL, WalletType.TRON_LOCAL):
-        # Chain ID
-        chain_choices = COMMON_CHAINS.get(wallet_type, [])
-        chain_id = _interactive_select("Chain ID:", chain_choices + ["custom"])
-        if chain_id == "custom":
-            chain_id = Prompt.ask("[bold]Custom Chain ID[/bold]")
-        elif chain_id is None:
-            chain_id = Prompt.ask("[bold]Chain ID[/bold]", default=chain_choices[0])
-        wallet_conf["chain_id"] = chain_id
+        # Chain ID (optional — metadata only, not used for signing)
+        chain_ids = COMMON_CHAINS.get(wallet_type, [])
+        skip_label = (
+            "All EVM chains (skip)" if wallet_type == WalletType.EVM_LOCAL
+            else "All TRON networks (skip)"
+        )
+        chain_display_choices = [skip_label] + [_chain_display(c) for c in chain_ids] + ["custom"]
+        selected = _interactive_select("Chain (optional):", chain_display_choices)
+        if selected == skip_label:
+            pass  # no chain_id stored
+        elif selected == "custom":
+            wallet_conf["chain_id"] = Prompt.ask("[bold]Custom Chain ID[/bold]")
+        elif selected is None:
+            chain_input = Prompt.ask("[bold]Chain ID[/bold] (enter to skip)", default="")
+            if chain_input:
+                wallet_conf["chain_id"] = chain_input
+        else:
+            wallet_conf["chain_id"] = _chain_from_display(selected)
 
         # Private key: generate or import
         action = _interactive_select("Private key:", ["generate", "import"])
@@ -182,19 +222,6 @@ def add(
         wallet_conf["address"] = address
         console.print(f"  Address: [cyan]{address}[/cyan]")
         console.print(f"  Saved:   [dim]id_{identity_file}.json[/dim]")
-
-        # TronGrid API key for Tron
-        if wallet_type == WalletType.TRON_LOCAL:
-            api_key = Prompt.ask(
-                "[bold]TronGrid API Key[/bold] (optional, press enter to skip)",
-                default="",
-                password=True,
-            )
-            if api_key:
-                cred_name = name
-                kv_store.save_credential(cred_name, api_key)
-                wallet_conf["cred_file"] = cred_name
-                console.print(f"  Saved:   [dim]cred_{cred_name}.json[/dim]")
 
     else:
         console.print(f"[yellow]Wallet type '{wallet_type}' is not yet fully supported.[/yellow]")
@@ -224,7 +251,8 @@ def list_wallets(
     table.add_column("Address", style="dim")
 
     for wid, conf in config.wallets.items():
-        table.add_row(wid, conf.type.value, conf.chain_id or "—", conf.address or "—")
+        chain = _chain_display(conf.chain_id) if conf.chain_id else "—"
+        table.add_row(wid, conf.type.value, chain, conf.address or "—")
 
     console.print(table)
 

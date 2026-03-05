@@ -10,7 +10,7 @@ export class TronWallet implements BaseWallet, Eip712Capable {
   private address: string
   private chainId: string
 
-  constructor(privateKey: Uint8Array, _apiKey?: string, chainId?: string) {
+  constructor(privateKey: Uint8Array, chainId?: string) {
     this.privateKeyBytes = privateKey
     this.chainId = chainId ?? 'tron:mainnet'
 

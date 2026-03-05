@@ -104,11 +104,7 @@ function createWallet(conf: WalletConfig, kvStore: SecureKVStore): BaseWallet {
     }
     case "tron_local": {
       const privateKey = kvStore.loadPrivateKey(conf.identity_file!);
-      let apiKey: string | undefined;
-      if (conf.cred_file) {
-        apiKey = kvStore.loadCredential(conf.cred_file) as string;
-      }
-      return new TronWallet(privateKey, apiKey, conf.chain_id);
+      return new TronWallet(privateKey, conf.chain_id);
     }
     default:
       throw new Error(`Unknown wallet type: ${conf.type}`);

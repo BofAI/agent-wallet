@@ -28,7 +28,7 @@ export {
 } from "./core/provider.js";
 
 // Storage
-export { loadConfig, saveConfig } from "./storage/config.js";
+export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./storage/config.js";
 export type { WalletConfig, WalletsTopology, WalletInfo } from "./storage/config.js";
 
 // Secret management

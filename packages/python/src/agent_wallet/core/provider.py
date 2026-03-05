@@ -114,12 +114,8 @@ def _create_wallet(conf: WalletConfig, kv_store: SecureKVStore) -> BaseWallet:
 
             assert conf.identity_file is not None
             private_key = kv_store.load_private_key(conf.identity_file)
-            api_key = None
-            if conf.cred_file:
-                api_key = kv_store.load_credential(conf.cred_file)
             return TronWallet(
                 private_key=private_key,
-                api_key=api_key,
                 chain_id=conf.chain_id,
             )
 

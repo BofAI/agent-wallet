@@ -19,7 +19,6 @@ class TronWallet(BaseWallet, Eip712Capable):
     def __init__(
         self,
         private_key: bytes,
-        api_key: Optional[str | dict] = None,
         chain_id: Optional[str] = None,
     ) -> None:
         from tronpy.keys import PrivateKey
