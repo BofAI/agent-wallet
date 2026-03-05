@@ -20,7 +20,10 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "publish:beta": "pnpm publish --tag beta",
+    "publish:latest": "pnpm publish"
   },
   "files": [
     "dist",
