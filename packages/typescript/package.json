@@ -7,8 +7,10 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -17,7 +19,30 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
+  "author": "BankOfAI <gummy780j@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BofAI/agent-wallet",
+    "directory": "packages/typescript"
+  },
+  "homepage": "https://github.com/BofAI/agent-wallet/tree/main/packages/typescript",
+  "bugs": "https://github.com/BofAI/agent-wallet/issues",
+  "keywords": [
+    "wallet",
+    "signing",
+    "blockchain",
+    "evm",
+    "tron",
+    "agent",
+    "mcp",
+    "eip712"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
