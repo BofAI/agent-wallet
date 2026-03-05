@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-wallet"
-version = "0.1.0"
+version = "2.0.0b0"
 description = "Universal multi-chain secure signing SDK for AI agents"
 readme = "README.md"
 license = {text = "MIT"}
