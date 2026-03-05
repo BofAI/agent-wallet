@@ -13,7 +13,6 @@ const WalletConfigSchema = z.object({
   address: z.string().optional(),
   identity_file: z.string().optional(),
   cred_file: z.string().optional(),
-  chain_id: z.string().optional(),
   wallet_id: z.string().optional(),
   remote_url: z.string().optional(),
 });
@@ -30,7 +29,6 @@ export type WalletsTopology = z.infer<typeof WalletsTopologySchema>;
 export interface WalletInfo {
   id: string;
   type: string;
-  chain_id?: string;
 }
 
 // ---------------------------------------------------------------------------

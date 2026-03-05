@@ -24,7 +24,7 @@ TEST_ADDRESS = TEST_TRON_KEY.public_key.to_base58check_address()
 
 @pytest.fixture
 def tron_wallet():
-    return TronWallet(private_key=TEST_KEY, chain_id="tron:nile")
+    return TronWallet(private_key=TEST_KEY)
 
 
 # --- Address ---

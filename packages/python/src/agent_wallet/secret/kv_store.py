@@ -163,11 +163,14 @@ class SecureKVStore:
         keystore = self._read_json(filename)
         plaintext = _decrypt_bytes(keystore, self._password)
         text = plaintext.decode("utf-8")
-        # Try to parse as JSON (for structured credentials)
+        # Try to parse as JSON dict (for structured credentials)
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
-            return text
+            pass
+        return text
 
     def save_credential(self, name: str, value: str | dict) -> None:
         """Encrypt and save a credential as cred_<name>.json."""

@@ -69,7 +69,7 @@ class TestAdd:
         result = runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\nmy_evm\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\nmy_evm\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         assert result.exit_code == 0
@@ -86,7 +86,7 @@ class TestAdd:
         result = runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\nmy_tron\ntron_local\ntron:nile\ngenerate\n\n",
+            input=f"{TEST_PASSWORD}\nmy_tron\ntron_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         assert result.exit_code == 0
@@ -98,7 +98,7 @@ class TestAdd:
         result = runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\nimported_evm\nevm_local\neip155:1\nimport\n{test_key}\n",
+            input=f"{TEST_PASSWORD}\nimported_evm\nevm_local\nimport\n{test_key}\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         assert result.exit_code == 0
@@ -109,14 +109,14 @@ class TestAdd:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\ndup_wallet\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\ndup_wallet\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         # Add duplicate
         result = runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\ndup_wallet\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\ndup_wallet\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         assert result.exit_code == 1
@@ -134,7 +134,7 @@ class TestList:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\ntest_wallet\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\ntest_wallet\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         result = runner.invoke(app, ["list", "--dir", initialized_dir])
@@ -149,7 +149,7 @@ class TestInspect:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\ninspect_me\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\ninspect_me\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         result = runner.invoke(
@@ -175,7 +175,7 @@ class TestRemove:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\nremove_me\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\nremove_me\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
 
@@ -215,7 +215,7 @@ class TestSign:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\nsign_wallet\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\nsign_wallet\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         return initialized_dir
@@ -270,7 +270,7 @@ class TestChangePassword:
         runner.invoke(
             app,
             ["add", "--dir", initialized_dir],
-            input=f"{TEST_PASSWORD}\npw_wallet\nevm_local\neip155:1\ngenerate\n",
+            input=f"{TEST_PASSWORD}\npw_wallet\nevm_local\ngenerate\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
 

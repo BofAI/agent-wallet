@@ -1,5 +1,5 @@
 // Core types and interfaces
-export { WalletType, COMMON_CHAINS } from "./core/base.js";
+export { WalletType } from "./core/base.js";
 export type { BaseWallet, Eip712Capable } from "./core/base.js";
 
 // Error classes

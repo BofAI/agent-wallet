@@ -25,7 +25,7 @@ describe("WalletConfig", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
       wallets: {
-        test: { type: "evm_local", identity_file: "id_test", chain_id: "eip155:1" },
+        test: { type: "evm_local", identity_file: "id_test" },
       },
     };
     expect(config.wallets["test"].type).toBe("evm_local");
@@ -39,7 +39,6 @@ describe("WalletConfig", () => {
           type: "tron_local",
           identity_file: "id_tron",
           cred_file: "cred_trongrid",
-          chain_id: "tron:mainnet",
         },
       },
     };
@@ -63,13 +62,11 @@ describe("loadConfig / saveConfig", () => {
         eth_deployer: {
           type: "evm_local",
           identity_file: "id_eth",
-          chain_id: "eip155:1",
         },
         tron_manager: {
           type: "tron_local",
           identity_file: "id_tron",
           cred_file: "cred_trongrid",
-          chain_id: "tron:mainnet",
         },
       },
     };
@@ -121,7 +118,6 @@ describe("migration", () => {
           type: "evm_local",
           address: "0xABC",
           identity_file: "eth",
-          chain_id: "eip155:1",
         },
         tron: {
           type: "tron_local",

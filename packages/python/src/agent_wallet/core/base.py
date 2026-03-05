@@ -16,27 +16,6 @@ class WalletType(StrEnum):
     # REMOTE = "remote"
 
 
-# Well-known chain identifiers per wallet type.
-# CLI and other consumers should reference this instead of hardcoding.
-COMMON_CHAINS: dict[WalletType, list[str]] = {
-    WalletType.EVM_LOCAL: [
-        "eip155:1",        # Ethereum Mainnet
-        "eip155:11155111", # Ethereum Sepolia
-        "eip155:56",       # BNB Smart Chain
-        "eip155:97",       # BSC Testnet
-        "eip155:137",      # Polygon
-        "eip155:80002",    # Polygon Amoy
-        "eip155:8453",     # Base
-        "eip155:84532",    # Base Sepolia
-        "eip155:42161",    # Arbitrum One
-        "eip155:421614",   # Arbitrum Sepolia
-    ],
-    WalletType.TRON_LOCAL: [
-        "tron:mainnet",
-        "tron:nile",
-        "tron:shasta",
-    ],
-}
 
 
 class BaseWallet(ABC):

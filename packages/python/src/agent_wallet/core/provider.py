@@ -51,7 +51,7 @@ class LocalWalletProvider(WalletProvider):
 
     async def list_wallets(self) -> list[WalletInfo]:
         return [
-            WalletInfo(id=wid, type=conf.type, chain_id=conf.chain_id)
+            WalletInfo(id=wid, type=conf.type)
             for wid, conf in self._config.wallets.items()
         ]
 
@@ -107,17 +107,14 @@ def _create_wallet(conf: WalletConfig, kv_store: SecureKVStore) -> BaseWallet:
 
             assert conf.identity_file is not None
             private_key = kv_store.load_private_key(conf.identity_file)
-            return EvmWallet(private_key=private_key, chain_id=conf.chain_id)
+            return EvmWallet(private_key=private_key)
 
         case WalletType.TRON_LOCAL:
             from agent_wallet.core.adapters.tron import TronWallet
 
             assert conf.identity_file is not None
             private_key = kv_store.load_private_key(conf.identity_file)
-            return TronWallet(
-                private_key=private_key,
-                chain_id=conf.chain_id,
-            )
+            return TronWallet(private_key=private_key)
 
         case WalletType.REMOTE:
             from agent_wallet.core.adapters.remote import RemoteWallet

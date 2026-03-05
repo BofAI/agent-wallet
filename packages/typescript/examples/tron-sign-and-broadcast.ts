@@ -52,7 +52,7 @@ async function main() {
   const wallets = await provider.listWallets();
   console.log("Available wallets:");
   for (const w of wallets) {
-    console.log(`  - ${w.id} (${w.type}, ${w.chain_id})`);
+    console.log(`  - ${w.id} (${w.type})`);
   }
   console.log();
 
@@ -80,13 +80,11 @@ async function main() {
   // The SDK only signs: it takes the unsigned tx { txID, raw_data_hex }
   // and returns a signed tx JSON with the signature attached.
   // ----------------------------------------------------------------
-  const chainId =
-    wallets.find((w) => w.id === WALLET_ID)?.chain_id ?? "tron:nile";
-  const network = chainId.split(":").pop() ?? "nile";
+  const network: string = "nile";
   const baseUrl = TRONGRID_URLS[network] ?? TRONGRID_URLS["nile"];
 
   console.log(`Signing TRX transfer: ${AMOUNT_SUN} SUN -> ${TO_ADDRESS}`);
-  console.log(`Network: ${chainId} (${baseUrl})`);
+  console.log(`Network: ${network} (${baseUrl})`);
 
   // 5a. Caller builds unsigned tx via TronGrid
   const unsignedTx = await buildTrxTransfer(baseUrl, address, TO_ADDRESS, AMOUNT_SUN);

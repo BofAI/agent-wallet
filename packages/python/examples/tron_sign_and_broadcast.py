@@ -58,7 +58,7 @@ async def main():
     wallets = await provider.list_wallets()
     print("Available wallets:")
     for w in wallets:
-        print(f"  - {w.id} ({w.type}, {w.chain_id})")
+        print(f"  - {w.id} ({w.type})")
     print()
 
     # ----------------------------------------------------------------
@@ -85,12 +85,11 @@ async def main():
     # The SDK only signs: it takes the unsigned tx { txID, raw_data_hex }
     # and returns a signed tx JSON with the signature attached.
     # ----------------------------------------------------------------
-    chain_id = next((w.chain_id for w in wallets if w.id == WALLET_ID), "tron:nile")
-    network = chain_id.split(":")[-1]
+    network = "nile"
     base_url = TRONGRID_URLS.get(network, TRONGRID_URLS["nile"])
 
     print(f"Signing TRX transfer: {AMOUNT_SUN} SUN -> {TO_ADDRESS}")
-    print(f"Network: {chain_id} ({base_url})")
+    print(f"Network: {network} ({base_url})")
 
     # 5a. Caller builds unsigned tx via TronGrid
     unsigned_tx = await build_trx_transfer(base_url, address, TO_ADDRESS, AMOUNT_SUN)

@@ -8,11 +8,9 @@ import { SigningError } from '../errors.js'
 export class TronWallet implements BaseWallet, Eip712Capable {
   private privateKeyBytes: Uint8Array
   private address: string
-  private chainId: string
 
-  constructor(privateKey: Uint8Array, chainId?: string) {
+  constructor(privateKey: Uint8Array) {
     this.privateKeyBytes = privateKey
-    this.chainId = chainId ?? 'tron:mainnet'
 
     // Derive Tron address: 0x41 + ethAddress (without 0x prefix)
     const hex = `0x${Buffer.from(privateKey).toString('hex')}` as `0x${string}`

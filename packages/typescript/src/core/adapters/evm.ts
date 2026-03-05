@@ -5,12 +5,10 @@ import { SigningError } from "../errors.js";
 
 export class EvmWallet implements BaseWallet, Eip712Capable {
   private account: ReturnType<typeof privateKeyToAccount>;
-  private chainId?: string;
 
-  constructor(privateKey: Uint8Array, chainId?: string) {
+  constructor(privateKey: Uint8Array) {
     const hex = `0x${Buffer.from(privateKey).toString("hex")}` as `0x${string}`;
     this.account = privateKeyToAccount(hex);
-    this.chainId = chainId;
   }
 
   async getAddress(): Promise<string> {

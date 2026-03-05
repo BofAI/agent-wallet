@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from agent_wallet.core.base import COMMON_CHAINS, Eip712Capable, WalletType
+from agent_wallet.core.base import Eip712Capable, WalletType
 
 
 def _interactive_select(prompt_text: str, choices: list[str]) -> str | None:
@@ -52,36 +52,6 @@ DEFAULT_DIR = os.environ.get(
     "AGENT_WALLET_DIR",
     os.path.join(Path.home(), ".agent-wallet"),
 )
-
-# Display aliases for chain IDs (CLI-only, not part of core SDK)
-CHAIN_ALIASES: dict[str, str] = {
-    "eip155:1": "Ethereum Mainnet",
-    "eip155:11155111": "Ethereum Sepolia",
-    "eip155:56": "BNB Smart Chain",
-    "eip155:97": "BSC Testnet",
-    "eip155:137": "Polygon",
-    "eip155:80002": "Polygon Amoy",
-    "eip155:8453": "Base",
-    "eip155:84532": "Base Sepolia",
-    "eip155:42161": "Arbitrum One",
-    "eip155:421614": "Arbitrum Sepolia",
-    "tron:mainnet": "TRON Mainnet",
-    "tron:nile": "TRON Nile",
-    "tron:shasta": "TRON Shasta",
-}
-
-
-def _chain_display(chain_id: str) -> str:
-    """Format chain ID for display: 'Ethereum Mainnet (eip155:1)'."""
-    alias = CHAIN_ALIASES.get(chain_id)
-    return f"{alias} ({chain_id})" if alias else chain_id
-
-
-def _chain_from_display(display: str) -> str:
-    """Extract chain ID from display string, e.g. 'Ethereum Mainnet (eip155:1)' → 'eip155:1'."""
-    if "(" in display and display.endswith(")"):
-        return display[display.rindex("(") + 1 : -1]
-    return display
 
 
 # --- Helpers ---
@@ -157,7 +127,11 @@ def add(
     """Add a new wallet (interactive)."""
     pw = _get_password()
     kv_store = SecureKVStore(dir, pw)
-    kv_store.verify_password()
+    try:
+        kv_store.verify_password()
+    except (DecryptionError, FileNotFoundError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     config = _load_config_safe(dir)
 
@@ -177,25 +151,6 @@ def add(
     wallet_conf: dict = {"type": wallet_type.value}
 
     if wallet_type in (WalletType.EVM_LOCAL, WalletType.TRON_LOCAL):
-        # Chain ID (optional — metadata only, not used for signing)
-        chain_ids = COMMON_CHAINS.get(wallet_type, [])
-        skip_label = (
-            "All EVM chains (skip)" if wallet_type == WalletType.EVM_LOCAL
-            else "All TRON networks (skip)"
-        )
-        chain_display_choices = [skip_label] + [_chain_display(c) for c in chain_ids] + ["custom"]
-        selected = _interactive_select("Chain (optional):", chain_display_choices)
-        if selected == skip_label:
-            pass  # no chain_id stored
-        elif selected == "custom":
-            wallet_conf["chain_id"] = Prompt.ask("[bold]Custom Chain ID[/bold]")
-        elif selected is None:
-            chain_input = Prompt.ask("[bold]Chain ID[/bold] (enter to skip)", default="")
-            if chain_input:
-                wallet_conf["chain_id"] = chain_input
-        else:
-            wallet_conf["chain_id"] = _chain_from_display(selected)
-
         # Private key: generate or import
         action = _interactive_select("Private key:", ["generate", "import"])
         if action is None:
@@ -247,12 +202,10 @@ def list_wallets(
     table = Table(title="Wallets")
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="green")
-    table.add_column("Chain", style="yellow")
     table.add_column("Address", style="dim")
 
     for wid, conf in config.wallets.items():
-        chain = _chain_display(conf.chain_id) if conf.chain_id else "—"
-        table.add_row(wid, conf.type.value, chain, conf.address or "—")
+        table.add_row(wid, conf.type.value, conf.address or "—")
 
     console.print(table)
 
@@ -278,7 +231,6 @@ def inspect(
     table.add_column("Value")
     table.add_row("Wallet", wallet_id)
     table.add_row("Type", conf.type.value)
-    table.add_row("Chain", conf.chain_id or "—")
     table.add_row("Address", conf.address or "—")
     table.add_row("Identity", f"id_{conf.identity_file}.json {id_status}" if conf.identity_file else "—")
     table.add_row("Credential", f"cred_{conf.cred_file}.json {cred_status}" if conf.cred_file else "—")
@@ -405,8 +357,7 @@ def change_password(
     dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
 ) -> None:
     """Change master password and re-encrypt all files."""
-    console.print("[bold]Current password:[/bold]")
-    old_pw = _get_password()
+    old_pw = Prompt.ask("[bold]Current password[/bold]", password=True)
 
     # Verify old password
     kv_store_old = SecureKVStore(dir, old_pw)
@@ -416,7 +367,6 @@ def change_password(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    console.print("[bold]New password:[/bold]")
     new_pw = Prompt.ask("[bold]New password[/bold]", password=True)
     new_pw2 = Prompt.ask("[bold]Confirm new password[/bold]", password=True)
     if new_pw != new_pw2:

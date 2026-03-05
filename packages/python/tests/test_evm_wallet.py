@@ -18,7 +18,7 @@ TEST_ADDRESS = Account.from_key(TEST_KEY).address
 
 @pytest.fixture
 def evm_wallet():
-    return EvmWallet(private_key=TEST_KEY, chain_id="eip155:1")
+    return EvmWallet(private_key=TEST_KEY)
 
 
 # --- Address ---

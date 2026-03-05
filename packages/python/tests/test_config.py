@@ -24,7 +24,7 @@ def secrets_dir():
 
 class TestWalletConfig:
     def test_valid_evm(self):
-        conf = WalletConfig(type="evm_local", identity_file="id_test", chain_id="eip155:1")
+        conf = WalletConfig(type="evm_local", identity_file="id_test")
         assert conf.type == "evm_local"
 
     def test_valid_tron(self):
@@ -32,7 +32,6 @@ class TestWalletConfig:
             type="tron_local",
             identity_file="id_tron",
             cred_file="cred_trongrid",
-            chain_id="tron:mainnet",
         )
         assert conf.cred_file == "cred_trongrid"
 
@@ -48,13 +47,11 @@ class TestLoadSaveConfig:
                 "eth_deployer": WalletConfig(
                     type="evm_local",
                     identity_file="id_eth_deployer",
-                    chain_id="eip155:1",
                 ),
                 "tron_manager": WalletConfig(
                     type="tron_local",
                     identity_file="id_tron_manager",
                     cred_file="cred_trongrid",
-                    chain_id="tron:mainnet",
                 ),
             }
         )
@@ -97,7 +94,6 @@ class TestMigration:
                     "type": "evm_local",
                     "address": "0xABC",
                     "identity_file": "eth",
-                    "chain_id": "eip155:1",
                 },
                 "tron": {
                     "type": "tron_local",

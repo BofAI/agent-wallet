@@ -25,7 +25,6 @@ class WalletConfig(BaseModel):
     address: Optional[str] = None
     identity_file: Optional[str] = None
     cred_file: Optional[str] = None
-    chain_id: Optional[str] = None
     # WaaS-specific
     wallet_id: Optional[str] = None
     # Remote-specific
@@ -44,7 +43,6 @@ class WalletInfo(BaseModel):
 
     id: str
     type: str
-    chain_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

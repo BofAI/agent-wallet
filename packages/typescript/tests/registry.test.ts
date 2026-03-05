@@ -31,7 +31,6 @@ function setupEvmSecrets(): void {
       eth_test: {
         type: "evm_local",
         identity_file: "id_eth_test",
-        chain_id: "eip155:1",
       },
     },
   };

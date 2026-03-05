@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from eth_account import Account
 from eth_account.messages import encode_defunct, encode_typed_data
 
@@ -14,9 +12,8 @@ from agent_wallet.core.errors import SigningError
 class EvmWallet(BaseWallet, Eip712Capable):
     """EVM wallet using local ECDSA signing via eth-account."""
 
-    def __init__(self, private_key: bytes, chain_id: Optional[str] = None) -> None:
+    def __init__(self, private_key: bytes) -> None:
         self._account = Account.from_key(private_key)
-        self._chain_id = chain_id
 
     async def get_address(self) -> str:
         return self._account.address

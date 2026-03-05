@@ -149,10 +149,14 @@ export class SecureKVStore {
     const plaintext = decryptBytes(keystore, this.password);
     const text = plaintext.toString("utf-8");
     try {
-      return JSON.parse(text) as Record<string, unknown>;
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
     } catch {
-      return text;
+      // not JSON, return raw text
     }
+    return text;
   }
 
   saveCredential(name: string, value: string | Record<string, unknown>): void {

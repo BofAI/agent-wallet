@@ -33,7 +33,6 @@ export class LocalWalletProvider extends WalletProvider {
     return Object.entries(this.config.wallets).map(([wid, conf]) => ({
       id: wid,
       type: conf.type,
-      chain_id: conf.chain_id,
     }));
   }
 
@@ -100,11 +99,11 @@ function createWallet(conf: WalletConfig, kvStore: SecureKVStore): BaseWallet {
   switch (conf.type) {
     case "evm_local": {
       const privateKey = kvStore.loadPrivateKey(conf.identity_file!);
-      return new EvmWallet(privateKey, conf.chain_id);
+      return new EvmWallet(privateKey);
     }
     case "tron_local": {
       const privateKey = kvStore.loadPrivateKey(conf.identity_file!);
-      return new TronWallet(privateKey, conf.chain_id);
+      return new TronWallet(privateKey);
     }
     default:
       throw new Error(`Unknown wallet type: ${conf.type}`);

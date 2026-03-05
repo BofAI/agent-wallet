@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-from typing import Optional
 
 from agent_wallet.core.base import BaseWallet, Eip712Capable
 from agent_wallet.core.errors import SigningError
@@ -16,17 +14,12 @@ class TronWallet(BaseWallet, Eip712Capable):
     All operations are pure local — no network calls.
     """
 
-    def __init__(
-        self,
-        private_key: bytes,
-        chain_id: Optional[str] = None,
-    ) -> None:
+    def __init__(self, private_key: bytes) -> None:
         from tronpy.keys import PrivateKey
 
         self._private_key_bytes = private_key
         self._tron_key = PrivateKey(private_key)
         self._address = self._tron_key.public_key.to_base58check_address()
-        self._chain_id = chain_id or "tron:mainnet"
 
     async def get_address(self) -> str:
         return self._address
