@@ -1,0 +1,64 @@
+{
+  "name": "@bankofai/agent-wallet",
+  "version": "2.0.0-beta.0",
+  "description": "Universal multi-chain secure signing SDK for AI agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "agent-wallet": "./dist/delivery/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "author": "BankOfAI <gummy780j@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BofAI/agent-wallet",
+    "directory": "packages/typescript"
+  },
+  "homepage": "https://github.com/BofAI/agent-wallet/tree/main/packages/typescript",
+  "bugs": "https://github.com/BofAI/agent-wallet/issues",
+  "keywords": [
+    "wallet",
+    "signing",
+    "blockchain",
+    "evm",
+    "tron",
+    "agent",
+    "mcp",
+    "eip712"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.3.0",
+    "@noble/curves": "^1.9.1",
+    "bs58check": "^4.0.0",
+    "viem": "^2.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-wallet"
+version = "2.0.0b0"
+description = "Universal multi-chain secure signing SDK for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "BankOfAI", email = "dev@bankofai.com"},
+]
+keywords = ["wallet", "signing", "blockchain", "evm", "tron", "agent", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0.0",
+    "pycryptodome>=3.19.0",
+    "eth-hash[pycryptodome]>=0.5.0",
+]
+
+[project.optional-dependencies]
+evm = ["eth-account>=0.8.0"]
+tron = ["tronpy>=0.4.0", "eth-account>=0.8.0"]
+waas = ["httpx>=0.25.0"]
+server = ["fastapi>=0.100.0", "uvicorn>=0.20.0", "fastmcp>=2.0.0"]
+cli = ["typer>=0.9.0", "rich>=13.0.0", "questionary>=2.0.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
+all = ["agent-wallet[evm,tron,waas,server,cli,dev]"]
+
+[project.urls]
+Homepage = "https://github.com/BofAI/agent-wallet"
+Documentation = "https://github.com/BofAI/agent-wallet#readme"
+Repository = "https://github.com/BofAI/agent-wallet"
+Issues = "https://github.com/BofAI/agent-wallet/issues"
+
+[project.scripts]
+agent-wallet = "agent_wallet.delivery.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_wallet"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/agent_wallet", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
