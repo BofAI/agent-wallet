@@ -1,0 +1,295 @@
+import { randomBytes } from "node:crypto";
+import { describe, it, expect } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
+import { keccak256 } from "viem";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import bs58check from "bs58check";
+import { TronWallet } from "../src/core/adapters/tron.js";
+import { EvmWallet } from "../src/core/adapters/evm.js";
+
+const TEST_KEY = Buffer.from(
+  "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b",
+  "hex",
+);
+
+// Derive expected Tron address the same way tronpy does: 0x41 + ethAddress
+const TEST_ETH_ACCOUNT = privateKeyToAccount(
+  `0x${TEST_KEY.toString("hex")}`,
+);
+const TEST_ETH_ADDR_BYTES = Buffer.from(
+  TEST_ETH_ACCOUNT.address.slice(2),
+  "hex",
+);
+const TEST_ADDRESS = bs58check.encode(
+  Buffer.concat([Buffer.from([0x41]), TEST_ETH_ADDR_BYTES]),
+);
+
+function makeWallet(key?: Buffer, chainId?: string): TronWallet {
+  return new TronWallet(key ?? TEST_KEY, undefined, chainId);
+}
+
+/** Manual ECDSA sign matching tronpy PrivateKey.sign_msg */
+function tronpySign(data: Uint8Array, key: Uint8Array): string {
+  const hash = keccak256(data);
+  const hashBytes = Buffer.from(hash.slice(2), "hex");
+  const sig = secp256k1.sign(hashBytes, key);
+  const r = sig.r.toString(16).padStart(64, "0");
+  const s = sig.s.toString(16).padStart(64, "0");
+  const v = (sig.recovery + 27).toString(16).padStart(2, "0");
+  return r + s + v;
+}
+
+const EIP712_DATA = {
+  types: {
+    EIP712Domain: [
+      { name: "name", type: "string" },
+      { name: "version", type: "string" },
+      { name: "chainId", type: "uint256" },
+      { name: "verifyingContract", type: "address" },
+    ],
+    Transfer: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+    ],
+  },
+  primaryType: "Transfer",
+  domain: {
+    name: "TestProtocol",
+    version: "1",
+    chainId: 728126428, // Tron chainId
+    verifyingContract: "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+  },
+  message: {
+    to: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    amount: 1000000,
+    nonce: 0,
+  },
+};
+
+const EIP712_NO_VERSION = {
+  types: {
+    EIP712Domain: [
+      { name: "name", type: "string" },
+      { name: "chainId", type: "uint256" },
+      { name: "verifyingContract", type: "address" },
+    ],
+    PaymentPermitDetails: [
+      { name: "buyer", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+    ],
+  },
+  primaryType: "PaymentPermitDetails",
+  domain: {
+    name: "x402PaymentPermit",
+    chainId: 728126428,
+    verifyingContract: "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+  },
+  message: {
+    buyer: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    amount: 1000000,
+    nonce: 0,
+  },
+};
+
+// --- Address ---
+
+describe("Address", () => {
+  it("should return correct address", async () => {
+    const wallet = makeWallet();
+    const addr = await wallet.getAddress();
+    expect(addr).toBe(TEST_ADDRESS);
+  });
+
+  it("should be base58 starting with T", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const addr = await wallet.getAddress();
+    expect(addr.startsWith("T")).toBe(true);
+    expect(addr.length).toBe(34);
+  });
+
+  it("should match manual derivation", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const account = privateKeyToAccount(
+      `0x${key.toString("hex")}`,
+    );
+    const ethAddrBytes = Buffer.from(account.address.slice(2), "hex");
+    const expected = bs58check.encode(
+      Buffer.concat([Buffer.from([0x41]), ethAddrBytes]),
+    );
+    expect(await wallet.getAddress()).toBe(expected);
+  });
+});
+
+// --- signMessage ---
+
+describe("signMessage", () => {
+  it("should be deterministic", async () => {
+    const wallet = makeWallet();
+    const sig1 = await wallet.signMessage(Buffer.from("test message"));
+    const sig2 = await wallet.signMessage(Buffer.from("test message"));
+    expect(sig1).toBe(sig2);
+  });
+
+  it("should differ for different messages", async () => {
+    const wallet = makeWallet();
+    const sig1 = await wallet.signMessage(Buffer.from("message A"));
+    const sig2 = await wallet.signMessage(Buffer.from("message B"));
+    expect(sig1).not.toBe(sig2);
+  });
+
+  it("should match tronpy sign_msg", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const msg = Buffer.from("verify this tron message");
+    const ourSig = await wallet.signMessage(msg);
+    const expected = tronpySign(msg, key);
+    expect(ourSig).toBe(expected);
+  });
+
+  it("should produce 65-byte signature", async () => {
+    const wallet = makeWallet();
+    const sigHex = await wallet.signMessage(Buffer.from("check length"));
+    expect(Buffer.from(sigHex, "hex").length).toBe(65);
+  });
+});
+
+// --- signRaw ---
+
+describe("signRaw", () => {
+  it("should be deterministic", async () => {
+    const wallet = makeWallet();
+    const raw = randomBytes(64);
+    const sig1 = await wallet.signRaw(raw);
+    const sig2 = await wallet.signRaw(raw);
+    expect(sig1).toBe(sig2);
+  });
+
+  it("should match tronpy sign_msg", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const rawData = randomBytes(32);
+    const ourSig = await wallet.signRaw(rawData);
+    const expected = tronpySign(rawData, key);
+    expect(ourSig).toBe(expected);
+  });
+});
+
+// --- signTypedData (EIP-712) ---
+
+describe("signTypedData", () => {
+  it("should produce recoverable signature", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const sigHex = await wallet.signTypedData(EIP712_DATA);
+    // Verify it's a valid 65-byte signature
+    expect(sigHex.length).toBe(130);
+  });
+
+  it("should match viem direct signing", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const account = privateKeyToAccount(`0x${key.toString("hex")}`);
+
+    const ourSig = await wallet.signTypedData(EIP712_DATA);
+    const { EIP712Domain, ...msgTypes } = EIP712_DATA.types;
+    const viemSig = await account.signTypedData({
+      domain: EIP712_DATA.domain as any,
+      types: msgTypes as any,
+      primaryType: EIP712_DATA.primaryType,
+      message: EIP712_DATA.message as any,
+    });
+    expect(ourSig).toBe(viemSig.slice(2));
+  });
+
+  it("should be deterministic", async () => {
+    const wallet = makeWallet();
+    const sig1 = await wallet.signTypedData(EIP712_DATA);
+    const sig2 = await wallet.signTypedData(EIP712_DATA);
+    expect(sig1).toBe(sig2);
+  });
+});
+
+// --- x402 behavioral compatibility ---
+
+describe("x402 compatibility", () => {
+  it("should match x402 signing without version", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const account = privateKeyToAccount(`0x${key.toString("hex")}`);
+
+    const ourSig = await wallet.signTypedData(EIP712_NO_VERSION);
+    const viemSig = await account.signTypedData({
+      domain: EIP712_NO_VERSION.domain as any,
+      types: {
+        PaymentPermitDetails: EIP712_NO_VERSION.types.PaymentPermitDetails,
+      } as any,
+      primaryType: "PaymentPermitDetails",
+      message: EIP712_NO_VERSION.message as any,
+    });
+    expect(ourSig).toBe(viemSig.slice(2));
+  });
+
+  it("should match x402 signing with version", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const account = privateKeyToAccount(`0x${key.toString("hex")}`);
+
+    const ourSig = await wallet.signTypedData(EIP712_DATA);
+    const viemSig = await account.signTypedData({
+      domain: EIP712_DATA.domain as any,
+      types: { Transfer: EIP712_DATA.types.Transfer } as any,
+      primaryType: "Transfer",
+      message: EIP712_DATA.message as any,
+    });
+    expect(ourSig).toBe(viemSig.slice(2));
+  });
+
+  it("should produce recoverable signature without version", async () => {
+    const key = randomBytes(32);
+    const wallet = new TronWallet(key);
+    const sigHex = await wallet.signTypedData(EIP712_NO_VERSION);
+    expect(sigHex.length).toBe(130);
+  });
+
+  it("should match EVM wallet for no-version domain", async () => {
+    const key = randomBytes(32);
+    const evmWallet = new EvmWallet(key);
+    const tronWallet = new TronWallet(key);
+
+    const evmSig = await evmWallet.signTypedData(EIP712_NO_VERSION);
+    const tronSig = await tronWallet.signTypedData(EIP712_NO_VERSION);
+    expect(evmSig).toBe(tronSig);
+  });
+});
+
+// --- Cross-key isolation ---
+
+describe("Cross-key isolation", () => {
+  it("should produce different signatures for different keys", async () => {
+    const walletA = new TronWallet(randomBytes(32));
+    const walletB = new TronWallet(randomBytes(32));
+
+    const msg = Buffer.from("same message");
+    const sigA = await walletA.signMessage(msg);
+    const sigB = await walletB.signMessage(msg);
+    expect(sigA).not.toBe(sigB);
+  });
+});
+
+// --- EVM/Tron consistency ---
+
+describe("EVM/Tron typed data consistency", () => {
+  it("should produce identical signatures for same key", async () => {
+    const key = randomBytes(32);
+    const evmWallet = new EvmWallet(key);
+    const tronWallet = new TronWallet(key);
+
+    const evmSig = await evmWallet.signTypedData(EIP712_DATA);
+    const tronSig = await tronWallet.signTypedData(EIP712_DATA);
+    expect(evmSig).toBe(tronSig);
+  });
+});

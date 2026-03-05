@@ -1,13 +1,37 @@
 # Python
 __pycache__/
 *.py[cod]
-*.so
+*.egg-info/
+dist/
+build/
+*.egg
 .venv/
-.env
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # TypeScript
 node_modules/
-dist/
-coverage/
-npm-debug.log
+*.js.map
+*.d.ts
+!*.config.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Secrets (NEVER commit)
+secrets/
+*.keystore
+
+# OS
 .DS_Store
+Thumbs.db
+
+# private
+private/
+
+# claude
+.claude/
