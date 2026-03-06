@@ -10,7 +10,7 @@ Signing-only by design: handles key storage and signing locally, with no RPC or 
 ## Install
 
 ```bash
-npm install @bankofai/agent-wallet
+npm install -g @bankofai/agent-wallet
 # or
 pnpm add @bankofai/agent-wallet
 ```

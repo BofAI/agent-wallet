@@ -23,7 +23,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 - **EIP-712 typed data** — Full support for structured data signing (x402, Permit2, etc.)
 - **Local / Remote modes** — Same interface whether keys are local or proxied via HTTP
 - **Dual language** — Python and TypeScript SDKs with identical API and cross-compatible keystore format
-- **CLI included** — Key management and signing from the command line (Python)
+- **CLI included** — Key management and signing from the command line (Python & TypeScript)
 
 ## Architecture
 
@@ -59,7 +59,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 | Package | Path | Language | Status |
 |---|---|---|---|
 | [agent-wallet (Python)](./packages/python/) | `packages/python/` | Python ≥ 3.10 | ✅ SDK + CLI |
-| [agent-wallet (TypeScript)](./packages/typescript/) | `packages/typescript/` | Node.js ≥ 18 | ✅ SDK |
+| [@bankofai/agent-wallet (TypeScript)](./packages/typescript/) | `packages/typescript/` | Node.js ≥ 18 | ✅ SDK + CLI |
 
 ## Quick Start
 
@@ -98,21 +98,29 @@ const address = await wallet.getAddress();
 const signature = await wallet.signMessage(new TextEncoder().encode("Hello!"));
 ```
 
-### CLI (Python)
+### CLI
+
+Both Python and TypeScript packages include a CLI with the same commands.
+
+**TypeScript (npm)**
+
+```bash
+npm install -g @bankofai/agent-wallet
+
+agent-wallet init
+agent-wallet add
+agent-wallet list
+agent-wallet sign msg --wallet my-wallet --message "Hello"
+```
+
+**Python (pip)**
 
 ```bash
 pip install agent-wallet[cli]
 
-# Initialize secrets directory
 agent-wallet init
-
-# Add a wallet (interactive)
 agent-wallet add
-
-# List wallets
 agent-wallet list
-
-# Sign a message
 agent-wallet sign msg --wallet my-wallet --message "Hello"
 ```
 
