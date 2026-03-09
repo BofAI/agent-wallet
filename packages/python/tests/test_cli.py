@@ -11,7 +11,7 @@ from agent_wallet.delivery.cli import app
 
 runner = CliRunner()
 
-TEST_PASSWORD = "test-password-123"
+TEST_PASSWORD = "Test-password-123!"
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ class TestInit:
         result = runner.invoke(
             app,
             ["init", "--dir", secrets_dir],
-            input="password1\npassword2\n",
+            input="Strong-pass-1!\nStrong-pass-2!\n",
         )
         assert result.exit_code == 1
         assert "do not match" in result.output
@@ -275,7 +275,7 @@ class TestChangePassword:
         )
 
         # Change password
-        new_pw = "new-password-456"
+        new_pw = "New-password-456!"
         result = runner.invoke(
             app,
             ["change-password", "--dir", initialized_dir],

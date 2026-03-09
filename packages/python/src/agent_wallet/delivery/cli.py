@@ -57,13 +57,40 @@ DEFAULT_DIR = os.environ.get(
 # --- Helpers ---
 
 
+def _validate_password_strength(password: str) -> list[str]:
+    """Return list of unmet password requirements."""
+    import re
+
+    errors: list[str] = []
+    if len(password) < 8:
+        errors.append("at least 8 characters")
+    if not re.search(r"[A-Z]", password):
+        errors.append("at least 1 uppercase letter")
+    if not re.search(r"[a-z]", password):
+        errors.append("at least 1 lowercase letter")
+    if not re.search(r"[0-9]", password):
+        errors.append("at least 1 digit")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        errors.append("at least 1 special character")
+    return errors
+
+
 def _get_password(*, confirm: bool = False) -> str:
     """Get password from env var or interactive prompt."""
     pw = os.environ.get("AGENT_WALLET_PASSWORD")
     if pw:
+        if confirm:
+            errors = _validate_password_strength(pw)
+            if errors:
+                console.print(f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]")
+                raise typer.Exit(1)
         return pw
     pw = Prompt.ask("[bold]Master password[/bold]", password=True)
     if confirm:
+        errors = _validate_password_strength(pw)
+        if errors:
+            console.print(f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]")
+            raise typer.Exit(1)
         pw2 = Prompt.ask("[bold]Confirm password[/bold]", password=True)
         if pw != pw2:
             console.print("[red]Passwords do not match.[/red]")
@@ -368,6 +395,10 @@ def change_password(
         raise typer.Exit(1)
 
     new_pw = Prompt.ask("[bold]New password[/bold]", password=True)
+    errors = _validate_password_strength(new_pw)
+    if errors:
+        console.print(f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]")
+        raise typer.Exit(1)
     new_pw2 = Prompt.ask("[bold]Confirm new password[/bold]", password=True)
     if new_pw != new_pw2:
         console.print("[red]Passwords do not match.[/red]")

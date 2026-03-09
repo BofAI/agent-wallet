@@ -20,7 +20,7 @@ import {
   main,
 } from "../src/delivery/cli.js";
 
-const TEST_PASSWORD = "test-password-123";
+const TEST_PASSWORD = "Test-password-123!";
 
 /** Create a mock CliIO that feeds answers from a queue. */
 function mockIO(answers: string[] = []): CliIO & { output: string[] } {
@@ -80,7 +80,7 @@ describe("TestInit", () => {
   });
 
   it("init password mismatch", async () => {
-    const io = mockIO(["password1", "password2"]);
+    const io = mockIO(["Strong-pass-1!", "Strong-pass-2!"]);
     await expect(cmdInit(secretsDir, io)).rejects.toThrow(CliExit);
     expect(getOutput(io)).toContain("do not match");
   });
@@ -296,7 +296,7 @@ describe("TestChangePassword", () => {
     await cmdAdd(secretsDir, io1);
 
     // Change password: current pw, new pw, confirm new pw
-    const newPw = "new-password-456";
+    const newPw = "New-password-456!";
     const io = mockIO([TEST_PASSWORD, newPw, newPw]);
     await cmdChangePassword(secretsDir, io);
 

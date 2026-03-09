@@ -103,11 +103,35 @@ function createConsoleIO(
   };
 }
 
+function validatePasswordStrength(password: string): string[] {
+  const errors: string[] = [];
+  if (password.length < 8) errors.push("at least 8 characters");
+  if (!/[A-Z]/.test(password)) errors.push("at least 1 uppercase letter");
+  if (!/[a-z]/.test(password)) errors.push("at least 1 lowercase letter");
+  if (!/[0-9]/.test(password)) errors.push("at least 1 digit");
+  if (!/[^A-Za-z0-9]/.test(password)) errors.push("at least 1 special character");
+  return errors;
+}
+
 async function getPassword(io: CliIO, opts?: { confirm?: boolean }): Promise<string> {
   const envPw = process.env.AGENT_WALLET_PASSWORD;
-  if (envPw) return envPw;
+  if (envPw) {
+    if (opts?.confirm) {
+      const errors = validatePasswordStrength(envPw);
+      if (errors.length > 0) {
+        io.print(`Password too weak. Requirements: ${errors.join(", ")}.`);
+        throw new CliExit(1);
+      }
+    }
+    return envPw;
+  }
   const pw = await io.prompt("Master password", { password: true });
   if (opts?.confirm) {
+    const errors = validatePasswordStrength(pw);
+    if (errors.length > 0) {
+      io.print(`Password too weak. Requirements: ${errors.join(", ")}.`);
+      throw new CliExit(1);
+    }
     const pw2 = await io.prompt("Confirm password", { password: true });
     if (pw !== pw2) {
       io.print("Passwords do not match.");
@@ -407,6 +431,11 @@ export async function cmdChangePassword(dir: string, io: CliIO): Promise<void> {
   }
 
   const newPw = await io.prompt("New password", { password: true });
+  const strengthErrors = validatePasswordStrength(newPw);
+  if (strengthErrors.length > 0) {
+    io.print(`Password too weak. Requirements: ${strengthErrors.join(", ")}.`);
+    throw new CliExit(1);
+  }
   const newPw2 = await io.prompt("Confirm new password", { password: true });
   if (newPw !== newPw2) {
     io.print("Passwords do not match.");
