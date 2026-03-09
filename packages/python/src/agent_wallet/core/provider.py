@@ -14,6 +14,7 @@ from agent_wallet.storage.config import (
     WalletInfo,
     WalletsTopology,
     load_config,
+    save_config,
 )
 
 
@@ -41,6 +42,7 @@ class LocalWalletProvider(WalletProvider):
     """
 
     def __init__(self, secrets_dir: str | Path, password: str) -> None:
+        self._secrets_dir = secrets_dir
         kv_store = SecureKVStore(secrets_dir, password)
         kv_store.verify_password()
         self._config = load_config(secrets_dir)
@@ -59,6 +61,23 @@ class LocalWalletProvider(WalletProvider):
         if wallet_id not in self._wallets:
             raise WalletNotFoundError(f"Wallet '{wallet_id}' not found")
         return self._wallets[wallet_id]
+
+    def get_active_id(self) -> str | None:
+        return self._config.active_wallet
+
+    async def get_active(self) -> BaseWallet:
+        active_id = self.get_active_id()
+        if not active_id:
+            raise WalletNotFoundError(
+                "No active wallet set. Use 'agent-wallet use <id>' to set one."
+            )
+        return await self.get_wallet(active_id)
+
+    def set_active(self, wallet_id: str) -> None:
+        if wallet_id not in self._wallets:
+            raise WalletNotFoundError(f"Wallet '{wallet_id}' not found")
+        self._config.active_wallet = wallet_id
+        save_config(self._secrets_dir, self._config)
 
 
 class RemoteWalletProvider(WalletProvider):

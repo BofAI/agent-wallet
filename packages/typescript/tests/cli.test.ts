@@ -15,6 +15,7 @@ import {
   cmdList,
   cmdInspect,
   cmdRemove,
+  cmdUse,
   cmdSignMsg,
   cmdChangePassword,
   main,
@@ -317,6 +318,169 @@ describe("TestChangePassword", () => {
 
     const output3 = getOutput(io3);
     expect(output3).toContain("0x");
+  });
+});
+
+describe("TestWeakPassword", () => {
+  let secretsDir: string;
+
+  beforeEach(() => {
+    secretsDir = createTempDir();
+  });
+
+  it("init rejects weak password (too short)", async () => {
+    const io = mockIO(["Ab1!", "Ab1!"]);
+    await expect(cmdInit(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Password too weak");
+    expect(getOutput(io)).toContain("at least 8 characters");
+  });
+
+  it("init rejects password without uppercase", async () => {
+    const io = mockIO(["test-password-1!", "test-password-1!"]);
+    await expect(cmdInit(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("at least 1 uppercase letter");
+  });
+
+  it("init rejects password without special character", async () => {
+    const io = mockIO(["TestPassword1", "TestPassword1"]);
+    await expect(cmdInit(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("at least 1 special character");
+  });
+
+  it("change-password rejects weak new password", async () => {
+    await initDir(secretsDir);
+    // Add a wallet so we have something to re-encrypt
+    const ioAdd = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+
+    // old pw, weak new pw
+    const io = mockIO([TEST_PASSWORD, "weak", "weak"]);
+    await expect(cmdChangePassword(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Password too weak");
+  });
+});
+
+describe("TestActiveWallet", () => {
+  let secretsDir: string;
+
+  beforeEach(async () => {
+    secretsDir = createTempDir();
+    await initDir(secretsDir);
+  });
+
+  it("first add auto-sets active wallet", async () => {
+    const io = mockIO([TEST_PASSWORD, "first_wallet", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io);
+
+    const output = getOutput(io);
+    expect(output).toContain("Active wallet set to 'first_wallet'");
+
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.active_wallet).toBe("first_wallet");
+  });
+
+  it("second add does not change active wallet", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+
+    const io2 = mockIO([TEST_PASSWORD, "w2", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io2);
+
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.active_wallet).toBe("w1");
+  });
+
+  it("use command sets active wallet", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+    const io2 = mockIO([TEST_PASSWORD, "w2", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io2);
+
+    const io = mockIO();
+    await cmdUse("w2", secretsDir, io);
+
+    const output = getOutput(io);
+    expect(output).toContain("Active wallet: w2");
+
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.active_wallet).toBe("w2");
+  });
+
+  it("use command rejects nonexistent wallet", async () => {
+    const io = mockIO();
+    await expect(cmdUse("nonexistent", secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("not found");
+  });
+
+  it("list shows active wallet marker", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+    const io2 = mockIO([TEST_PASSWORD, "w2", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io2);
+
+    const io = mockIO();
+    await cmdList(secretsDir, io);
+
+    const output = getOutput(io);
+    // w1 is active, should have * marker
+    expect(output).toContain("* w1");
+  });
+
+  it("remove active wallet clears active", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+
+    const io = mockIO();
+    await cmdRemove("w1", secretsDir, true, io);
+
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.active_wallet).toBeNull();
+  });
+
+  it("sign msg without --wallet uses active wallet", async () => {
+    const ioAdd = mockIO([TEST_PASSWORD, "active_signer", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+
+    const io = mockIO([TEST_PASSWORD]);
+    await cmdSignMsg(undefined, "hello active", secretsDir, io);
+
+    const output = getOutput(io);
+    expect(output).toContain("Signature:");
+  });
+
+  it("sign msg without --wallet and no active errors", async () => {
+    // Add a wallet then clear active
+    const ioAdd = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+
+    // Clear active wallet manually
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    config.active_wallet = null;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(secretsDir, "wallets_config.json"), JSON.stringify(config));
+
+    const io = mockIO([TEST_PASSWORD]);
+    await expect(cmdSignMsg(undefined, "hello", secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("No wallet specified");
+  });
+
+  it("sign msg on uninitialized dir shows not initialized error", async () => {
+    const emptyDir = createTempDir();
+    const io = mockIO();
+    await expect(cmdSignMsg(undefined, "hello", emptyDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("not initialized");
+  });
+
+  it("main use command works via argv", async () => {
+    const ioAdd = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+    const ioAdd2 = mockIO([TEST_PASSWORD, "w2", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd2);
+
+    const io = mockIO();
+    const code = await main(["use", "w2", "--dir", secretsDir], io);
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("Active wallet: w2");
   });
 });
 

@@ -209,10 +209,16 @@ def add(
         console.print(f"[yellow]Wallet type '{wallet_type}' is not yet fully supported.[/yellow]")
         raise typer.Exit(1)
 
+    # Auto-set as active if no active wallet exists
+    if not config.active_wallet:
+        config.active_wallet = name
+
     # Update config
     config.wallets[name] = WalletConfig.model_validate(wallet_conf)
     save_config(dir, config)
     console.print(f"[green]Wallet '{name}' added.[/green] Config updated.")
+    if config.active_wallet == name:
+        console.print(f"  Active wallet set to '{name}'.")
 
 
 @app.command("list")
@@ -227,12 +233,14 @@ def list_wallets(
         return
 
     table = Table(title="Wallets")
+    table.add_column("", style="bold yellow", width=2)
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="green")
     table.add_column("Address", style="dim")
 
     for wid, conf in config.wallets.items():
-        table.add_row(wid, conf.type.value, conf.address or "—")
+        marker = "*" if wid == config.active_wallet else ""
+        table.add_row(marker, wid, conf.type.value, conf.address or "—")
 
     console.print(table)
 
@@ -297,9 +305,43 @@ def remove(
             cred_path.unlink()
             console.print(f"  Deleted: [dim]{cred_path.name}[/dim]")
 
+    if config.active_wallet == wallet_id:
+        config.active_wallet = None
+
     del config.wallets[wallet_id]
     save_config(dir, config)
     console.print(f"[green]Wallet '{wallet_id}' removed.[/green]")
+
+
+@app.command()
+def use(
+    wallet_id: str = typer.Argument(help="Wallet ID to set as active"),
+    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+) -> None:
+    """Set the active wallet."""
+    config = _load_config_safe(dir)
+    if wallet_id not in config.wallets:
+        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+        raise typer.Exit(1)
+
+    config.active_wallet = wallet_id
+    save_config(dir, config)
+    console.print(f"Active wallet: {wallet_id} ({config.wallets[wallet_id].type.value})")
+
+
+def _resolve_wallet_id(explicit: Optional[str], dir: str) -> str:
+    """Resolve wallet ID from explicit flag, active wallet, or error."""
+    if explicit:
+        return explicit
+    try:
+        config = load_config(dir)
+    except FileNotFoundError:
+        console.print("[red]Wallet not initialized. Run 'agent-wallet init' first.[/red]")
+        raise typer.Exit(1)
+    if config.active_wallet:
+        return config.active_wallet
+    console.print("[red]No wallet specified and no active wallet set. Use '--wallet <id>' or 'agent-wallet use <id>'.[/red]")
+    raise typer.Exit(1)
 
 
 # --- Sign subcommands ---
@@ -307,18 +349,19 @@ def remove(
 
 @sign_app.command("tx")
 def sign_tx(
-    wallet: str = typer.Option(..., "--wallet", "-w", help="Wallet ID"),
+    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     payload: str = typer.Option(..., "--payload", "-p", help="Transaction payload (JSON)"),
     dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
 ) -> None:
     """Sign a transaction."""
+    wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password()
 
     from agent_wallet.core.provider import WalletFactory
 
     try:
         provider = WalletFactory(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet))
+        w = asyncio.run(provider.get_wallet(wallet_id))
         tx_data = json.loads(payload)
         signed = asyncio.run(w.sign_transaction(tx_data))
         # Pretty-print if JSON, otherwise print as-is
@@ -335,18 +378,19 @@ def sign_tx(
 
 @sign_app.command("msg")
 def sign_msg(
-    wallet: str = typer.Option(..., "--wallet", "-w", help="Wallet ID"),
+    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     message: str = typer.Option(..., "--message", "-m", help="Message to sign"),
     dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
 ) -> None:
     """Sign a message."""
+    wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password()
 
     from agent_wallet.core.provider import WalletFactory
 
     try:
         provider = WalletFactory(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet))
+        w = asyncio.run(provider.get_wallet(wallet_id))
         signature = asyncio.run(w.sign_message(message.encode()))
         console.print(f"[green]Signature:[/green] {signature}")
     except WalletError as e:
@@ -356,18 +400,19 @@ def sign_msg(
 
 @sign_app.command("typed-data")
 def sign_typed_data(
-    wallet: str = typer.Option(..., "--wallet", "-w", help="Wallet ID"),
+    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     data: str = typer.Option(..., "--data", help="EIP-712 typed data (JSON)"),
     dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
 ) -> None:
     """Sign EIP-712 typed data."""
+    wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password()
 
     from agent_wallet.core.provider import WalletFactory
 
     try:
         provider = WalletFactory(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet))
+        w = asyncio.run(provider.get_wallet(wallet_id))
         if not isinstance(w, Eip712Capable):
             console.print("[red]This wallet does not support EIP-712 signing.[/red]")
             raise typer.Exit(1)

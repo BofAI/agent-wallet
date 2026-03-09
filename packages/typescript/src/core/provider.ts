@@ -5,6 +5,7 @@ import { EvmWallet } from "./adapters/evm.js";
 import { TronWallet } from "./adapters/tron.js";
 import {
   loadConfig,
+  saveConfig,
   type WalletConfig,
   type WalletInfo,
   type WalletsTopology,
@@ -16,11 +17,13 @@ export abstract class WalletProvider {
 }
 
 export class LocalWalletProvider extends WalletProvider {
+  private secretsDir: string;
   private config: WalletsTopology;
   private wallets: Map<string, BaseWallet> = new Map();
 
   constructor(secretsDir: string, password: string) {
     super();
+    this.secretsDir = secretsDir;
     const kvStore = new SecureKVStore(secretsDir, password);
     kvStore.verifyPassword();
     this.config = loadConfig(secretsDir);
@@ -42,6 +45,26 @@ export class LocalWalletProvider extends WalletProvider {
       throw new WalletNotFoundError(`Wallet '${walletId}' not found`);
     }
     return wallet;
+  }
+
+  getActiveId(): string | null {
+    return this.config.active_wallet ?? null;
+  }
+
+  async getActive(): Promise<BaseWallet> {
+    const activeId = this.getActiveId();
+    if (!activeId) {
+      throw new WalletNotFoundError("No active wallet set. Use 'agent-wallet use <id>' to set one.");
+    }
+    return this.getWallet(activeId);
+  }
+
+  setActive(walletId: string): void {
+    if (!this.wallets.has(walletId)) {
+      throw new WalletNotFoundError(`Wallet '${walletId}' not found`);
+    }
+    this.config.active_wallet = walletId;
+    saveConfig(this.secretsDir, this.config);
   }
 }
 
