@@ -42,6 +42,7 @@ Commands:
   init             Initialize secrets directory and set master password.
   add              Add a new wallet (interactive).
   list             List all configured wallets.
+  use              Set the active wallet.
   inspect          Show wallet details including address.
   remove           Remove a wallet and its associated files.
   sign             Sign transactions or messages.
@@ -61,6 +62,8 @@ Master password: ********
 Confirm password: ********
 Initialized. Secrets directory: /Users/you/.agent-wallet
 ```
+
+> **Password requirements:** At least 8 characters, with uppercase, lowercase, digit, and special character.
 
 You can specify a custom directory:
 
@@ -90,9 +93,26 @@ Imported private key.
   Address: TJRabPrwbZy45sbavfcjinPJC18kjpRTv8
   Saved:   id_my-tron-wallet.json
 Wallet 'my-tron-wallet' added. Config updated.
+  Active wallet set to 'my-tron-wallet'.
 ```
 
-## 4. List Wallets
+The first wallet you add is automatically set as the **active wallet**. You can then sign without specifying `--wallet` each time.
+
+## 4. Set Active Wallet
+
+If you have multiple wallets, use the `use` command to switch the active wallet:
+
+```bash
+agent-wallet use my-evm-wallet
+```
+
+```
+Active wallet: my-evm-wallet (evm_local)
+```
+
+The active wallet is used by default for all sign commands. You can always override it with `--wallet`.
+
+## 5. List Wallets
 
 ```bash
 agent-wallet list
@@ -100,15 +120,17 @@ agent-wallet list
 
 ```
               Wallets
-┌──────────────────┬────────────┬──────────────────┐
-│ Name             │ Type       │ Address          │
-├──────────────────┼────────────┼──────────────────┤
-│ my-tron-wallet   │ tron_local │ TJRabPrw...RTv8  │
-│ my-evm-wallet    │ evm_local  │ 0x8c71...4fe3    │
-└──────────────────┴────────────┴──────────────────┘
+┌───┬──────────────────┬────────────┬──────────────────┐
+│   │ Name             │ Type       │ Address          │
+├───┼──────────────────┼────────────┼──────────────────┤
+│ * │ my-evm-wallet    │ evm_local  │ 0x8c71...4fe3    │
+│   │ my-tron-wallet   │ tron_local │ TJRabPrw...RTv8  │
+└───┴──────────────────┴────────────┴──────────────────┘
 ```
 
-## 5. Inspect a Wallet
+The `*` marker indicates the active wallet.
+
+## 6. Inspect a Wallet
 
 ```bash
 agent-wallet inspect my-tron-wallet
@@ -122,11 +144,17 @@ Identity    id_my-tron-wallet.json ✓
 Credential  —
 ```
 
-## 6. Sign
+## 7. Sign
 
 ### Sign a message
 
+The `--wallet` flag is optional if you have an active wallet set:
+
 ```bash
+# Uses the active wallet
+agent-wallet sign msg --message "Hello"
+
+# Or specify a wallet explicitly
 agent-wallet sign msg --wallet my-tron-wallet --message "Hello"
 ```
 
@@ -160,7 +188,7 @@ agent-wallet sign typed-data \
   }'
 ```
 
-## 7. Environment Variables
+## 8. Environment Variables
 
 You can skip interactive password prompts by setting environment variables:
 
@@ -177,7 +205,7 @@ AGENT_WALLET_PASSWORD=my-password agent-wallet sign msg \
   --message "Hello"
 ```
 
-## 8. Other Commands
+## 9. Other Commands
 
 ### Remove a wallet
 
@@ -216,3 +244,4 @@ All `id_*.json` and `cred_*.json` files are encrypted with Keystore V3 (scrypt +
 - Build and sign TRON transactions — see [tron_sign_and_broadcast.py](../packages/python/examples/tron_sign_and_broadcast.py)
 - Build and sign BSC transactions — see [bsc_sign_and_broadcast.py](../packages/python/examples/bsc_sign_and_broadcast.py)
 - Sign EIP-712 data for x402 — see [x402_sign_typed_data.py](../packages/python/examples/x402_sign_typed_data.py)
+- Switch active wallet via SDK — see [switch_active_wallet.py](../packages/python/examples/switch_active_wallet.py)

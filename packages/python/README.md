@@ -41,6 +41,11 @@ async def main():
     address = await wallet.get_address()
     signature = await wallet.sign_message(b"Hello from agent-wallet!")
 
+    # Active wallet — set once, use without specifying ID
+    provider.set_active("my-wallet")
+    active = await provider.get_active()
+    sig = await active.sign_message(b"Hello!")
+
 asyncio.run(main())
 ```
 
@@ -56,8 +61,14 @@ agent-wallet add
 # List all wallets
 agent-wallet list
 
-# Sign a message
-agent-wallet sign msg --wallet my-wallet --message "Hello"
+# Set active wallet (skip --wallet on subsequent commands)
+agent-wallet use my-wallet
+
+# Sign a message (uses active wallet)
+agent-wallet sign msg --message "Hello"
+
+# Override active wallet with explicit --wallet
+agent-wallet sign msg --wallet other --message "Hello"
 
 # Sign a transaction (from JSON file)
 agent-wallet sign tx --wallet my-wallet --payload '{"txID": "...", "raw_data_hex": "..."}'
@@ -184,10 +195,12 @@ WalletError
 - [tron_sign_and_broadcast.py](./examples/tron_sign_and_broadcast.py) — Build tx via TronGrid, sign with SDK, broadcast
 - [bsc_sign_and_broadcast.py](./examples/bsc_sign_and_broadcast.py) — Build BSC testnet tx, sign with SDK, broadcast
 - [x402_sign_typed_data.py](./examples/x402_sign_typed_data.py) — EIP-712 typed data signing for x402 PaymentPermit
+- [switch_active_wallet.py](./examples/switch_active_wallet.py) — Set and switch active wallet via SDK
 
 ## Security
 
 - **Keystore V3** — scrypt (N=262144, r=8, p=1) + AES-128-CTR + keccak256 MAC
+- **Password strength enforced** — Minimum 8 characters with uppercase, lowercase, digit, and special character
 - **Password not retained** — Discarded after provider initialization
 - **No network calls** — All signing is pure local computation
 - **Sentinel verification** — Master password correctness verified before key decryption

@@ -304,3 +304,194 @@ class TestChangePassword:
 
 
 import pathlib
+
+
+class TestWeakPassword:
+    def test_init_rejects_weak_password_too_short(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["init", "--dir", secrets_dir],
+            input="Ab1!\nAb1!\n",
+        )
+        assert result.exit_code == 1
+        assert "Password too weak" in result.output
+        assert "at least 8 characters" in result.output
+
+    def test_init_rejects_password_without_uppercase(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["init", "--dir", secrets_dir],
+            input="test-password-1!\ntest-password-1!\n",
+        )
+        assert result.exit_code == 1
+        assert "at least 1 uppercase letter" in result.output
+
+    def test_init_rejects_password_without_special_char(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["init", "--dir", secrets_dir],
+            input="TestPassword1\nTestPassword1\n",
+        )
+        assert result.exit_code == 1
+        assert "at least 1 special character" in result.output
+
+    def test_change_password_rejects_weak_new_password(self, initialized_dir):
+        # Add a wallet
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        # Change password with weak new pw
+        result = runner.invoke(
+            app,
+            ["change-password", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nweak\nweak\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        assert result.exit_code == 1
+        assert "Password too weak" in result.output
+
+
+class TestActiveWallet:
+    def test_first_add_auto_sets_active(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nfirst_wallet\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        assert result.exit_code == 0
+        assert "Active wallet set to 'first_wallet'" in result.output
+
+        config = json.loads(
+            (pathlib.Path(initialized_dir) / "wallets_config.json").read_text()
+        )
+        assert config["active_wallet"] == "first_wallet"
+
+    def test_second_add_does_not_change_active(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw2\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        config = json.loads(
+            (pathlib.Path(initialized_dir) / "wallets_config.json").read_text()
+        )
+        assert config["active_wallet"] == "w1"
+
+    def test_use_command_sets_active(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw2\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        result = runner.invoke(app, ["use", "w2", "--dir", initialized_dir])
+        assert result.exit_code == 0
+        assert "Active wallet: w2" in result.output
+
+        config = json.loads(
+            (pathlib.Path(initialized_dir) / "wallets_config.json").read_text()
+        )
+        assert config["active_wallet"] == "w2"
+
+    def test_use_command_rejects_nonexistent(self, initialized_dir):
+        result = runner.invoke(app, ["use", "nonexistent", "--dir", initialized_dir])
+        assert result.exit_code == 1
+        assert "not found" in result.output
+
+    def test_list_shows_active_marker(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw2\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        result = runner.invoke(app, ["list", "--dir", initialized_dir])
+        assert result.exit_code == 0
+        assert "*" in result.output  # active marker
+
+    def test_remove_active_wallet_clears_active(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        result = runner.invoke(
+            app, ["remove", "w1", "--dir", initialized_dir, "--yes"]
+        )
+        assert result.exit_code == 0
+
+        config = json.loads(
+            (pathlib.Path(initialized_dir) / "wallets_config.json").read_text()
+        )
+        assert config.get("active_wallet") is None
+
+    def test_sign_without_wallet_uses_active(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nactive_signer\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        result = runner.invoke(
+            app,
+            ["sign", "msg", "--message", "hello active", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        assert result.exit_code == 0
+        assert "Signature:" in result.output
+
+    def test_sign_without_wallet_and_no_active_errors(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        # Clear active wallet
+        config_path = pathlib.Path(initialized_dir) / "wallets_config.json"
+        config = json.loads(config_path.read_text())
+        config["active_wallet"] = None
+        config_path.write_text(json.dumps(config))
+
+        result = runner.invoke(
+            app,
+            ["sign", "msg", "--message", "hello", "--dir", initialized_dir],
+            env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+        )
+        assert result.exit_code == 1
+        assert "No wallet specified" in result.output
+
+    def test_sign_on_uninitialized_dir_shows_not_initialized(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = runner.invoke(
+                app,
+                ["sign", "msg", "--message", "hello", "--dir", tmpdir],
+                env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+            )
+            assert result.exit_code == 1
+            assert "not initialized" in result.output.lower()

@@ -40,6 +40,11 @@ const address = await wallet.getAddress();
 const signature = await wallet.signMessage(
   new TextEncoder().encode("Hello from agent-wallet!"),
 );
+
+// Active wallet — set once, use without specifying ID
+provider.setActive("my-wallet");
+const active = await provider.getActive();
+const sig = await active.signMessage(new TextEncoder().encode("Hello!"));
 ```
 
 ## API Reference
@@ -200,10 +205,12 @@ WalletError
 - [tron-sign-and-broadcast.ts](./examples/tron-sign-and-broadcast.ts) — Build tx via TronGrid, sign with SDK, broadcast
 - [bsc-sign-and-broadcast.ts](./examples/bsc-sign-and-broadcast.ts) — Build BSC testnet tx, sign with SDK, broadcast
 - [x402-sign-typed-data.ts](./examples/x402-sign-typed-data.ts) — EIP-712 typed data signing for x402 PaymentPermit
+- [switch-active-wallet.ts](./examples/switch-active-wallet.ts) — Set and switch active wallet via SDK
 
 ## Security
 
 - **Keystore V3** — scrypt (N=262144, r=8, p=1) + AES-128-CTR + keccak256 MAC
+- **Password strength enforced** — Minimum 8 characters with uppercase, lowercase, digit, and special character
 - **Password not retained** — Discarded after provider initialization
 - **No network calls** — All signing is pure local computation
 - **Sentinel verification** — Master password correctness verified before key decryption

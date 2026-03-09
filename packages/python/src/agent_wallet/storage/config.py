@@ -35,6 +35,7 @@ class WalletsTopology(BaseModel):
     """Root model for wallets_config.json."""
 
     config_version: int = CURRENT_CONFIG_VERSION
+    active_wallet: Optional[str] = None
     wallets: dict[str, WalletConfig]
 
 

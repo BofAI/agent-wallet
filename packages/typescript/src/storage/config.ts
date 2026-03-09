@@ -21,6 +21,7 @@ export type WalletConfig = z.infer<typeof WalletConfigSchema>;
 
 const WalletsTopologySchema = z.object({
   config_version: z.number().int().default(CURRENT_CONFIG_VERSION),
+  active_wallet: z.string().nullable().optional().default(null),
   wallets: z.record(z.string(), WalletConfigSchema),
 });
 

@@ -20,6 +20,8 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 - **Multi-chain** — EVM (Ethereum, BSC, Polygon, Base, Arbitrum) and TRON via unified `BaseWallet` interface
 - **Signing-only** — Pure local signing; no network calls, no RPC dependencies
 - **Keystore V3 encryption** — Private keys encrypted at rest with scrypt + AES-128-CTR
+- **Password strength enforcement** — Master password requires 8+ chars, uppercase, lowercase, digit, and special character
+- **Active wallet** — Set a default wallet with `agent-wallet use <id>` to skip `--wallet` on every command
 - **EIP-712 typed data** — Full support for structured data signing (x402, Permit2, etc.)
 - **Local / Remote modes** — Same interface whether keys are local or proxied via HTTP
 - **Dual language** — Python and TypeScript SDKs with identical API and cross-compatible keystore format
@@ -110,7 +112,9 @@ npm install -g @bankofai/agent-wallet
 agent-wallet init
 agent-wallet add
 agent-wallet list
-agent-wallet sign msg --wallet my-wallet --message "Hello"
+agent-wallet use my-wallet          # set active wallet
+agent-wallet sign msg --message "Hello"   # signs with active wallet
+agent-wallet sign msg --wallet other --message "Hello"  # override active
 ```
 
 **Python (pip)**
@@ -121,7 +125,9 @@ pip install agent-wallet[cli]
 agent-wallet init
 agent-wallet add
 agent-wallet list
-agent-wallet sign msg --wallet my-wallet --message "Hello"
+agent-wallet use my-wallet          # set active wallet
+agent-wallet sign msg --message "Hello"   # signs with active wallet
+agent-wallet sign msg --wallet other --message "Hello"  # override active
 ```
 
 ## Signing-Only Design
@@ -157,6 +163,7 @@ Both Python and TypeScript implementations produce identical outputs:
 
 - Private keys are encrypted at rest using **Keystore V3** (scrypt + AES-128-CTR)
 - Master password is verified via a sentinel value — never stored in plaintext
+- **Password strength enforced** — Minimum 8 characters with uppercase, lowercase, digit, and special character
 - Password is discarded from memory after provider initialization
 - No private keys are ever sent over the network (in Local mode)
 
@@ -167,6 +174,7 @@ Both Python and TypeScript implementations produce identical outputs:
 | Sign & broadcast TRON tx | [tron_sign_and_broadcast.py](./packages/python/examples/tron_sign_and_broadcast.py) | [tron-sign-and-broadcast.ts](./packages/typescript/examples/tron-sign-and-broadcast.ts) |
 | Sign & broadcast BSC tx | [bsc_sign_and_broadcast.py](./packages/python/examples/bsc_sign_and_broadcast.py) | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts) |
 | EIP-712 typed data (x402) | [x402_sign_typed_data.py](./packages/python/examples/x402_sign_typed_data.py) | [x402-sign-typed-data.ts](./packages/typescript/examples/x402-sign-typed-data.ts) |
+| Switch active wallet (SDK) | [switch_active_wallet.py](./packages/python/examples/switch_active_wallet.py) | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts) |
 
 ## Contributing
 
