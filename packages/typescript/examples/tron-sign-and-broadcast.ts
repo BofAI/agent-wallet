@@ -20,58 +20,57 @@
  *   AGENT_WALLET_PASSWORD=<your-password> npx tsx examples/tron-sign-and-broadcast.ts
  */
 
-import { WalletFactory } from "../src/index.js";
+import { WalletFactory } from '../src/index.js'
 
 // --- Configuration ---
 
-const SECRETS_DIR =
-  process.env.AGENT_WALLET_DIR ?? `${process.env.HOME}/.agent-wallet`;
-const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? "";
-const WALLET_ID = "wallet-b";
+const SECRETS_DIR = process.env.AGENT_WALLET_DIR ?? `${process.env.HOME}/.agent-wallet`
+const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? ''
+const WALLET_ID = 'wallet-d'
 
 // Transfer parameters
-const TO_ADDRESS = "TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr";
-const AMOUNT_SUN = 1_000_000; // 1 TRX = 1,000,000 SUN
+const TO_ADDRESS = 'TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr'
+const AMOUNT_SUN = 1_000_000 // 1 TRX = 1,000,000 SUN
 
 // TronGrid endpoints by network
 const TRONGRID_URLS: Record<string, string> = {
-  mainnet: "https://api.trongrid.io",
-  nile: "https://nile.trongrid.io",
-  shasta: "https://api.shasta.trongrid.io",
-};
+  mainnet: 'https://api.trongrid.io',
+  nile: 'https://nile.trongrid.io',
+  shasta: 'https://api.shasta.trongrid.io',
+}
 
 async function main() {
   // ----------------------------------------------------------------
   // Step 1: Create provider (decrypts all keys, then discards password)
   // ----------------------------------------------------------------
-  const provider = WalletFactory({ secretsDir: SECRETS_DIR, password: PASSWORD });
+  const provider = WalletFactory({ secretsDir: SECRETS_DIR, password: PASSWORD })
 
   // ----------------------------------------------------------------
   // Step 2: List wallets (optional — shows what's available)
   // ----------------------------------------------------------------
-  const wallets = await provider.listWallets();
-  console.log("Available wallets:");
+  const wallets = await provider.listWallets()
+  console.log('Available wallets:')
   for (const w of wallets) {
-    console.log(`  - ${w.id} (${w.type})`);
+    console.log(`  - ${w.id} (${w.type})`)
   }
-  console.log();
+  console.log()
 
   // ----------------------------------------------------------------
   // Step 3: Get wallet instance
   // ----------------------------------------------------------------
-  const wallet = await provider.getWallet(WALLET_ID);
-  const address = await wallet.getAddress();
-  console.log(`Using wallet: ${WALLET_ID}`);
-  console.log(`Address:      ${address}`);
-  console.log();
+  const wallet = await provider.getWallet(WALLET_ID)
+  const address = await wallet.getAddress()
+  console.log(`Using wallet: ${WALLET_ID}`)
+  console.log(`Address:      ${address}`)
+  console.log()
 
   // ----------------------------------------------------------------
   // Step 4: Sign a message (pure local, no network)
   // ----------------------------------------------------------------
-  const message = Buffer.from("Hello from agent-wallet!");
-  const msgSig = await wallet.signMessage(message);
-  console.log(`Message signature: ${msgSig}`);
-  console.log();
+  const message = Buffer.from('Hello from agent-wallet!')
+  const msgSig = await wallet.signMessage(message)
+  console.log(`Message signature: ${msgSig}`)
+  console.log()
 
   // ----------------------------------------------------------------
   // Step 5: Build unsigned tx via TronGrid, then sign with SDK
@@ -80,75 +79,64 @@ async function main() {
   // The SDK only signs: it takes the unsigned tx { txID, raw_data_hex }
   // and returns a signed tx JSON with the signature attached.
   // ----------------------------------------------------------------
-  const network: string = "nile";
-  const baseUrl = TRONGRID_URLS[network] ?? TRONGRID_URLS["nile"];
+  const network: string = 'nile'
+  const baseUrl = TRONGRID_URLS[network] ?? TRONGRID_URLS['nile']
 
-  console.log(`Signing TRX transfer: ${AMOUNT_SUN} SUN -> ${TO_ADDRESS}`);
-  console.log(`Network: ${network} (${baseUrl})`);
+  console.log(`Signing TRX transfer: ${AMOUNT_SUN} SUN -> ${TO_ADDRESS}`)
+  console.log(`Network: ${network} (${baseUrl})`)
 
   // 5a. Caller builds unsigned tx via TronGrid
-  const unsignedTx = await buildTrxTransfer(baseUrl, address, TO_ADDRESS, AMOUNT_SUN);
-  console.log(`TX ID:     ${unsignedTx.txID}`);
+  const unsignedTx = await buildTrxTransfer(baseUrl, address, TO_ADDRESS, AMOUNT_SUN)
+  console.log(`TX ID:     ${unsignedTx.txID}`)
 
   // 5b. SDK signs the unsigned tx
-  const signedTxJson = await wallet.signTransaction(unsignedTx);
-  const signedTx = JSON.parse(signedTxJson) as Record<string, unknown>;
-  console.log(`Signature: ${(signedTx.signature as string[])[0]}`);
-  console.log();
+  const signedTxJson = await wallet.signTransaction(unsignedTx)
+  const signedTx = JSON.parse(signedTxJson) as Record<string, unknown>
+  console.log(`Signature: ${(signedTx.signature as string[])[0]}`)
+  console.log()
 
   // ----------------------------------------------------------------
   // Step 6: Caller broadcasts the signed tx
   // ----------------------------------------------------------------
-  console.log("Broadcasting...");
-  const txid = await broadcastTransaction(signedTx, baseUrl);
-  console.log(`Broadcasted! txid: ${txid}`);
+  console.log('Broadcasting...')
+  const txid = await broadcastTransaction(signedTx, baseUrl)
+  console.log(`Broadcasted! txid: ${txid}`)
 
-  const explorerBase =
-    network === "mainnet"
-      ? "https://tronscan.org"
-      : `https://${network}.tronscan.org`;
-  console.log(`Explorer:   ${explorerBase}/#/transaction/${txid}`);
+  const explorerBase = network === 'mainnet' ? 'https://tronscan.org' : `https://${network}.tronscan.org`
+  console.log(`Explorer:   ${explorerBase}/#/transaction/${txid}`)
 }
 
 // --- Helper functions (caller's responsibility, NOT part of SDK) ---
 
-async function buildTrxTransfer(
-  baseUrl: string,
-  from: string,
-  to: string,
-  amountSun: number,
-): Promise<Record<string, unknown>> {
+async function buildTrxTransfer(baseUrl: string, from: string, to: string, amountSun: number): Promise<Record<string, unknown>> {
   const res = await fetch(`${baseUrl}/wallet/createtransaction`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       owner_address: from,
       to_address: to,
       amount: amountSun,
       visible: true,
     }),
-  });
-  const tx = (await res.json()) as Record<string, unknown>;
+  })
+  const tx = (await res.json()) as Record<string, unknown>
   if (!tx.txID) {
-    throw new Error(`Failed to build transaction: ${JSON.stringify(tx)}`);
+    throw new Error(`Failed to build transaction: ${JSON.stringify(tx)}`)
   }
-  return tx;
+  return tx
 }
 
-async function broadcastTransaction(
-  signedTx: Record<string, unknown>,
-  baseUrl: string,
-): Promise<string> {
+async function broadcastTransaction(signedTx: Record<string, unknown>, baseUrl: string): Promise<string> {
   const res = await fetch(`${baseUrl}/wallet/broadcasttransaction`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(signedTx),
-  });
-  const result = (await res.json()) as Record<string, unknown>;
+  })
+  const result = (await res.json()) as Record<string, unknown>
   if (result.result) {
-    return (result.txid as string) ?? (signedTx.txID as string) ?? "";
+    return (result.txid as string) ?? (signedTx.txID as string) ?? ''
   }
-  throw new Error(`Broadcast rejected: ${JSON.stringify(result)}`);
+  throw new Error(`Broadcast rejected: ${JSON.stringify(result)}`)
 }
 
-main().catch(console.error);
+main().catch(console.error)

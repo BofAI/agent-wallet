@@ -8,8 +8,8 @@ from typing import Optional
 
 from agent_wallet.core.base import BaseWallet, WalletType
 from agent_wallet.core.errors import WalletNotFoundError
-from agent_wallet.secret.kv_store import SecureKVStore
-from agent_wallet.storage.config import (
+from agent_wallet.local.kv_store import SecureKVStore
+from agent_wallet.local.config import (
     WalletConfig,
     WalletInfo,
     WalletsTopology,

@@ -1,6 +1,6 @@
 import type { BaseWallet } from "./base.js";
 import { WalletNotFoundError } from "./errors.js";
-import { SecureKVStore } from "../secret/kv-store.js";
+import { SecureKVStore } from "../local/kv-store.js";
 import { EvmWallet } from "./adapters/evm.js";
 import { TronWallet } from "./adapters/tron.js";
 import {
@@ -9,7 +9,7 @@ import {
   type WalletConfig,
   type WalletInfo,
   type WalletsTopology,
-} from "../storage/config.js";
+} from "../local/config.js";
 
 export abstract class WalletProvider {
   abstract listWallets(): Promise<WalletInfo[]>;

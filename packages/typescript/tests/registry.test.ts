@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { SecureKVStore } from "../src/secret/kv-store.js";
-import { saveConfig } from "../src/storage/config.js";
-import type { WalletsTopology } from "../src/storage/config.js";
+import { SecureKVStore } from "../src/local/kv-store.js";
+import { saveConfig } from "../src/local/config.js";
+import type { WalletsTopology } from "../src/local/config.js";
 import {
   WalletProvider,
   LocalWalletProvider,

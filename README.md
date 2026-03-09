@@ -44,13 +44,9 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 └──────────────────────┬──────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────┐
-│              Secret Layer                        │
+│           Local Infrastructure (local/)          │
 │   SecureKVStore — Keystore V3 encrypt/decrypt    │
 │   scrypt (N=262144) + AES-128-CTR + keccak MAC   │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│              Storage Layer                       │
 │   wallets_config.json · id_*.json · cred_*.json  │
 │   master.json (password sentinel)                │
 └─────────────────────────────────────────────────┘

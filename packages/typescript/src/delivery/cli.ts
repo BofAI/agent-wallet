@@ -11,8 +11,8 @@ import { privateKeyToAccount } from 'viem/accounts'
 import bs58check from 'bs58check'
 
 import { WalletType, type Eip712Capable } from '../core/base.js'
-import { type WalletConfig, type WalletsTopology, loadConfig, saveConfig } from '../storage/config.js'
-import { SecureKVStore } from '../secret/kv-store.js'
+import { type WalletConfig, type WalletsTopology, loadConfig, saveConfig } from '../local/config.js'
+import { SecureKVStore } from '../local/kv-store.js'
 import { DecryptionError, WalletError } from '../core/errors.js'
 import { WalletFactory } from '../core/provider.js'
 

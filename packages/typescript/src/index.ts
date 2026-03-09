@@ -27,9 +27,7 @@ export {
   createProvider,
 } from "./core/provider.js";
 
-// Storage
-export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./storage/config.js";
-export type { WalletConfig, WalletsTopology, WalletInfo } from "./storage/config.js";
-
-// Secret management
-export { SecureKVStore, encryptBytes, decryptBytes } from "./secret/kv-store.js";
+// Local infrastructure (config + key storage)
+export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./local/config.js";
+export type { WalletConfig, WalletsTopology, WalletInfo } from "./local/config.js";
+export { SecureKVStore, encryptBytes, decryptBytes } from "./local/kv-store.js";

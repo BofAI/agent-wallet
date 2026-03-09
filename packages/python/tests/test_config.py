@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_wallet.storage.config import (
+from agent_wallet.local.config import (
     CURRENT_CONFIG_VERSION,
     WalletConfig,
     WalletsTopology,

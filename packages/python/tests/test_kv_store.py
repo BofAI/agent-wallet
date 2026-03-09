@@ -7,7 +7,7 @@ import tempfile
 import pytest
 
 from agent_wallet.core.errors import DecryptionError
-from agent_wallet.secret.kv_store import SecureKVStore
+from agent_wallet.local.kv_store import SecureKVStore
 
 
 @pytest.fixture

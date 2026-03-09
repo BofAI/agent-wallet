@@ -30,8 +30,8 @@ def _interactive_select(prompt_text: str, choices: list[str]) -> str | None:
     except (ImportError, EOFError, OSError, ValueError):
         return None
 from agent_wallet.core.errors import DecryptionError, WalletError
-from agent_wallet.secret.kv_store import SecureKVStore
-from agent_wallet.storage.config import (
+from agent_wallet.local.kv_store import SecureKVStore
+from agent_wallet.local.config import (
     WalletConfig,
     WalletsTopology,
     load_config,

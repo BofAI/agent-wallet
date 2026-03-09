@@ -12,8 +12,8 @@ from agent_wallet.core.provider import (
     WalletProvider,
     WalletFactory,
 )
-from agent_wallet.secret.kv_store import SecureKVStore
-from agent_wallet.storage.config import WalletConfig, WalletsTopology, save_config
+from agent_wallet.local.kv_store import SecureKVStore
+from agent_wallet.local.config import WalletConfig, WalletsTopology, save_config
 
 
 @pytest.fixture

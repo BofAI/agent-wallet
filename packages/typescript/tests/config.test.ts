@@ -8,7 +8,7 @@ import {
   migrateConfig,
   saveConfig,
   type WalletsTopology,
-} from "../src/storage/config.js";
+} from "../src/local/config.js";
 
 let secretsDir: string;
 
@@ -24,6 +24,7 @@ describe("WalletConfig", () => {
   it("should accept valid evm config", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
+      active_wallet: null,
       wallets: {
         test: { type: "evm_local", identity_file: "id_test" },
       },
@@ -34,6 +35,7 @@ describe("WalletConfig", () => {
   it("should accept valid tron config", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
+      active_wallet: null,
       wallets: {
         test: {
           type: "tron_local",
@@ -58,6 +60,7 @@ describe("loadConfig / saveConfig", () => {
   it("should roundtrip config", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
+      active_wallet: null,
       wallets: {
         eth_deployer: {
           type: "evm_local",
@@ -92,6 +95,7 @@ describe("loadConfig / saveConfig", () => {
   it("should stamp current version on save", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
+      active_wallet: null,
       wallets: {},
     };
     saveConfig(secretsDir, config);
@@ -179,6 +183,7 @@ describe("migration", () => {
   it("should not rewrite file that is already current", () => {
     const config: WalletsTopology = {
       config_version: CURRENT_CONFIG_VERSION,
+      active_wallet: null,
       wallets: {},
     };
     saveConfig(secretsDir, config);

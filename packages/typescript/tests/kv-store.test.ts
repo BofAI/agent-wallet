@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { SecureKVStore, encryptBytes, decryptBytes } from "../src/secret/kv-store.js";
+import { SecureKVStore, encryptBytes, decryptBytes } from "../src/local/kv-store.js";
 import { DecryptionError } from "../src/core/errors.js";
 
 let secretsDir: string;
