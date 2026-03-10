@@ -18,7 +18,12 @@ import { WalletFactory } from '../core/provider.js'
 
 // --- Helpers ---
 
-const DEFAULT_DIR = process.env.AGENT_WALLET_DIR ?? join(homedir(), '.agent-wallet')
+function expandTilde(p: string): string {
+  if (p === '~' || p.startsWith('~/')) return join(homedir(), p.slice(1))
+  return p
+}
+
+const DEFAULT_DIR = expandTilde(process.env.AGENT_WALLET_DIR ?? join(homedir(), '.agent-wallet'))
 
 export interface CliIO {
   print(msg: string): void
@@ -566,26 +571,38 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
   const cliIO = io ?? createConsoleIO()
   const rawArgs = argv ?? process.argv.slice(2)
 
-  if (rawArgs.length === 0) {
-    cliIO.print('Usage: agent-wallet <command> [options]')
-    cliIO.print('')
-    cliIO.print('Commands:')
-    cliIO.print('  init              Initialize secrets directory and set master password')
-    cliIO.print('  add               Add a new wallet (interactive)')
-    cliIO.print('  list              List all configured wallets')
-    cliIO.print('  use <id>          Set the active wallet')
-    cliIO.print('  inspect <id>      Show wallet details')
-    cliIO.print('  remove <id>       Remove a wallet')
-    cliIO.print('  sign tx           Sign a transaction')
-    cliIO.print('  sign msg          Sign a message')
-    cliIO.print('  sign typed-data   Sign EIP-712 typed data')
-    cliIO.print('  change-password   Change master password')
-    cliIO.print('  serve             Start MCP / HTTP server')
+  const showHelp = (io: CliIO): 0 => {
+    io.print('Usage: agent-wallet <command> [options]')
+    io.print('')
+    io.print('Commands:')
+    io.print('  init              Initialize secrets directory and set master password')
+    io.print('  add               Add a new wallet (interactive)')
+    io.print('  list              List all configured wallets')
+    io.print('  use <id>          Set the active wallet')
+    io.print('  inspect <id>      Show wallet details')
+    io.print('  remove <id>       Remove a wallet')
+    io.print('  sign tx           Sign a transaction')
+    io.print('  sign msg          Sign a message')
+    io.print('  sign typed-data   Sign EIP-712 typed data')
+    io.print('  change-password   Change master password')
+    io.print('  serve             Start MCP / HTTP server')
+    io.print('')
+    io.print('Options:')
+    io.print('  --dir, -d         Secrets directory path (default: ~/.agent-wallet)')
+    io.print('  --help, -h        Show this help message')
     return 0
   }
 
+  if (rawArgs.length === 0) {
+    return showHelp(cliIO)
+  }
+
+  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
+    return showHelp(cliIO)
+  }
+
   const { command, subcommand, args, options } = parseArgs(rawArgs)
-  const dir = (options.dir ?? options.d ?? DEFAULT_DIR) as string
+  const dir = expandTilde((options.dir ?? options.d ?? DEFAULT_DIR) as string)
 
   try {
     switch (command) {

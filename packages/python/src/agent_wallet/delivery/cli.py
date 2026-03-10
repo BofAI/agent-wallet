@@ -48,13 +48,25 @@ app.add_typer(sign_app, name="sign")
 
 console = Console()
 
-DEFAULT_DIR = os.environ.get(
-    "AGENT_WALLET_DIR",
-    os.path.join(Path.home(), ".agent-wallet"),
+DEFAULT_DIR = os.path.expanduser(
+    os.environ.get(
+        "AGENT_WALLET_DIR",
+        os.path.join("~", ".agent-wallet"),
+    )
 )
 
 
 # --- Helpers ---
+
+
+def _expand_dir(value: str) -> str:
+    """Typer callback: expand ``~`` in --dir values."""
+    return os.path.expanduser(value)
+
+
+def _dir_option(help: str = "Secrets directory path") -> str:
+    """Reusable --dir / -d option with tilde expansion."""
+    return typer.Option(DEFAULT_DIR, "--dir", "-d", help=help, callback=_expand_dir)
 
 
 def _validate_password_strength(password: str) -> list[str]:
@@ -124,7 +136,7 @@ def _derive_address(wallet_type: WalletType, private_key: bytes) -> str:
 
 @app.command()
 def init(
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Initialize secrets directory and set master password."""
     secrets_path = Path(dir)
@@ -149,7 +161,7 @@ def init(
 
 @app.command()
 def add(
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Add a new wallet (interactive)."""
     pw = _get_password()
@@ -223,7 +235,7 @@ def add(
 
 @app.command("list")
 def list_wallets(
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """List all configured wallets."""
     config = _load_config_safe(dir)
@@ -248,7 +260,7 @@ def list_wallets(
 @app.command()
 def inspect(
     wallet_id: str = typer.Argument(help="Wallet ID to inspect"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Show wallet details including address."""
     config = _load_config_safe(dir)
@@ -276,7 +288,7 @@ def inspect(
 @app.command()
 def remove(
     wallet_id: str = typer.Argument(help="Wallet ID to remove"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Remove a wallet and its associated files."""
@@ -316,7 +328,7 @@ def remove(
 @app.command()
 def use(
     wallet_id: str = typer.Argument(help="Wallet ID to set as active"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Set the active wallet."""
     config = _load_config_safe(dir)
@@ -351,7 +363,7 @@ def _resolve_wallet_id(explicit: Optional[str], dir: str) -> str:
 def sign_tx(
     wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     payload: str = typer.Option(..., "--payload", "-p", help="Transaction payload (JSON)"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Sign a transaction."""
     wallet_id = _resolve_wallet_id(wallet, dir)
@@ -380,7 +392,7 @@ def sign_tx(
 def sign_msg(
     wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     message: str = typer.Option(..., "--message", "-m", help="Message to sign"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Sign a message."""
     wallet_id = _resolve_wallet_id(wallet, dir)
@@ -402,7 +414,7 @@ def sign_msg(
 def sign_typed_data(
     wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
     data: str = typer.Option(..., "--data", help="EIP-712 typed data (JSON)"),
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Sign EIP-712 typed data."""
     wallet_id = _resolve_wallet_id(wallet, dir)
@@ -426,7 +438,7 @@ def sign_typed_data(
 
 @app.command("change-password")
 def change_password(
-    dir: str = typer.Option(DEFAULT_DIR, "--dir", "-d", help="Secrets directory path"),
+    dir: str = _dir_option(),
 ) -> None:
     """Change master password and re-encrypt all files."""
     old_pw = Prompt.ask("[bold]Current password[/bold]", password=True)

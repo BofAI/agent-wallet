@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
@@ -101,6 +102,9 @@ class RemoteWalletProvider(WalletProvider):
         )
 
 
+_DEFAULT_SECRETS_DIR = os.path.join(Path.home(), ".agent-wallet")
+
+
 def WalletFactory(
     *,
     secrets_dir: Optional[str | Path] = None,
@@ -111,11 +115,10 @@ def WalletFactory(
     """Factory — create the appropriate provider from arguments."""
     if remote_url:
         return RemoteWalletProvider(remote_url, token=token)
-    if secrets_dir:
-        if password is None:
-            raise ValueError("password is required for Local mode")
-        return LocalWalletProvider(secrets_dir, password)
-    raise ValueError("Either secrets_dir+password or remote_url is required")
+    if password:
+        resolved_dir = os.path.expanduser(str(secrets_dir)) if secrets_dir else _DEFAULT_SECRETS_DIR
+        return LocalWalletProvider(resolved_dir, password)
+    raise ValueError("Either password (for Local mode) or remote_url (for Remote mode) is required")
 
 
 def _create_wallet(conf: WalletConfig, kv_store: SecureKVStore) -> BaseWallet:

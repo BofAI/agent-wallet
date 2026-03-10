@@ -362,3 +362,77 @@ async def test_evm_tron_typed_data_same_key_same_sig():
     tron_sig = await tron_wallet.sign_typed_data(EIP712_DATA)
 
     assert evm_sig == tron_sig
+
+
+# --- Cross-language test vectors (must match TypeScript) ---
+
+
+PERMIT2_TYPED_DATA = {
+    "types": {
+        "EIP712Domain": [
+            {"name": "name", "type": "string"},
+            {"name": "chainId", "type": "uint256"},
+            {"name": "verifyingContract", "type": "address"},
+        ],
+        "PermitDetails": [
+            {"name": "token", "type": "address"},
+            {"name": "amount", "type": "uint160"},
+            {"name": "expiration", "type": "uint48"},
+            {"name": "nonce", "type": "uint48"},
+        ],
+        "PermitSingle": [
+            {"name": "details", "type": "PermitDetails"},
+            {"name": "spender", "type": "address"},
+            {"name": "sigDeadline", "type": "uint256"},
+        ],
+    },
+    "primaryType": "PermitSingle",
+    "domain": {
+        "name": "Permit2",
+        "chainId": 728126428,
+        "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+    },
+    "message": {
+        "details": {
+            "token": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+            "amount": "1000000",
+            "expiration": "1700000000",
+            "nonce": "0",
+        },
+        "spender": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "sigDeadline": "1700000000",
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_cross_lang_transfer_signature():
+    """Transfer signature must match TypeScript output for same key."""
+    wallet = TronWallet(private_key=TEST_KEY)
+    sig = await wallet.sign_typed_data(EIP712_DATA)
+    assert sig == (
+        "22008ffd588b4b370146bfd2e23426a53f945e32f32e1d8d2443769b69272b9a"
+        "5f7f0b85b3f447ed0c5bb3d683e8fc92f8180aeb74071198b5e9bec5dbe34e0e1c"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cross_lang_permit_single_signature():
+    """PermitSingle (nested struct) signature must match TypeScript output."""
+    wallet = TronWallet(private_key=TEST_KEY)
+    sig = await wallet.sign_typed_data(PERMIT2_TYPED_DATA)
+    assert sig == (
+        "b2d374f840a447528ec3b9cedf394ded8000bcb79e3e1b9715859126db7350a5"
+        "3b05e7dca620819143e68f3038726b539f674bbfeb50aad6db746f6d1e8083221c"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cross_lang_x402_signature():
+    """x402 PaymentPermit (no version) signature must match TypeScript output."""
+    wallet = TronWallet(private_key=TEST_KEY)
+    sig = await wallet.sign_typed_data(EIP712_NO_VERSION)
+    assert sig == (
+        "790cdd6f8f4e827bd3619c627994922cbcb70e52f828f204ddc51a733de72ded"
+        "1c6cd40aedbc3c4a522f920da060c6a97a08005d0db7ca5a69f4da585beaefdc1c"
+    )
