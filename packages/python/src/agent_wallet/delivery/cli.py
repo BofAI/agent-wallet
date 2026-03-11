@@ -210,12 +210,13 @@ def start(
         console.print("\n🔐 Wallet already initialized.")
     else:
         # Fresh init
-        if password:
-            errors = _validate_password_strength(password)
+        explicit_pw = password or os.environ.get("AGENT_WALLET_PASSWORD")
+        if explicit_pw:
+            errors = _validate_password_strength(explicit_pw)
             if errors:
                 console.print(_format_password_error(errors))
                 raise typer.Exit(1)
-            pw = password
+            pw = explicit_pw
         else:
             pw = _generate_password()
             auto_generated = True

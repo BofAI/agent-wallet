@@ -64,7 +64,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 ### Python
 
 ```bash
-pip install agent-wallet[tron]
+$ pip install agent-wallet[tron]
 ```
 
 ```python
@@ -80,7 +80,7 @@ signature = await wallet.sign_message(b"Hello from agent-wallet!")
 ### TypeScript
 
 ```bash
-npm install @bankofai/agent-wallet
+$ npm install @bankofai/agent-wallet
 ```
 
 ```typescript
@@ -102,17 +102,17 @@ One command to get started:
 
 ```bash
 # TypeScript
-npm install -g @bankofai/agent-wallet
+$ npm install -g @bankofai/agent-wallet
 ```
 
 ```bash
-agent-wallet start -p YOUR_PASSWORD -i WALLET_TYPE
+$ agent-wallet start -p YOUR_PASSWORD -i WALLET_TYPE
 ```
 
 For Example:
 
 ```bash
-agent-wallet start -p Abc12345! -i tron
+$ agent-wallet start -p Abc12345! -i tron
 ```
 
 ```
@@ -137,8 +137,15 @@ agent-wallet start -p Abc12345! -i tron
 Now you can sign:
 
 ```bash
-agent-wallet sign msg "Hello" -p Abc12345!
-agent-wallet sign tx '{"txID":"..."}' -p Abc12345!
+$ agent-wallet sign msg "Hello" -p Abc12345!
+$ agent-wallet sign tx '{"txID":"..."}' -p Abc12345!
+```
+
+Or use an environment variable to skip the password prompt:
+
+```bash
+$ export AGENT_WALLET_PASSWORD="Abc12345!"
+$ agent-wallet sign msg "Hello"
 ```
 
 For the full CLI reference, see [Getting Started](./doc/getting-started.md).
@@ -193,14 +200,14 @@ Both Python and TypeScript implementations produce identical outputs:
 
 ```bash
 # Python
-cd packages/python
-pip install -e ".[all]"
-pytest
+$ cd packages/python
+$ pip install -e ".[all]"
+$ pytest
 
 # TypeScript
-cd packages/typescript
-pnpm install
-pnpm test
+$ cd packages/typescript
+$ pnpm install
+$ pnpm test
 ```
 
 ## License

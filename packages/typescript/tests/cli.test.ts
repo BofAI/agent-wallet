@@ -591,6 +591,35 @@ describe("TestStart", () => {
     expect(getOutput(io2)).toContain("already exists");
   });
 
+  it("start with AGENT_WALLET_PASSWORD env var", async () => {
+    const oldPw = process.env.AGENT_WALLET_PASSWORD;
+    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD;
+    try {
+      const io = mockIO();
+      await cmdStart(secretsDir, io); // no explicit password
+      const output = getOutput(io);
+      expect(output).toContain("Wallet initialized!");
+      expect(output).toContain("default_tron");
+      expect(output).toContain("default_evm");
+      // Should NOT show auto-generated password message
+      expect(output).not.toContain("Your master password:");
+    } finally {
+      if (oldPw === undefined) delete process.env.AGENT_WALLET_PASSWORD;
+      else process.env.AGENT_WALLET_PASSWORD = oldPw;
+    }
+  });
+
+  it("start idempotent with wrong password fails", async () => {
+    const io1 = mockIO();
+    await cmdStart(secretsDir, io1, { password: TEST_PASSWORD });
+    expect(getOutput(io1)).toContain("Wallet initialized!");
+
+    // Second run with wrong password
+    const io2 = mockIO();
+    await expect(cmdStart(secretsDir, io2, { password: "Wrong-password-1!" })).rejects.toThrow(CliExit);
+    expect(getOutput(io2)).toContain("Wrong password");
+  });
+
   it("start rejects weak password", async () => {
     const io = mockIO();
     await expect(cmdStart(secretsDir, io, { password: "weak" })).rejects.toThrow(CliExit);

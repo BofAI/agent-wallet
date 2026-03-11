@@ -12,13 +12,13 @@ This guide walks you through every CLI command in `@bankofai/agent-wallet` — f
 ## 1. Install
 
 ```bash
-npm install -g @bankofai/agent-wallet
+$ npm install -g @bankofai/agent-wallet
 ```
 
 Verify the installation:
 
 ```bash
-agent-wallet --help
+$ agent-wallet --help
 ```
 
 Expected output:
@@ -59,7 +59,7 @@ The `start` command is the fastest way to get up and running. It initializes the
 ### Option A: Auto-generate everything
 
 ```bash
-agent-wallet start
+$ agent-wallet start
 ```
 
 The system generates a strong password and creates both a TRON and an EVM wallet:
@@ -91,7 +91,7 @@ The system generates a strong password and creates both a TRON and an EVM wallet
 ### Option B: Choose your own password
 
 ```bash
-agent-wallet start -p Abc12345!
+$ agent-wallet start -p Abc12345!
 ```
 
 ```
@@ -118,7 +118,7 @@ No password is printed because you chose it yourself.
 ### Option C: Import an existing private key
 
 ```bash
-agent-wallet start -p Abc12345! -i tron
+$ agent-wallet start -p Abc12345! -i tron
 ```
 
 You'll be prompted to paste your private key:
@@ -163,7 +163,7 @@ Running `start` again is safe — it won't error or overwrite existing wallets. 
 Create a secrets directory and set a master password. All private keys will be encrypted with this password.
 
 ```bash
-agent-wallet init
+$ agent-wallet init
 ```
 
 Interactive prompts:
@@ -179,13 +179,13 @@ Initialized. Secrets directory: /home/you/.agent-wallet
 ### Skip the password prompt
 
 ```bash
-agent-wallet init -p "MyP@ssw0rd!"
+$ agent-wallet init -p "MyP@ssw0rd!"
 ```
 
 ### Custom directory
 
 ```bash
-agent-wallet init -d ./my-secrets
+$ agent-wallet init -d ./my-secrets
 ```
 
 ### What it creates
@@ -203,7 +203,7 @@ agent-wallet init -d ./my-secrets
 ## 4. `add` — Add a New Wallet
 
 ```bash
-agent-wallet add
+$ agent-wallet add
 ```
 
 Interactive prompts:
@@ -223,7 +223,7 @@ Wallet 'my-tron-wallet' added. Config updated.
 ### Skip the password prompt
 
 ```bash
-agent-wallet add -p "MyP@ssw0rd!"
+$ agent-wallet add -p "MyP@ssw0rd!"
 ```
 
 ### Wallet types
@@ -258,7 +258,7 @@ agent-wallet add -p "MyP@ssw0rd!"
 ## 5. `list` — List All Wallets
 
 ```bash
-agent-wallet list
+$ agent-wallet list
 ```
 
 Expected output:
@@ -289,7 +289,7 @@ No wallets configured.
 ## 6. `use <id>` — Set Active Wallet
 
 ```bash
-agent-wallet use my-evm-wallet
+$ agent-wallet use my-evm-wallet
 ```
 
 ```
@@ -310,7 +310,7 @@ The active wallet is used by default for all `sign` commands. You can always ove
 ## 7. `inspect <id>` — Show Wallet Details
 
 ```bash
-agent-wallet inspect my-tron-wallet
+$ agent-wallet inspect my-tron-wallet
 ```
 
 ```
@@ -330,7 +330,7 @@ Credential  —
 ## 8. `remove <id>` — Remove a Wallet
 
 ```bash
-agent-wallet remove my-tron-wallet
+$ agent-wallet remove my-tron-wallet
 ```
 
 Interactive confirmation:
@@ -344,9 +344,9 @@ Wallet 'my-tron-wallet' removed.
 ### Skip confirmation
 
 ```bash
-agent-wallet remove my-tron-wallet --yes
+$ agent-wallet remove my-tron-wallet --yes
 # or
-agent-wallet remove my-tron-wallet -y
+$ agent-wallet remove my-tron-wallet -y
 ```
 
 ### Active wallet behavior
@@ -360,7 +360,7 @@ If you remove the currently active wallet, `active_wallet` is automatically clea
 Message is passed as a **positional argument**:
 
 ```bash
-agent-wallet sign msg "Hello"
+$ agent-wallet sign msg "Hello"
 ```
 
 ```
@@ -371,13 +371,13 @@ Signature: 4a9c8f...e71b
 ### Skip the password prompt
 
 ```bash
-agent-wallet sign msg "Hello" -p "MyP@ssw0rd!"
+$ agent-wallet sign msg "Hello" -p "MyP@ssw0rd!"
 ```
 
 ### Specifying a wallet explicitly
 
 ```bash
-agent-wallet sign msg "Hello" -w my-tron-wallet
+$ agent-wallet sign msg "Hello" -w my-tron-wallet
 ```
 
 ### Error cases
@@ -395,7 +395,7 @@ agent-wallet sign msg "Hello" -w my-tron-wallet
 Transaction payload is passed as a **positional argument** (JSON string):
 
 ```bash
-agent-wallet sign tx '{"txID":"abc123...","raw_data_hex":"0a02...","raw_data":{...}}'
+$ agent-wallet sign tx '{"txID":"abc123...","raw_data_hex":"0a02...","raw_data":{...}}'
 ```
 
 ```
@@ -410,13 +410,13 @@ Signed tx:
 ### Skip the password prompt
 
 ```bash
-agent-wallet sign tx '{"txID":"abc123..."}' -p "MyP@ssw0rd!"
+$ agent-wallet sign tx '{"txID":"abc123..."}' -p "MyP@ssw0rd!"
 ```
 
 ### Specifying a wallet
 
 ```bash
-agent-wallet sign tx '{"txID":"abc123..."}' -w my-tron-wallet -p "MyP@ssw0rd!"
+$ agent-wallet sign tx '{"txID":"abc123..."}' -w my-tron-wallet -p "MyP@ssw0rd!"
 ```
 
 If the signed result is valid JSON, it's pretty-printed. Otherwise it's printed as a raw string.
@@ -435,7 +435,7 @@ If the signed result is valid JSON, it's pretty-printed. Otherwise it's printed 
 Typed data is passed as a **positional argument** (JSON string):
 
 ```bash
-agent-wallet sign typed-data '{
+$ agent-wallet sign typed-data '{
   "types": {
     "EIP712Domain": [
       {"name":"name","type":"string"},
@@ -469,7 +469,7 @@ Signature: 22008ffd...0e1c
 ## 12. `change-password` — Change Master Password
 
 ```bash
-agent-wallet change-password
+$ agent-wallet change-password
 ```
 
 ```
@@ -488,7 +488,7 @@ Re-encrypts **all** key files (`master.json`, `id_*.json`, `cred_*.json`) with t
 ### Skip the current password prompt
 
 ```bash
-agent-wallet change-password -p "CurrentP@ss!"
+$ agent-wallet change-password -p "CurrentP@ss!"
 ```
 
 ---
@@ -496,7 +496,7 @@ agent-wallet change-password -p "CurrentP@ss!"
 ## 13. `reset` — Delete All Wallet Data
 
 ```bash
-agent-wallet reset
+$ agent-wallet reset
 ```
 
 Interactive double-confirmation:
@@ -517,9 +517,9 @@ Really delete everything? Last chance! (y/N): y
 ### Skip confirmation
 
 ```bash
-agent-wallet reset --yes
+$ agent-wallet reset --yes
 # or
-agent-wallet reset -y
+$ agent-wallet reset -y
 ```
 
 ### Error cases
@@ -540,23 +540,23 @@ agent-wallet reset -y
 ### Non-interactive usage (CI/CD, scripts)
 
 ```bash
-export AGENT_WALLET_PASSWORD="MyP@ssw0rd!"
-export AGENT_WALLET_DIR="~/.agent-wallet"
+$ export AGENT_WALLET_PASSWORD="MyP@ssw0rd!"
+$ export AGENT_WALLET_DIR="~/.agent-wallet"
 
 # All commands will use these values without prompting
-agent-wallet sign msg "Hello"
-agent-wallet sign tx '{"txID":"..."}'
+$ agent-wallet sign msg "Hello"
+$ agent-wallet sign tx '{"txID":"..."}'
 ```
 
 Single-line usage:
 
 ```bash
-AGENT_WALLET_PASSWORD="MyP@ssw0rd!" agent-wallet sign msg "Hello"
+$ AGENT_WALLET_PASSWORD="MyP@ssw0rd!" agent-wallet sign msg "Hello"
 ```
 
 > **Tip:** You can also use the `-p` flag on any command instead of the environment variable:
 > ```bash
-> agent-wallet sign msg "Hello" -p "MyP@ssw0rd!"
+> $ agent-wallet sign msg "Hello" -p "MyP@ssw0rd!"
 > ```
 
 ---
@@ -566,24 +566,24 @@ AGENT_WALLET_PASSWORD="MyP@ssw0rd!" agent-wallet sign msg "Hello"
 All commands accept `--dir` (or `-d`) to specify a custom secrets directory:
 
 ```bash
-agent-wallet start --dir ./my-secrets
-agent-wallet init --dir ./my-secrets
-agent-wallet add --dir ./my-secrets
-agent-wallet list --dir ./my-secrets
-agent-wallet use my-wallet --dir ./my-secrets
-agent-wallet inspect my-wallet --dir ./my-secrets
-agent-wallet remove my-wallet --dir ./my-secrets
-agent-wallet sign msg "Hello" --dir ./my-secrets
-agent-wallet sign tx '...' --dir ./my-secrets
-agent-wallet sign typed-data '...' --dir ./my-secrets
-agent-wallet change-password --dir ./my-secrets
-agent-wallet reset --dir ./my-secrets
+$ agent-wallet start --dir ./my-secrets
+$ agent-wallet init --dir ./my-secrets
+$ agent-wallet add --dir ./my-secrets
+$ agent-wallet list --dir ./my-secrets
+$ agent-wallet use my-wallet --dir ./my-secrets
+$ agent-wallet inspect my-wallet --dir ./my-secrets
+$ agent-wallet remove my-wallet --dir ./my-secrets
+$ agent-wallet sign msg "Hello" --dir ./my-secrets
+$ agent-wallet sign tx '...' --dir ./my-secrets
+$ agent-wallet sign typed-data '...' --dir ./my-secrets
+$ agent-wallet change-password --dir ./my-secrets
+$ agent-wallet reset --dir ./my-secrets
 ```
 
 Tilde expansion is supported:
 
 ```bash
-agent-wallet list --dir ~/custom-wallets
+$ agent-wallet list --dir ~/custom-wallets
 ```
 
 ---

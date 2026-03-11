@@ -412,6 +412,36 @@ class TestStart:
         assert "already exists" in result2.output.lower()
         assert "default_tron" in result2.output
 
+    def test_start_with_env_password(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "--dir", secrets_dir],
+            env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+        )
+        assert result.exit_code == 0
+        assert "Wallet initialized!" in result.output
+        assert "default_tron" in result.output
+        assert "default_evm" in result.output
+        # Should NOT show auto-generated password
+        assert "Your master password:" not in result.output
+
+    def test_start_idempotent_wrong_password_fails(self, secrets_dir):
+        # First run — init
+        result1 = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result1.exit_code == 0
+        assert "Wallet initialized!" in result1.output
+
+        # Second run — wrong password
+        result2 = runner.invoke(
+            app,
+            ["start", "-p", "Wrong-password-1!", "--dir", secrets_dir],
+        )
+        assert result2.exit_code == 1
+        assert "Wrong password" in result2.output
+
     def test_start_rejects_weak_password(self, secrets_dir):
         result = runner.invoke(
             app,
