@@ -225,8 +225,8 @@ class TestSign:
             app,
             [
                 "sign", "msg",
+                "hello world",
                 "--wallet", "sign_wallet",
-                "--message", "hello world",
                 "--dir", dir_with_evm_wallet,
             ],
             input=f"{TEST_PASSWORD}\n",
@@ -240,8 +240,8 @@ class TestSign:
             app,
             [
                 "sign", "msg",
+                "hello",
                 "--wallet", "sign_wallet",
-                "--message", "hello",
                 "--dir", dir_with_evm_wallet,
             ],
             env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
@@ -254,8 +254,8 @@ class TestSign:
             app,
             [
                 "sign", "msg",
+                "hello",
                 "--wallet", "nonexistent",
-                "--message", "hello",
                 "--dir", dir_with_evm_wallet,
             ],
             env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
@@ -304,6 +304,171 @@ class TestChangePassword:
 
 
 import pathlib
+
+
+class TestStart:
+    def test_start_with_password_creates_both_wallets(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result.exit_code == 0
+        assert "Wallet initialized" in result.output
+        assert "default_tron" in result.output
+        assert "default_evm" in result.output
+        assert "tron_local" in result.output
+        assert "evm_local" in result.output
+        assert "Active wallet: default_tron" in result.output
+
+        # Verify config
+        config = json.loads(
+            (pathlib.Path(secrets_dir) / "wallets_config.json").read_text()
+        )
+        assert "default_tron" in config["wallets"]
+        assert config["wallets"]["default_tron"]["type"] == "tron_local"
+        assert "default_evm" in config["wallets"]
+        assert config["wallets"]["default_evm"]["type"] == "evm_local"
+        assert config["active_wallet"] == "default_tron"
+
+    def test_start_without_password_auto_generates(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "--dir", secrets_dir],
+        )
+        assert result.exit_code == 0
+        assert "Your master password:" in result.output
+        assert "Save this password" in result.output
+        assert "default_tron" in result.output
+        assert "default_evm" in result.output
+
+    def test_start_import_tron(self, secrets_dir):
+        test_key = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
+        result = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "-i", "tron", "--dir", secrets_dir],
+            input=f"{test_key}\n",
+        )
+        assert result.exit_code == 0
+        assert "Imported wallet" in result.output
+        assert "default_tron" in result.output
+        assert "tron_local" in result.output
+
+        config = json.loads(
+            (pathlib.Path(secrets_dir) / "wallets_config.json").read_text()
+        )
+        assert "default_tron" in config["wallets"]
+        assert "default_evm" not in config["wallets"]
+        assert config["active_wallet"] == "default_tron"
+
+    def test_start_import_evm(self, secrets_dir):
+        test_key = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
+        result = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "-i", "evm", "--dir", secrets_dir],
+            input=f"{test_key}\n",
+        )
+        assert result.exit_code == 0
+        assert "Imported wallet" in result.output
+        assert "default_evm" in result.output
+        assert "evm_local" in result.output
+        assert "0x" in result.output
+
+    def test_start_twice_returns_existing(self, secrets_dir):
+        # First run
+        result1 = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result1.exit_code == 0
+        assert "Wallet initialized!" in result1.output
+
+        # Second run — idempotent, no error
+        result2 = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result2.exit_code == 0
+        assert "already initialized" in result2.output.lower()
+        assert "default_tron" in result2.output
+        assert "default_evm" in result2.output
+
+    def test_start_import_twice_returns_existing(self, secrets_dir):
+        test_key = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
+        # First run — import tron
+        result1 = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "-i", "tron", "--dir", secrets_dir],
+            input=f"{test_key}\n",
+        )
+        assert result1.exit_code == 0
+        assert "Imported wallet" in result1.output
+
+        # Second run — should not prompt for key, just show existing
+        result2 = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "-i", "tron", "--dir", secrets_dir],
+        )
+        assert result2.exit_code == 0
+        assert "already exists" in result2.output.lower()
+        assert "default_tron" in result2.output
+
+    def test_start_rejects_weak_password(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "-p", "weak", "--dir", secrets_dir],
+        )
+        assert result.exit_code == 1
+        assert "Password too weak" in result.output
+
+    def test_start_rejects_unknown_import_type(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "-i", "unknown", "--dir", secrets_dir],
+        )
+        assert result.exit_code == 1
+        assert "Unknown wallet type" in result.output
+
+    def test_start_shows_quick_guide(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result.exit_code == 0
+        assert "Quick guide" in result.output
+        assert "agent-wallet list" in result.output
+
+
+class TestPasswordFlag:
+    def test_init_with_password_flag(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["init", "-p", TEST_PASSWORD, "--dir", secrets_dir],
+        )
+        assert result.exit_code == 0
+        assert "Initialized" in result.output
+        assert (pathlib.Path(secrets_dir) / "master.json").exists()
+
+    def test_add_with_password_flag(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["add", "-p", TEST_PASSWORD, "--dir", initialized_dir],
+            input="pw_wallet\nevm_local\ngenerate\n",
+        )
+        assert result.exit_code == 0
+        assert "added" in result.output
+
+    def test_sign_msg_with_password_flag(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "-p", TEST_PASSWORD, "--dir", initialized_dir],
+            input="sig_wallet\nevm_local\ngenerate\n",
+        )
+        result = runner.invoke(
+            app,
+            ["sign", "msg", "hello", "--wallet", "sig_wallet", "-p", TEST_PASSWORD, "--dir", initialized_dir],
+        )
+        assert result.exit_code == 0
+        assert "Signature:" in result.output
 
 
 class TestWeakPassword:
@@ -458,7 +623,7 @@ class TestActiveWallet:
         )
         result = runner.invoke(
             app,
-            ["sign", "msg", "--message", "hello active", "--dir", initialized_dir],
+            ["sign", "msg", "hello active", "--dir", initialized_dir],
             input=f"{TEST_PASSWORD}\n",
             env={"AGENT_WALLET_PASSWORD": ""},
         )
@@ -480,7 +645,7 @@ class TestActiveWallet:
 
         result = runner.invoke(
             app,
-            ["sign", "msg", "--message", "hello", "--dir", initialized_dir],
+            ["sign", "msg", "hello", "--dir", initialized_dir],
             env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
         )
         assert result.exit_code == 1
@@ -490,8 +655,66 @@ class TestActiveWallet:
         with tempfile.TemporaryDirectory() as tmpdir:
             result = runner.invoke(
                 app,
-                ["sign", "msg", "--message", "hello", "--dir", tmpdir],
+                ["sign", "msg", "hello", "--dir", tmpdir],
                 env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
             )
             assert result.exit_code == 1
             assert "not initialized" in result.output.lower()
+
+
+class TestReset:
+    @pytest.fixture()
+    def initialized_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner.invoke(
+                app,
+                ["init", "--dir", tmpdir],
+                input=f"{TEST_PASSWORD}\n{TEST_PASSWORD}\n",
+                env={"AGENT_WALLET_PASSWORD": ""},
+            )
+            yield tmpdir
+
+    def test_reset_with_yes(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nw1\nevm_local\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+
+        p = pathlib.Path(initialized_dir)
+        assert (p / "master.json").exists()
+        assert (p / "wallets_config.json").exists()
+        assert (p / "id_w1.json").exists()
+
+        result = runner.invoke(
+            app, ["reset", "--dir", initialized_dir, "--yes"]
+        )
+        assert result.exit_code == 0
+        assert "reset complete" in result.output.lower()
+        assert not (p / "master.json").exists()
+        assert not (p / "wallets_config.json").exists()
+        assert not (p / "id_w1.json").exists()
+
+    def test_reset_cancelled(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["reset", "--dir", initialized_dir],
+            input="n\n",
+        )
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        assert (pathlib.Path(initialized_dir) / "master.json").exists()
+
+    def test_reset_no_data(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = runner.invoke(
+                app, ["reset", "--dir", tmpdir, "--yes"]
+            )
+            assert result.exit_code == 1
+            assert "No wallet data" in result.output
+
+    def test_reset_help(self):
+        result = runner.invoke(app, ["reset", "--help"])
+        assert result.exit_code == 0
+        assert "Delete all wallet data" in result.output

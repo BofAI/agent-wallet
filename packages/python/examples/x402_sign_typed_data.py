@@ -25,9 +25,9 @@ from agent_wallet import WalletFactory
 
 # --- Configuration ---
 
-SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
+# SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
 PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
-WALLET_ID = "wallet-b"  # tron_local wallet
+WALLET_ID = "wallet-a"  # tron_local wallet
 
 
 # --- x402 PaymentPermit typed data ---
@@ -95,7 +95,7 @@ async def main():
     # ----------------------------------------------------------------
     # Step 1: Create provider
     # ----------------------------------------------------------------
-    provider = WalletFactory(secrets_dir=SECRETS_DIR, password=PASSWORD)
+    provider = WalletFactory(password=PASSWORD)
     wallet = await provider.get_wallet(WALLET_ID)
     address = await wallet.get_address()
     print(f"Wallet:  {WALLET_ID}")
