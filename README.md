@@ -64,7 +64,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 ### Python
 
 ```bash
-pip install agent-wallet[tron]
+$ pip install agent-wallet[tron]
 ```
 
 ```python
@@ -80,7 +80,7 @@ signature = await wallet.sign_message(b"Hello from agent-wallet!")
 ### TypeScript
 
 ```bash
-npm install @bankofai/agent-wallet
+$ npm install @bankofai/agent-wallet
 ```
 
 ```typescript
@@ -98,33 +98,57 @@ const signature = await wallet.signMessage(new TextEncoder().encode("Hello!"));
 
 ### CLI
 
-Both Python and TypeScript packages include a CLI with the same commands.
-
-**TypeScript (npm)**
+One command to get started:
 
 ```bash
-npm install -g @bankofai/agent-wallet
-
-agent-wallet init
-agent-wallet add
-agent-wallet list
-agent-wallet use my-wallet          # set active wallet
-agent-wallet sign msg --message "Hello"   # signs with active wallet
-agent-wallet sign msg --wallet other --message "Hello"  # override active
+# TypeScript
+$ npm install -g @bankofai/agent-wallet
 ```
-
-**Python (pip)**
 
 ```bash
-pip install agent-wallet[cli]
-
-agent-wallet init
-agent-wallet add
-agent-wallet list
-agent-wallet use my-wallet          # set active wallet
-agent-wallet sign msg --message "Hello"   # signs with active wallet
-agent-wallet sign msg --wallet other --message "Hello"  # override active
+$ agent-wallet start -p YOUR_PASSWORD -i WALLET_TYPE
 ```
+
+For Example:
+
+```bash
+$ agent-wallet start -p Abc12345! -i tron
+```
+
+```
+🔐 Wallet initialized!
+✔ Paste private key (hex)
+
+🪙 Imported wallet:
+┌──────────────────────┬─────────────────┬──────────────────────────────────────────────┐
+│ Wallet ID            │ Type            │ Address                                      │
+├──────────────────────┼─────────────────┼──────────────────────────────────────────────┤
+│ default_tron         │ tron_local      │ TNmoJ3Be59WFEq5dsW6eCkZjveiL3G8HVB           │
+└──────────────────────┴─────────────────┴──────────────────────────────────────────────┘
+
+⭐ Active wallet: default_tron
+
+💡 Quick guide:
+   agent-wallet list              — View your wallets
+   agent-wallet sign tx '{...}'   — Sign a transaction
+   agent-wallet start -h          — See all options
+```
+
+Now you can sign:
+
+```bash
+$ agent-wallet sign msg "Hello" -p Abc12345!
+$ agent-wallet sign tx '{"txID":"..."}' -p Abc12345!
+```
+
+Or use an environment variable to skip the password prompt:
+
+```bash
+$ export AGENT_WALLET_PASSWORD="Abc12345!"
+$ agent-wallet sign msg "Hello"
+```
+
+For the full CLI reference, see [Getting Started](./doc/getting-started.md).
 
 ## Signing-Only Design
 
@@ -176,14 +200,14 @@ Both Python and TypeScript implementations produce identical outputs:
 
 ```bash
 # Python
-cd packages/python
-pip install -e ".[all]"
-pytest
+$ cd packages/python
+$ pip install -e ".[all]"
+$ pytest
 
 # TypeScript
-cd packages/typescript
-pnpm install
-pnpm test
+$ cd packages/typescript
+$ pnpm install
+$ pnpm test
 ```
 
 ## License

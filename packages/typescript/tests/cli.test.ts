@@ -18,6 +18,8 @@ import {
   cmdUse,
   cmdSignMsg,
   cmdChangePassword,
+  cmdStart,
+  cmdReset,
   main,
 } from "../src/delivery/cli.js";
 
@@ -484,6 +486,207 @@ describe("TestActiveWallet", () => {
   });
 });
 
+describe("TestStart", () => {
+  let secretsDir: string;
+
+  beforeEach(() => {
+    secretsDir = createTempDir();
+  });
+
+  it("start with -p creates both default wallets", async () => {
+    const io = mockIO();
+    await cmdStart(secretsDir, io, { password: TEST_PASSWORD });
+
+    const output = getOutput(io);
+    expect(output).toContain("Wallet initialized");
+    expect(output).toContain("default_tron");
+    expect(output).toContain("default_evm");
+    expect(output).toContain("tron_local");
+    expect(output).toContain("evm_local");
+    expect(output).toContain("Active wallet: default_tron");
+
+    // Verify config
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.wallets.default_tron).toBeDefined();
+    expect(config.wallets.default_tron.type).toBe("tron_local");
+    expect(config.wallets.default_evm).toBeDefined();
+    expect(config.wallets.default_evm.type).toBe("evm_local");
+    expect(config.active_wallet).toBe("default_tron");
+  });
+
+  it("start without -p auto-generates password", async () => {
+    const io = mockIO();
+    await cmdStart(secretsDir, io);
+
+    const output = getOutput(io);
+    expect(output).toContain("Your master password:");
+    expect(output).toContain("Save this password");
+    expect(output).toContain("default_tron");
+    expect(output).toContain("default_evm");
+  });
+
+  it("start -i tron imports wallet", async () => {
+    const testKey = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b";
+    const io = mockIO([testKey]);
+    await cmdStart(secretsDir, io, { password: TEST_PASSWORD, importType: "tron" });
+
+    const output = getOutput(io);
+    expect(output).toContain("Imported wallet");
+    expect(output).toContain("default_tron");
+    expect(output).toContain("tron_local");
+
+    const config = JSON.parse(readFileSync(join(secretsDir, "wallets_config.json"), "utf-8"));
+    expect(config.wallets.default_tron).toBeDefined();
+    expect(config.wallets.default_evm).toBeUndefined();
+    expect(config.active_wallet).toBe("default_tron");
+  });
+
+  it("start -i evm imports wallet", async () => {
+    const testKey = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b";
+    const io = mockIO([testKey]);
+    await cmdStart(secretsDir, io, { password: TEST_PASSWORD, importType: "evm" });
+
+    const output = getOutput(io);
+    expect(output).toContain("Imported wallet");
+    expect(output).toContain("default_evm");
+    expect(output).toContain("evm_local");
+    expect(output).toContain("0x");
+  });
+
+  it("start twice returns existing wallets", async () => {
+    const io1 = mockIO();
+    await cmdStart(secretsDir, io1, { password: TEST_PASSWORD });
+    expect(getOutput(io1)).toContain("Wallet initialized!");
+
+    // Second run — should not error, shows existing wallets
+    const io2 = mockIO();
+    await cmdStart(secretsDir, io2, { password: TEST_PASSWORD });
+    const output = getOutput(io2);
+    expect(output).toContain("already initialized");
+    expect(output).toContain("default_tron");
+    expect(output).toContain("default_evm");
+  });
+
+  it("start -i tron twice returns existing wallet", async () => {
+    const testKey = "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b";
+    const io1 = mockIO([testKey]);
+    await cmdStart(secretsDir, io1, { password: TEST_PASSWORD, importType: "tron" });
+
+    // Second run — no key prompt, just shows existing
+    const io2 = mockIO(); // no answers needed
+    await cmdStart(secretsDir, io2, { password: TEST_PASSWORD, importType: "tron" });
+    const output = getOutput(io2);
+    expect(output).toContain("already exists");
+    expect(output).toContain("default_tron");
+  });
+
+  it("start then start -i creates missing wallet", async () => {
+    // First: default setup creates both wallets
+    const io1 = mockIO();
+    await cmdStart(secretsDir, io1, { password: TEST_PASSWORD });
+
+    // Second: -i tron should see it already exists
+    const io2 = mockIO();
+    await cmdStart(secretsDir, io2, { password: TEST_PASSWORD, importType: "tron" });
+    expect(getOutput(io2)).toContain("already exists");
+  });
+
+  it("start with AGENT_WALLET_PASSWORD env var", async () => {
+    const oldPw = process.env.AGENT_WALLET_PASSWORD;
+    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD;
+    try {
+      const io = mockIO();
+      await cmdStart(secretsDir, io); // no explicit password
+      const output = getOutput(io);
+      expect(output).toContain("Wallet initialized!");
+      expect(output).toContain("default_tron");
+      expect(output).toContain("default_evm");
+      // Should NOT show auto-generated password message
+      expect(output).not.toContain("Your master password:");
+    } finally {
+      if (oldPw === undefined) delete process.env.AGENT_WALLET_PASSWORD;
+      else process.env.AGENT_WALLET_PASSWORD = oldPw;
+    }
+  });
+
+  it("start idempotent with wrong password fails", async () => {
+    const io1 = mockIO();
+    await cmdStart(secretsDir, io1, { password: TEST_PASSWORD });
+    expect(getOutput(io1)).toContain("Wallet initialized!");
+
+    // Second run with wrong password
+    const io2 = mockIO();
+    await expect(cmdStart(secretsDir, io2, { password: "Wrong-password-1!" })).rejects.toThrow(CliExit);
+    expect(getOutput(io2)).toContain("Wrong password");
+  });
+
+  it("start rejects weak password", async () => {
+    const io = mockIO();
+    await expect(cmdStart(secretsDir, io, { password: "weak" })).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Password too weak");
+  });
+
+  it("start rejects unknown import type", async () => {
+    const io = mockIO();
+    await expect(cmdStart(secretsDir, io, { password: TEST_PASSWORD, importType: "unknown" })).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Unknown wallet type");
+  });
+
+  it("start shows quick guide", async () => {
+    const io = mockIO();
+    await cmdStart(secretsDir, io, { password: TEST_PASSWORD });
+
+    const output = getOutput(io);
+    expect(output).toContain("Quick guide");
+    expect(output).toContain("agent-wallet list");
+  });
+});
+
+describe("TestPasswordFlag", () => {
+  let secretsDir: string;
+
+  beforeEach(async () => {
+    secretsDir = createTempDir();
+  });
+
+  it("init with -p flag skips prompt", async () => {
+    const io = mockIO(); // no answers needed
+    await cmdInit(secretsDir, io, { password: TEST_PASSWORD });
+    expect(getOutput(io)).toContain("Initialized");
+    expect(existsSync(join(secretsDir, "master.json"))).toBe(true);
+  });
+
+  it("add with -p flag skips password prompt", async () => {
+    await initDir(secretsDir);
+    // Only need wallet name, type, action (no password prompt)
+    const io = mockIO(["pw_wallet", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io, { password: TEST_PASSWORD });
+    expect(getOutput(io)).toContain("added");
+  });
+
+  it("sign msg with -p flag via main", async () => {
+    await initDir(secretsDir);
+    const ioAdd = mockIO([TEST_PASSWORD, "sig_wallet", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+
+    const io = mockIO();
+    const code = await main(
+      ["sign", "msg", "hello", "--wallet", "sig_wallet", "-p", TEST_PASSWORD, "--dir", secretsDir],
+      io
+    );
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("Signature:");
+  });
+
+  it("start via main with -p flag", async () => {
+    const io = mockIO();
+    const code = await main(["start", "-p", TEST_PASSWORD, "--dir", secretsDir], io);
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("default_tron");
+    expect(getOutput(io)).toContain("default_evm");
+  });
+});
+
 describe("TestMain", () => {
   it("no args shows help", async () => {
     const io = mockIO();
@@ -492,9 +695,108 @@ describe("TestMain", () => {
     expect(getOutput(io)).toContain("Usage:");
   });
 
+  it("help shows start command", async () => {
+    const io = mockIO();
+    const code = await main(["--help"], io);
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("start");
+    expect(getOutput(io)).toContain("--password");
+  });
+
+  it("start --help shows command-specific options", async () => {
+    const io = mockIO();
+    const code = await main(["start", "--help"], io);
+    expect(code).toBe(0);
+    const output = getOutput(io);
+    expect(output).toContain("--import, -i");
+    expect(output).toContain("--password, -p");
+    expect(output).toContain("Quick setup");
+  });
+
+  it("sign --help shows subcommands", async () => {
+    const io = mockIO();
+    const code = await main(["sign", "--help"], io);
+    expect(code).toBe(0);
+    const output = getOutput(io);
+    expect(output).toContain("tx");
+    expect(output).toContain("msg");
+    expect(output).toContain("typed-data");
+  });
+
+  it("sign msg --help shows options", async () => {
+    const io = mockIO();
+    const code = await main(["sign", "msg", "--help"], io);
+    expect(code).toBe(0);
+    const output = getOutput(io);
+    expect(output).toContain("--wallet, -w");
+    expect(output).toContain("--password, -p");
+    expect(output).toContain("Sign a message");
+  });
+
   it("unknown command returns 1", async () => {
     const io = mockIO();
     const code = await main(["unknown-cmd"], io);
     expect(code).toBe(1);
+  });
+
+  it("reset --help shows options", async () => {
+    const io = mockIO();
+    const code = await main(["reset", "--help"], io);
+    expect(code).toBe(0);
+    const output = getOutput(io);
+    expect(output).toContain("--yes, -y");
+    expect(output).toContain("Delete all wallet data");
+  });
+});
+
+describe("TestReset", () => {
+  let secretsDir: string;
+
+  beforeEach(async () => {
+    secretsDir = createTempDir();
+  });
+
+  it("reset with --yes deletes all files", async () => {
+    await initDir(secretsDir);
+    const ioAdd = mockIO([TEST_PASSWORD, "w1", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, ioAdd);
+
+    expect(existsSync(join(secretsDir, "master.json"))).toBe(true);
+    expect(existsSync(join(secretsDir, "wallets_config.json"))).toBe(true);
+    expect(existsSync(join(secretsDir, "id_w1.json"))).toBe(true);
+
+    const io = mockIO();
+    await cmdReset(secretsDir, true, io);
+
+    const output = getOutput(io);
+    expect(output).toContain("reset complete");
+    expect(existsSync(join(secretsDir, "master.json"))).toBe(false);
+    expect(existsSync(join(secretsDir, "wallets_config.json"))).toBe(false);
+    expect(existsSync(join(secretsDir, "id_w1.json"))).toBe(false);
+  });
+
+  it("reset cancelled keeps files", async () => {
+    await initDir(secretsDir);
+
+    const io = mockIO(["n"]); // first confirm returns false
+    await expect(cmdReset(secretsDir, false, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Cancelled");
+    expect(existsSync(join(secretsDir, "master.json"))).toBe(true);
+  });
+
+  it("reset no data throws", async () => {
+    const io = mockIO();
+    await expect(cmdReset(secretsDir, true, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("No wallet data");
+  });
+
+  it("reset via main with --yes", async () => {
+    await initDir(secretsDir);
+
+    const io = mockIO();
+    const code = await main(["reset", "--yes", "--dir", secretsDir], io);
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("reset complete");
+    expect(existsSync(join(secretsDir, "master.json"))).toBe(false);
   });
 });
