@@ -1,7 +1,14 @@
 import { keccak256 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { secp256k1 } from '@noble/curves/secp256k1'
-import bs58check from 'bs58check'
+import bs58checkModule from 'bs58check'
+
+// Normalize CJS/ESM interop: bs58check v4 exports differ between CJS and ESM,
+// and tsup's __toESM() wrapper can add an extra .default layer in CJS bundles.
+const bs58check: typeof bs58checkModule =
+  typeof (bs58checkModule as any).encode === 'function'
+    ? bs58checkModule
+    : (bs58checkModule as any).default
 import type { BaseWallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'
 
