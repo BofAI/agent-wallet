@@ -182,6 +182,7 @@ WalletError
 - [bsc_sign_and_broadcast.py](./examples/bsc_sign_and_broadcast.py) — Build BSC testnet tx, sign with SDK, broadcast
 - [tron_x402_sign_typed_data.py](./examples/tron_x402_sign_typed_data.py) — TRON x402 PaymentPermit signing
 - [bsc_x402_sign_typed_data.py](./examples/bsc_x402_sign_typed_data.py) — BSC/EVM x402 PaymentPermit signing
+- [dual_sign_typed_data_from_private_key.py](./examples/dual_sign_typed_data_from_private_key.py) — Reuse one external env input for both TRON and EVM signers
 - [switch_active_wallet.py](./examples/switch_active_wallet.py) — Set and switch active wallet via SDK
 
 ## Security

@@ -206,6 +206,7 @@ Both Python and TypeScript implementations produce identical outputs:
 | Sign & broadcast BSC tx | [bsc_sign_and_broadcast.py](./packages/python/examples/bsc_sign_and_broadcast.py) | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts) |
 | TRON x402 typed data | [tron_x402_sign_typed_data.py](./packages/python/examples/tron_x402_sign_typed_data.py) | [tron-x402-sign-typed-data.ts](./packages/typescript/examples/tron-x402-sign-typed-data.ts) |
 | BSC x402 typed data | [bsc_x402_sign_typed_data.py](./packages/python/examples/bsc_x402_sign_typed_data.py) | [bsc-x402-sign-typed-data.ts](./packages/typescript/examples/bsc-x402-sign-typed-data.ts) |
+| Dual TRON/EVM typed data from one env input | [dual_sign_typed_data_from_private_key.py](./packages/python/examples/dual_sign_typed_data_from_private_key.py) | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts) |
 | Switch active wallet (SDK) | [switch_active_wallet.py](./packages/python/examples/switch_active_wallet.py) | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts) |
 
 ## Contributing

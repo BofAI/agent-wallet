@@ -233,6 +233,7 @@ WalletError
 - [bsc-sign-and-broadcast.ts](./examples/bsc-sign-and-broadcast.ts) — Build BSC testnet tx, sign with SDK, broadcast
 - [tron-x402-sign-typed-data.ts](./examples/tron-x402-sign-typed-data.ts) — TRON x402 PaymentPermit signing
 - [bsc-x402-sign-typed-data.ts](./examples/bsc-x402-sign-typed-data.ts) — BSC/EVM x402 PaymentPermit signing
+- [dual-sign-typed-data-from-private-key.ts](./examples/dual-sign-typed-data-from-private-key.ts) — Reuse one external env input for both TRON and EVM signers
 - [switch-active-wallet.ts](./examples/switch-active-wallet.ts) — Set and switch active wallet via SDK
 
 ## Security
