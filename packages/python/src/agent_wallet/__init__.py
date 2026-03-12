@@ -12,8 +12,8 @@ from agent_wallet.core.errors import (
 from agent_wallet.core.providers import (
     LocalWalletProvider,
     StaticWalletProvider,
-    WalletFactory,
     WalletProvider,
+    resolve_wallet_provider,
 )
 
 __all__ = [
@@ -26,8 +26,8 @@ __all__ = [
     "StaticWalletProvider",
     "UnsupportedOperationError",
     "WalletError",
-    "WalletFactory",
     "WalletNotFoundError",
     "WalletProvider",
     "WalletType",
+    "resolve_wallet_provider",
 ]

@@ -15,7 +15,7 @@ Prerequisites:
   - agent-wallet add (a tron_local or evm_local wallet)
 
 Usage:
-  AGENT_WALLET_PASSWORD=<your-password> python examples/x402_sign_typed_data.py
+  AGENT_WALLET_PRIVATE_KEY=<hex> python examples/tron_x402_sign_typed_data.py
 """
 
 import asyncio
@@ -24,11 +24,11 @@ import base58
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 
-from agent_wallet import WalletFactory
+from agent_wallet import resolve_wallet_provider
 
 # --- Configuration ---
 
-# WalletFactory resolves the active wallet directly from environment.
+# resolve_wallet_provider resolves the active wallet directly from environment.
 
 
 # --- x402 PaymentPermit typed data ---
@@ -96,7 +96,7 @@ async def main():
     # ----------------------------------------------------------------
     # Step 1: Create provider from env and resolve the active wallet
     # ----------------------------------------------------------------
-    provider = WalletFactory()
+    provider = resolve_wallet_provider(network="tron")
     wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
     print(f"Address: {address}")

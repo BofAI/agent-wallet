@@ -2,7 +2,7 @@
  * Demo: Sign a BSC (BNB Smart Chain) transaction and broadcast it using agent-wallet SDK.
  *
  * This example shows how to use the agent-wallet SDK to:
- *   1. Initialize via WalletFactory (decrypt keys once)
+ *   1. Initialize via resolveWalletProvider (decrypt keys once)
  *   2. Get an EVM wallet by ID
  *   3. Sign a message (pure local, no network)
  *   4. Build a BNB transfer tx, sign it with the SDK, and broadcast via BSC testnet RPC
@@ -13,10 +13,10 @@
  *   - The wallet address must have testnet BNB (use https://www.bnbchain.org/en/testnet-faucet)
  *
  * Usage:
- *   AGENT_WALLET_PASSWORD=<your-password> npx tsx examples/bsc-sign-and-broadcast.ts
+ *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/bsc-sign-and-broadcast.ts
  */
 
-import { WalletFactory } from "../src/index.js";
+import { resolveWalletProvider } from "../src/index.js";
 
 // Transfer parameters
 const TO_ADDRESS = "0x565d490806a6d8ef532f4d29ec00ef6aac71a17a"; // replace with recipient
@@ -30,7 +30,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Create provider from env and resolve the active wallet
   // ----------------------------------------------------------------
-  const provider = WalletFactory();
+  const provider = resolveWalletProvider({ network: "eip155:97" });
 
   // ----------------------------------------------------------------
   // Step 2: Get wallet instance

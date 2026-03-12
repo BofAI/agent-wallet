@@ -14,15 +14,25 @@ from agent_wallet.core.providers.static import StaticWalletProvider
 _DEFAULT_SECRETS_DIR = os.path.join(Path.home(), ".agent-wallet")
 _ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD"
 _ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR"
-_ENV_TRON_PRIVATE_KEY = "TRON_PRIVATE_KEY"
-_ENV_TRON_MNEMONIC = "TRON_MNEMONIC"
-_ENV_EVM_PRIVATE_KEY = "EVM_PRIVATE_KEY"
-_ENV_EVM_MNEMONIC = "EVM_MNEMONIC"
+_ENV_AGENT_WALLET_PRIVATE_KEY = "AGENT_WALLET_PRIVATE_KEY"
+_ENV_AGENT_WALLET_MNEMONIC = "AGENT_WALLET_MNEMONIC"
+
+_NetworkFamily = str
 
 
-def WalletFactory() -> WalletProvider:
-    """Create the appropriate provider from environment variables."""
-    env = os.environ
+def resolve_wallet_provider(
+    *,
+    network: str | None = None,
+) -> WalletProvider:
+    """Resolve the appropriate provider from environment variables."""
+    return _resolve_wallet_provider_from_env(os.environ, network=network)
+
+
+def _resolve_wallet_provider_from_env(
+    env: Mapping[str, str],
+    *,
+    network: str | None = None,
+) -> WalletProvider:
     password = _clean_env_value(env, _ENV_AGENT_WALLET_PASSWORD)
     if password:
         secrets_dir = _clean_env_value(env, _ENV_AGENT_WALLET_DIR)
@@ -31,35 +41,35 @@ def WalletFactory() -> WalletProvider:
         )
         return LocalWalletProvider(resolved_dir, password)
 
-    return StaticWalletProvider(_create_wallet_from_env(env))
+    return StaticWalletProvider(_create_wallet_from_env(env, network))
 
 
-def _create_wallet_from_env(env: Mapping[str, str]) -> BaseWallet:
-    tron_private_key = _clean_env_value(env, _ENV_TRON_PRIVATE_KEY)
-    tron_mnemonic = _clean_env_value(env, _ENV_TRON_MNEMONIC)
-    evm_private_key = _clean_env_value(env, _ENV_EVM_PRIVATE_KEY)
-    evm_mnemonic = _clean_env_value(env, _ENV_EVM_MNEMONIC)
+def _create_wallet_from_env(env: Mapping[str, str], network: str | None) -> BaseWallet:
+    private_key = _clean_env_value(env, _ENV_AGENT_WALLET_PRIVATE_KEY)
+    mnemonic = _clean_env_value(env, _ENV_AGENT_WALLET_MNEMONIC)
 
     _assert_single_wallet_source(
-        tron_private_key=tron_private_key,
-        tron_mnemonic=tron_mnemonic,
-        evm_private_key=evm_private_key,
-        evm_mnemonic=evm_mnemonic,
+        private_key=private_key,
+        mnemonic=mnemonic,
     )
 
-    if tron_private_key:
-        return _create_tron_wallet_from_private_key(tron_private_key)
-    if tron_mnemonic:
-        return _create_tron_wallet_from_mnemonic(tron_mnemonic)
-    if evm_private_key:
-        return _create_evm_wallet_from_private_key(evm_private_key)
-    if evm_mnemonic:
-        return _create_evm_wallet_from_mnemonic(evm_mnemonic)
+    if not private_key and not mnemonic:
+        raise ValueError(
+            "resolve_wallet_provider requires one of: AGENT_WALLET_PASSWORD, "
+            "AGENT_WALLET_PRIVATE_KEY, or AGENT_WALLET_MNEMONIC"
+        )
 
-    raise ValueError(
-        "WalletFactory requires one of: AGENT_WALLET_PASSWORD, "
-        "TRON_PRIVATE_KEY, TRON_MNEMONIC, EVM_PRIVATE_KEY, or EVM_MNEMONIC"
-    )
+    family = _parse_network_family(network)
+
+    if private_key:
+        if family == "tron":
+            return _create_tron_wallet_from_private_key(private_key)
+        return _create_evm_wallet_from_private_key(private_key)
+
+    assert mnemonic is not None
+    if family == "tron":
+        return _create_tron_wallet_from_mnemonic(mnemonic)
+    return _create_evm_wallet_from_mnemonic(mnemonic)
 
 
 def _clean_env_value(env: Mapping[str, str], key: str) -> str | None:
@@ -72,22 +82,28 @@ def _clean_env_value(env: Mapping[str, str], key: str) -> str | None:
 
 def _assert_single_wallet_source(
     *,
-    tron_private_key: str | None,
-    tron_mnemonic: str | None,
-    evm_private_key: str | None,
-    evm_mnemonic: str | None,
+    private_key: str | None,
+    mnemonic: str | None,
 ) -> None:
-    if tron_private_key and tron_mnemonic:
-        raise ValueError("Provide only one of TRON_PRIVATE_KEY or TRON_MNEMONIC")
-    if evm_private_key and evm_mnemonic:
-        raise ValueError("Provide only one of EVM_PRIVATE_KEY or EVM_MNEMONIC")
-
-    has_tron = tron_private_key is not None or tron_mnemonic is not None
-    has_evm = evm_private_key is not None or evm_mnemonic is not None
-    if has_tron and has_evm:
+    if private_key and mnemonic:
         raise ValueError(
-            "Provide either TRON_* or EVM_* environment variables, not both"
+            "Provide only one of AGENT_WALLET_PRIVATE_KEY or "
+            "AGENT_WALLET_MNEMONIC"
         )
+
+
+def _parse_network_family(network: str | None) -> _NetworkFamily:
+    normalized = network.strip().lower() if network else None
+    if not normalized:
+        raise ValueError(
+            "resolve_wallet_provider requires network when using "
+            "AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC"
+        )
+    if normalized == "tron" or normalized.startswith("tron:"):
+        return "tron"
+    if normalized == "eip155" or normalized.startswith("eip155:"):
+        return "eip155"
+    raise ValueError("network must start with 'tron' or 'eip155'")
 
 
 def _create_evm_wallet_from_private_key(private_key: str) -> BaseWallet:

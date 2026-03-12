@@ -17,10 +17,10 @@
  *   - The wallet address must be activated (have received TRX at least once)
  *
  * Usage:
- *   AGENT_WALLET_PASSWORD=<your-password> npx tsx examples/tron-sign-and-broadcast.ts
+ *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/tron-sign-and-broadcast.ts
  */
 
-import { WalletFactory } from '../src/index.js'
+import { resolveWalletProvider } from '../src/index.js'
 
 // Transfer parameters
 const TO_ADDRESS = 'TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr'
@@ -37,7 +37,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Create provider from env and resolve the active wallet
   // ----------------------------------------------------------------
-  const provider = WalletFactory()
+  const provider = resolveWalletProvider({ network: 'tron' })
 
   // ----------------------------------------------------------------
   // Step 2: Get wallet instance

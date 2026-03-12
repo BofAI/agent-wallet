@@ -22,7 +22,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 - **Keystore V3 encryption** — Private keys encrypted at rest with scrypt + AES-128-CTR
 - **Password strength enforcement** — Master password requires 8+ chars, uppercase, lowercase, digit, and special character
 - **Active wallet** — Set a default wallet with `agent-wallet use <id>` to skip `--wallet` on every command
-- **Env-driven wallet selection** — `WalletFactory()` can resolve local, EVM, or TRON wallets directly from environment variables
+- **Env-driven wallet selection** — `resolveWalletProvider()` can resolve local, EVM, or TRON wallets directly from environment variables
 - **EIP-712 typed data** — Full support for structured data signing (x402, Permit2, etc.)
 - **Dual language** — Python and TypeScript SDKs with identical API and cross-compatible keystore format
 - **CLI included** — Key management and signing from the command line (Python & TypeScript)
@@ -37,7 +37,7 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
                        │
 ┌──────────────────────▼──────────────────────────┐
 │              Wallet Core Layer                   │
-│   WalletFactory → LocalWalletProvider            │
+│   resolveWalletProvider → LocalWalletProvider    │
 │                 → StaticWalletProvider           │
 │   BaseWallet: sign_message · sign_transaction    │
 │               sign_raw · sign_typed_data         │
@@ -66,24 +66,46 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 
 ```bash
 $ npm install @bankofai/agent-wallet
-$ export EVM_PRIVATE_KEY=YOUR_PRIVATE_KEY
+$ export AGENT_WALLET_PRIVATE_KEY=YOUR_PRIVATE_KEY
 ```
 
 ```typescript
-import { WalletFactory } from "@bankofai/agent-wallet";
+import { resolveWalletProvider } from "@bankofai/agent-wallet";
 
-const provider = WalletFactory();
+const provider = resolveWalletProvider({ network: "eip155:1" });
 const wallet = await provider.getActiveWallet();
 
 const address = await wallet.getAddress();
 const signature = await wallet.signMessage(new TextEncoder().encode("Hello!"));
 ```
 
-`WalletFactory()` resolves the provider from environment variables:
+### SDK Environment
 
-- `AGENT_WALLET_PASSWORD` and optional `AGENT_WALLET_DIR` -> `LocalWalletProvider`
-- `TRON_PRIVATE_KEY` or `TRON_MNEMONIC` -> `StaticWalletProvider` backed by `TronWallet`
-- `EVM_PRIVATE_KEY` or `EVM_MNEMONIC` -> `StaticWalletProvider` backed by `EvmWallet`
+Available environment variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `AGENT_WALLET_PASSWORD` | local mode | Enables local wallet mode |
+| `AGENT_WALLET_DIR` | optional | Secrets directory, default `~/.agent-wallet` |
+| `AGENT_WALLET_PRIVATE_KEY` | static mode | Single-wallet private key |
+| `AGENT_WALLET_MNEMONIC` | static mode | Single-wallet mnemonic |
+
+Configuration modes:
+
+| Mode | Required configuration | Optional configuration |
+|---|---|---|
+| `local` | `AGENT_WALLET_PASSWORD` | `AGENT_WALLET_DIR` |
+| `tron static` | `network="tron"` or `network="tron:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
+| `evm static` | `network="eip155"` or `network="eip155:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
+
+Resolution rules:
+
+- `AGENT_WALLET_PASSWORD` takes precedence over `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`
+- `AGENT_WALLET_PRIVATE_KEY` and `AGENT_WALLET_MNEMONIC` cannot both be set
+- `network` is required for single-wallet mode
+- `network: "tron"` and `network: "tron:..."` use the TRON adapter
+- `network: "eip155"` and `network: "eip155:..."` use the EVM adapter
+- TRON mnemonic derivation uses `m/44'/195'/0'/0/0`
 
 ### CLI
 

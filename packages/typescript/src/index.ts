@@ -22,8 +22,9 @@ export {
   WalletProvider,
   LocalWalletProvider,
   StaticWalletProvider,
-  WalletFactory,
+  resolveWalletProvider,
 } from "./core/providers/index.js";
+export type { ResolveWalletProviderOptions } from "./core/providers/index.js";
 
 // Local infrastructure (config + key storage)
 export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./local/config.js";

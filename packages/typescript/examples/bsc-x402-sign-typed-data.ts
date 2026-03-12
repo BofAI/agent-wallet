@@ -2,18 +2,18 @@
  * Demo: Sign EIP-712 typed data for x402 payment permit with an EVM/BSC wallet.
  *
  * This example is the EVM/BSC counterpart to tron-x402-sign-typed-data.ts.
- * It resolves the active wallet from environment variables via WalletFactory()
+ * It resolves the active wallet from environment variables via resolveWalletProvider()
  * and verifies the recovered signer directly against the EVM address.
  *
  * Recommended env:
- *   EVM_PRIVATE_KEY=<hex> npx tsx examples/bsc-x402-sign-typed-data.ts
- *   EVM_MNEMONIC="word1 word2 ..." npx tsx examples/bsc-x402-sign-typed-data.ts
+ *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/bsc-x402-sign-typed-data.ts
+ *   AGENT_WALLET_MNEMONIC="word1 word2 ..." npx tsx examples/bsc-x402-sign-typed-data.ts
  *
  * Optional local mode also works:
  *   AGENT_WALLET_PASSWORD=<password> npx tsx examples/bsc-x402-sign-typed-data.ts
  */
 
-import { WalletFactory, type Eip712Capable } from "../src/index.js";
+import { resolveWalletProvider, type Eip712Capable } from "../src/index.js";
 import { recoverTypedDataAddress } from "viem";
 
 const PAYMENT_PERMIT = {
@@ -69,13 +69,13 @@ const STANDARD_TYPED_DATA = {
 };
 
 async function main() {
-  const provider = WalletFactory();
+  const provider = resolveWalletProvider({ network: "eip155:97" });
   const wallet = await provider.getActiveWallet();
   const address = await wallet.getAddress();
 
   if (!address.startsWith("0x")) {
     throw new Error(
-      "bsc-x402-sign-typed-data.ts expects an EVM wallet. Set EVM_PRIVATE_KEY or EVM_MNEMONIC.",
+      "bsc-x402-sign-typed-data.ts expects an EVM wallet. Set AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC.",
     );
   }
 

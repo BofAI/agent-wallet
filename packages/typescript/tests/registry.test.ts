@@ -14,7 +14,12 @@ import {
   WalletError,
   WalletNotFoundError,
 } from '../src/core/errors.js'
-import { LocalWalletProvider, StaticWalletProvider, WalletFactory, WalletProvider } from '../src/core/providers/index.js'
+import {
+  LocalWalletProvider,
+  StaticWalletProvider,
+  WalletProvider,
+  resolveWalletProvider,
+} from '../src/core/providers/index.js'
 import { saveConfig } from '../src/local/config.js'
 import { SecureKVStore } from '../src/local/kv-store.js'
 
@@ -48,10 +53,8 @@ function resetWalletEnv(): void {
   for (const key of [
     'AGENT_WALLET_PASSWORD',
     'AGENT_WALLET_DIR',
-    'TRON_PRIVATE_KEY',
-    'TRON_MNEMONIC',
-    'EVM_PRIVATE_KEY',
-    'EVM_MNEMONIC',
+    'AGENT_WALLET_PRIVATE_KEY',
+    'AGENT_WALLET_MNEMONIC',
   ]) {
     delete process.env[key]
   }
@@ -131,63 +134,70 @@ describe('Error classes', () => {
   })
 })
 
-describe('WalletFactory', () => {
+describe('resolveWalletProvider', () => {
   it('should create local provider from env', () => {
     process.env.AGENT_WALLET_PASSWORD = password
     process.env.AGENT_WALLET_DIR = secretsDir
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider()
     expect(provider).toBeInstanceOf(LocalWalletProvider)
   })
 
-  it('should prefer local provider when chain env also exists', () => {
+  it('should prefer local provider when generic env also exists', () => {
     process.env.AGENT_WALLET_PASSWORD = password
     process.env.AGENT_WALLET_DIR = secretsDir
-    process.env.EVM_PRIVATE_KEY = TEST_PRIVATE_KEY
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider()
     expect(provider).toBeInstanceOf(LocalWalletProvider)
   })
 
   it('should create static provider for EVM private key mode', () => {
-    process.env.EVM_PRIVATE_KEY = TEST_PRIVATE_KEY
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider({ network: 'eip155' })
     expect(provider).toBeInstanceOf(StaticWalletProvider)
   })
 
   it('should throw on missing env', () => {
-    expect(() => WalletFactory()).toThrow(/WalletFactory requires one of/)
+    expect(() => resolveWalletProvider()).toThrow(/resolveWalletProvider requires one of/)
   })
 
-  it('should throw on conflicting chain env', () => {
-    process.env.TRON_PRIVATE_KEY = TEST_PRIVATE_KEY
-    process.env.EVM_PRIVATE_KEY = `0x${'aa'.repeat(32)}`
+  it('should require network for generic env wallet mode', () => {
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
-    expect(() => WalletFactory()).toThrow(/either TRON_\* or EVM_\*/)
+    expect(() => resolveWalletProvider()).toThrow(/requires options\.network/)
   })
 
-  it('should throw on conflicting same-chain env', () => {
-    process.env.TRON_PRIVATE_KEY = TEST_PRIVATE_KEY
-    process.env.TRON_MNEMONIC = TEST_MNEMONIC
+  it('should throw on conflicting generic env', () => {
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
+    process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
 
-    expect(() => WalletFactory()).toThrow(/TRON_PRIVATE_KEY or TRON_MNEMONIC/)
+    expect(() => resolveWalletProvider({ network: 'tron' })).toThrow(
+      /AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC/,
+    )
   })
 
   it('should derive an EVM wallet from mnemonic', async () => {
-    process.env.EVM_MNEMONIC = TEST_MNEMONIC
+    process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider({ network: 'eip155:1' })
     const wallet = await provider.getActiveWallet()
     expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS)
   })
 
   it('should derive a TRON wallet from mnemonic', async () => {
-    process.env.TRON_MNEMONIC = TEST_MNEMONIC
+    process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider({ network: 'tron:nile' })
     const wallet = await provider.getActiveWallet()
     expect((await wallet.getAddress()).startsWith('T')).toBe(true)
+  })
+
+  it('should reject unknown network prefixes', () => {
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
+
+    expect(() => resolveWalletProvider({ network: 'solana:devnet' })).toThrow(/must start with 'tron' or 'eip155'/)
   })
 })
 
@@ -202,9 +212,9 @@ describe('End-to-end', () => {
   })
 
   it('should sign message via env-backed factory', async () => {
-    process.env.EVM_PRIVATE_KEY = TEST_PRIVATE_KEY
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
-    const provider = WalletFactory()
+    const provider = resolveWalletProvider({ network: 'eip155' })
     const wallet = await provider.getActiveWallet()
     const addr = await wallet.getAddress()
     expect(addr.startsWith('0x')).toBe(true)

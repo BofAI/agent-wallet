@@ -2,12 +2,12 @@
 Demo: Sign EIP-712 typed data for x402 payment permit with an EVM/BSC wallet.
 
 This example is the EVM/BSC counterpart to tron_x402_sign_typed_data.py.
-It resolves the active wallet from environment variables via WalletFactory()
+It resolves the active wallet from environment variables via resolve_wallet_provider()
 and verifies the recovered signer directly against the EVM address.
 
 Recommended env:
-  EVM_PRIVATE_KEY=<hex> python examples/bsc_x402_sign_typed_data.py
-  EVM_MNEMONIC="<words>" python examples/bsc_x402_sign_typed_data.py
+  AGENT_WALLET_PRIVATE_KEY=<hex> python examples/bsc_x402_sign_typed_data.py
+  AGENT_WALLET_MNEMONIC="<words>" python examples/bsc_x402_sign_typed_data.py
 
 Optional local mode also works:
   AGENT_WALLET_PASSWORD=<password> python examples/bsc_x402_sign_typed_data.py
@@ -18,7 +18,7 @@ import asyncio
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 
-from agent_wallet import WalletFactory
+from agent_wallet import resolve_wallet_provider
 
 # --- x402 PaymentPermit typed data (BSC example) ---
 
@@ -76,14 +76,14 @@ STANDARD_TYPED_DATA = {
 
 
 async def main():
-    provider = WalletFactory()
+    provider = resolve_wallet_provider(network="eip155:97")
     wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
 
     if not address.startswith("0x"):
         raise RuntimeError(
             "bsc_x402_sign_typed_data.py expects an EVM wallet. "
-            "Set EVM_PRIVATE_KEY or EVM_MNEMONIC."
+            "Set AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC."
         )
 
     print(f"Address: {address}")

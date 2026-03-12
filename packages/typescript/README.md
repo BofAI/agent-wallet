@@ -20,10 +20,10 @@ pnpm add @bankofai/agent-wallet
 ## Quick Start
 
 ```typescript
-import { LocalWalletProvider, WalletFactory } from "@bankofai/agent-wallet";
+import { LocalWalletProvider, resolveWalletProvider } from "@bankofai/agent-wallet";
 
 // Env-driven mode: resolve the active wallet directly
-const provider = WalletFactory();
+const provider = resolveWalletProvider({ network: "eip155:1" });
 const wallet = await provider.getActiveWallet();
 const address = await wallet.getAddress();
 const signature = await wallet.signMessage(
@@ -42,7 +42,7 @@ const active = await localProvider.getActiveWallet();
 const sig = await active.signMessage(new TextEncoder().encode("Hello!"));
 ```
 
-Before using `WalletFactory()`, set one of:
+Before using `resolveWalletProvider()`, set one of:
 
 ```bash
 export AGENT_WALLET_PASSWORD="Abc12345!"
@@ -52,32 +52,47 @@ export AGENT_WALLET_DIR="$HOME/.agent-wallet"
 or:
 
 ```bash
-export TRON_PRIVATE_KEY=YOUR_PRIVATE_KEY
+export AGENT_WALLET_PRIVATE_KEY=YOUR_PRIVATE_KEY
 # or
-export EVM_PRIVATE_KEY=YOUR_PRIVATE_KEY
+export AGENT_WALLET_MNEMONIC="word1 word2 ..."
 ```
 
 ## API Reference
 
-### WalletFactory
+### resolveWalletProvider
 
 ```typescript
-import { WalletFactory } from "@bankofai/agent-wallet";
+import { resolveWalletProvider } from "@bankofai/agent-wallet";
 
-const provider = WalletFactory();
+const provider = resolveWalletProvider({ network: "tron:nile" });
 ```
 
-`WalletFactory()` reads environment variables and returns:
-
-- `LocalWalletProvider` when `AGENT_WALLET_PASSWORD` is set
-- `StaticWalletProvider` with a `TronWallet` when `TRON_PRIVATE_KEY` or `TRON_MNEMONIC` is set
-- `StaticWalletProvider` with an `EvmWallet` when `EVM_PRIVATE_KEY` or `EVM_MNEMONIC` is set
-
 Environment variables:
-- `AGENT_WALLET_DIR` for local mode (default: `~/.agent-wallet`)
-- `AGENT_WALLET_PASSWORD` for local mode
-- `TRON_PRIVATE_KEY` / `TRON_MNEMONIC` for TRON single-wallet mode
-- `EVM_PRIVATE_KEY` / `EVM_MNEMONIC` for EVM single-wallet mode
+
+| Variable | Required | Description |
+|---|---|---|
+| `AGENT_WALLET_PASSWORD` | local mode | Enables local wallet mode |
+| `AGENT_WALLET_DIR` | optional | Secrets directory, default `~/.agent-wallet` |
+| `AGENT_WALLET_PRIVATE_KEY` | static mode | Single-wallet private key |
+| `AGENT_WALLET_MNEMONIC` | static mode | Single-wallet mnemonic |
+
+Configuration modes:
+
+| Mode | Required configuration | Optional configuration |
+|---|---|---|
+| `local` | `AGENT_WALLET_PASSWORD` | `AGENT_WALLET_DIR` |
+| `tron static` | `network="tron"` or `network="tron:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
+| `evm static` | `network="eip155"` or `network="eip155:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
+
+Network routing:
+- `tron` or `tron:<chain>` uses the TRON adapter
+- `eip155` or `eip155:<chainId>` uses the EVM adapter
+- TRON mnemonic derivation uses `m/44'/195'/0'/0/0`
+
+Resolution rules:
+- `AGENT_WALLET_PASSWORD` takes precedence over `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`
+- Set exactly one of `AGENT_WALLET_PRIVATE_KEY` or `AGENT_WALLET_MNEMONIC`
+- `network` is required for single-wallet mode
 
 ### BaseWallet
 

@@ -15,16 +15,16 @@
  *   - agent-wallet add (a tron_local or evm_local wallet)
  *
  * Usage:
- *   AGENT_WALLET_PASSWORD=<your-password> npx tsx examples/x402-sign-typed-data.ts
+ *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/tron-x402-sign-typed-data.ts
  */
 
-import { WalletFactory, type Eip712Capable } from "../src/index.js";
+import { resolveWalletProvider, type Eip712Capable } from "../src/index.js";
 import { recoverTypedDataAddress } from "viem";
 import bs58check from "bs58check";
 
 // --- Configuration ---
 
-// WalletFactory resolves the active wallet directly from environment.
+// resolveWalletProvider resolves the active wallet directly from environment.
 
 // --- x402 PaymentPermit typed data ---
 
@@ -90,7 +90,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Create provider from env and resolve the active wallet
   // ----------------------------------------------------------------
-  const provider = WalletFactory();
+  const provider = resolveWalletProvider({ network: "tron" });
   const wallet = await provider.getActiveWallet();
   const address = await wallet.getAddress();
   console.log(`Address: ${address}`);
