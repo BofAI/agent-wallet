@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from pydantic import BaseModel
 
@@ -22,20 +22,18 @@ class WalletConfig(BaseModel):
     """Single wallet entry in wallets_config.json."""
 
     type: WalletType
-    address: Optional[str] = None
-    identity_file: Optional[str] = None
-    cred_file: Optional[str] = None
+    address: str | None = None
+    identity_file: str | None = None
+    cred_file: str | None = None
     # WaaS-specific
-    wallet_id: Optional[str] = None
-    # Remote-specific
-    remote_url: Optional[str] = None
+    wallet_id: str | None = None
 
 
 class WalletsTopology(BaseModel):
     """Root model for wallets_config.json."""
 
     config_version: int = CURRENT_CONFIG_VERSION
-    active_wallet: Optional[str] = None
+    active_wallet: str | None = None
     wallets: dict[str, WalletConfig]
 
 

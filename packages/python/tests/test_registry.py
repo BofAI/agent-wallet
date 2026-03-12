@@ -1,4 +1,4 @@
-"""Tests for WalletProvider — LocalWalletProvider + RemoteWalletProvider."""
+"""Tests for wallet providers and env-driven WalletFactory resolution."""
 
 import os
 import tempfile
@@ -6,40 +6,56 @@ import tempfile
 import pytest
 
 from agent_wallet.core.errors import DecryptionError, WalletNotFoundError
-from agent_wallet.core.provider import (
+from agent_wallet.core.providers import (
     LocalWalletProvider,
-    RemoteWalletProvider,
-    WalletProvider,
+    StaticWalletProvider,
     WalletFactory,
+    WalletProvider,
 )
-from agent_wallet.local.kv_store import SecureKVStore
 from agent_wallet.local.config import WalletConfig, WalletsTopology, save_config
+from agent_wallet.local.kv_store import SecureKVStore
+
+TEST_PRIVATE_KEY = "0x4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
+TEST_MNEMONIC = "test test test test test test test test test test test junk"
+TEST_EVM_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
 
 @pytest.fixture
 def setup_evm_secrets():
-    """Set up a secrets dir with master.json + one EVM wallet."""
+    """Set up a secrets dir with master.json + one active EVM wallet."""
     with tempfile.TemporaryDirectory() as tmpdir:
         password = "test-registry-pw"
         kv = SecureKVStore(tmpdir, password)
         kv.init_master()
 
-        # Generate a test key
         key = os.urandom(32)
         kv.save_private_key("id_eth_test", key)
 
-        # Write config
         config = WalletsTopology(
+            active_wallet="eth_test",
             wallets={
                 "eth_test": WalletConfig(
                     type="evm_local",
                     identity_file="id_eth_test",
                 ),
-            }
+            },
         )
         save_config(tmpdir, config)
 
         yield tmpdir, password
+
+
+@pytest.fixture(autouse=True)
+def clear_wallet_env(monkeypatch):
+    for key in (
+        "AGENT_WALLET_PASSWORD",
+        "AGENT_WALLET_DIR",
+        "TRON_PRIVATE_KEY",
+        "TRON_MNEMONIC",
+        "EVM_PRIVATE_KEY",
+        "EVM_MNEMONIC",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
 
 class TestLocalWalletProvider:
@@ -61,6 +77,13 @@ class TestLocalWalletProvider:
         assert wallet is not None
 
     @pytest.mark.asyncio
+    async def test_get_active_wallet(self, setup_evm_secrets):
+        tmpdir, password = setup_evm_secrets
+        provider = LocalWalletProvider(secrets_dir=tmpdir, password=password)
+        wallet = await provider.get_active_wallet()
+        assert wallet is not None
+
+    @pytest.mark.asyncio
     async def test_get_wallet_not_found(self, setup_evm_secrets):
         tmpdir, password = setup_evm_secrets
         provider = LocalWalletProvider(secrets_dir=tmpdir, password=password)
@@ -73,54 +96,79 @@ class TestLocalWalletProvider:
             LocalWalletProvider(secrets_dir=tmpdir, password="wrong-password")
 
 
-class TestRemoteWalletProvider:
-    def test_init(self):
-        provider = RemoteWalletProvider(remote_url="http://localhost:8080")
-        assert isinstance(provider, WalletProvider)
-
-    @pytest.mark.asyncio
-    async def test_get_wallet_returns_remote_wallet(self):
-        from agent_wallet.core.adapters.remote import RemoteWallet
-
-        provider = RemoteWalletProvider(
-            remote_url="http://localhost:8080", token="test-token"
-        )
-        wallet = await provider.get_wallet("my_wallet")
-        assert isinstance(wallet, RemoteWallet)
-
-    @pytest.mark.asyncio
-    async def test_list_wallets_not_implemented(self):
-        provider = RemoteWalletProvider(remote_url="http://localhost:8080")
-        with pytest.raises(NotImplementedError):
-            await provider.list_wallets()
-
-
 class TestWalletFactory:
-    def test_local_mode(self, setup_evm_secrets):
+    def test_local_mode(self, setup_evm_secrets, monkeypatch):
         tmpdir, password = setup_evm_secrets
-        provider = WalletFactory(secrets_dir=tmpdir, password=password)
+        monkeypatch.setenv("AGENT_WALLET_PASSWORD", password)
+        monkeypatch.setenv("AGENT_WALLET_DIR", tmpdir)
+        provider = WalletFactory()
         assert isinstance(provider, LocalWalletProvider)
 
-    def test_remote_mode(self):
-        provider = WalletFactory(remote_url="http://localhost:8080")
-        assert isinstance(provider, RemoteWalletProvider)
+    def test_local_mode_takes_precedence_over_chain_env(
+        self, setup_evm_secrets, monkeypatch
+    ):
+        tmpdir, password = setup_evm_secrets
+        monkeypatch.setenv("AGENT_WALLET_PASSWORD", password)
+        monkeypatch.setenv("AGENT_WALLET_DIR", tmpdir)
+        monkeypatch.setenv("EVM_PRIVATE_KEY", TEST_PRIVATE_KEY)
+        provider = WalletFactory()
+        assert isinstance(provider, LocalWalletProvider)
 
-    def test_missing_args(self):
-        with pytest.raises(ValueError, match="Either"):
+    def test_evm_private_key_mode(self, monkeypatch):
+        monkeypatch.setenv("EVM_PRIVATE_KEY", TEST_PRIVATE_KEY)
+        provider = WalletFactory()
+        assert isinstance(provider, StaticWalletProvider)
+
+    def test_missing_env(self):
+        with pytest.raises(ValueError, match="WalletFactory requires one of"):
             WalletFactory()
 
-    def test_missing_password(self):
-        with pytest.raises(ValueError, match="password"):
-            WalletFactory(secrets_dir="/tmp/fake")
+    def test_conflicting_chain_env(self, monkeypatch):
+        monkeypatch.setenv("TRON_PRIVATE_KEY", TEST_PRIVATE_KEY)
+        monkeypatch.setenv("EVM_PRIVATE_KEY", "0x" + ("aa" * 32))
+        with pytest.raises(ValueError, match="either TRON_\\* or EVM_\\*"):
+            WalletFactory()
+
+    def test_conflicting_same_chain_env(self, monkeypatch):
+        monkeypatch.setenv("TRON_PRIVATE_KEY", TEST_PRIVATE_KEY)
+        monkeypatch.setenv("TRON_MNEMONIC", TEST_MNEMONIC)
+        with pytest.raises(ValueError, match="TRON_PRIVATE_KEY or TRON_MNEMONIC"):
+            WalletFactory()
+
+    @pytest.mark.asyncio
+    async def test_evm_mnemonic_mode(self, monkeypatch):
+        monkeypatch.setenv("EVM_MNEMONIC", TEST_MNEMONIC)
+        provider = WalletFactory()
+        wallet = await provider.get_active_wallet()
+        assert await wallet.get_address() == TEST_EVM_ADDRESS
+
+    @pytest.mark.asyncio
+    async def test_tron_mnemonic_mode(self, monkeypatch):
+        monkeypatch.setenv("TRON_MNEMONIC", TEST_MNEMONIC)
+        provider = WalletFactory()
+        wallet = await provider.get_active_wallet()
+        assert (await wallet.get_address()).startswith("T")
 
 
 @pytest.mark.asyncio
 async def test_evm_wallet_sign_via_provider(setup_evm_secrets):
-    """End-to-end: provider → get_wallet → sign_message."""
+    """End-to-end: local provider → get_wallet → sign_message."""
     tmpdir, password = setup_evm_secrets
     provider = LocalWalletProvider(secrets_dir=tmpdir, password=password)
     wallet = await provider.get_wallet("eth_test")
     addr = await wallet.get_address()
     assert addr.startswith("0x")
     sig = await wallet.sign_message(b"hello from provider")
+    assert len(sig) > 0
+
+
+@pytest.mark.asyncio
+async def test_evm_wallet_sign_via_factory_env(monkeypatch):
+    """End-to-end: env factory → active wallet → sign_message."""
+    monkeypatch.setenv("EVM_PRIVATE_KEY", TEST_PRIVATE_KEY)
+    provider = WalletFactory()
+    wallet = await provider.get_active_wallet()
+    addr = await wallet.get_address()
+    assert addr.startswith("0x")
+    sig = await wallet.sign_message(b"hello from env provider")
     assert len(sig) > 0

@@ -20,31 +20,41 @@ pnpm add @bankofai/agent-wallet
 ## Quick Start
 
 ```typescript
-import { WalletFactory } from "@bankofai/agent-wallet";
+import { LocalWalletProvider, WalletFactory } from "@bankofai/agent-wallet";
 
-// Initialize provider (decrypts keys, then discards password)
-const provider = WalletFactory({
-  secretsDir: "~/.agent-wallet",
-  password: "my-password",
-});
-
-// List available wallets
-const wallets = await provider.listWallets();
-for (const w of wallets) {
-  console.log(`${w.id} (${w.type})`);
-}
-
-// Get a wallet and sign
-const wallet = await provider.getWallet("my-wallet");
+// Env-driven mode: resolve the active wallet directly
+const provider = WalletFactory();
+const wallet = await provider.getActiveWallet();
 const address = await wallet.getAddress();
 const signature = await wallet.signMessage(
   new TextEncoder().encode("Hello from agent-wallet!"),
 );
 
-// Active wallet — set once, use without specifying ID
-provider.setActive("my-wallet");
-const active = await provider.getActive();
+// Local mode: manage multiple wallets explicitly
+const localProvider = new LocalWalletProvider("~/.agent-wallet", "my-password");
+const wallets = await localProvider.listWallets();
+for (const w of wallets) {
+  console.log(`${w.id} (${w.type})`);
+}
+
+localProvider.setActive("my-wallet");
+const active = await localProvider.getActiveWallet();
 const sig = await active.signMessage(new TextEncoder().encode("Hello!"));
+```
+
+Before using `WalletFactory()`, set one of:
+
+```bash
+export AGENT_WALLET_PASSWORD="Abc12345!"
+export AGENT_WALLET_DIR="$HOME/.agent-wallet"
+```
+
+or:
+
+```bash
+export TRON_PRIVATE_KEY=YOUR_PRIVATE_KEY
+# or
+export EVM_PRIVATE_KEY=YOUR_PRIVATE_KEY
 ```
 
 ## API Reference
@@ -54,18 +64,20 @@ const sig = await active.signMessage(new TextEncoder().encode("Hello!"));
 ```typescript
 import { WalletFactory } from "@bankofai/agent-wallet";
 
-// Local mode — keys stored on disk, encrypted with Keystore V3
-const provider = WalletFactory({
-  secretsDir: "/path/to/secrets",
-  password: "master-pw",
-});
-
-// Remote mode — proxy signing to a remote agent-wallet server
-const provider = WalletFactory({
-  remoteUrl: "https://signer.example.com",
-  token: "bearer-token",
-});
+const provider = WalletFactory();
 ```
+
+`WalletFactory()` reads environment variables and returns:
+
+- `LocalWalletProvider` when `AGENT_WALLET_PASSWORD` is set
+- `StaticWalletProvider` with a `TronWallet` when `TRON_PRIVATE_KEY` or `TRON_MNEMONIC` is set
+- `StaticWalletProvider` with an `EvmWallet` when `EVM_PRIVATE_KEY` or `EVM_MNEMONIC` is set
+
+Environment variables:
+- `AGENT_WALLET_DIR` for local mode (default: `~/.agent-wallet`)
+- `AGENT_WALLET_PASSWORD` for local mode
+- `TRON_PRIVATE_KEY` / `TRON_MNEMONIC` for TRON single-wallet mode
+- `EVM_PRIVATE_KEY` / `EVM_MNEMONIC` for EVM single-wallet mode
 
 ### BaseWallet
 
@@ -89,7 +101,7 @@ All signing methods return hex-encoded signature strings (no `0x` prefix).
 ### EVM Signing
 
 ```typescript
-const wallet = await provider.getWallet("my-evm-wallet");
+const wallet = await provider.getActiveWallet();
 
 // Sign arbitrary message (EIP-191 personal sign)
 const sig = await wallet.signMessage(new TextEncoder().encode("Hello"));
@@ -121,7 +133,7 @@ const sig = await wallet.signTransaction({
 ### TRON Signing
 
 ```typescript
-const wallet = await provider.getWallet("my-tron-wallet");
+const wallet = await provider.getActiveWallet();
 
 // Sign message (keccak256 + secp256k1, no Ethereum prefix)
 const sig = await wallet.signMessage(new TextEncoder().encode("Hello"));
@@ -164,7 +176,7 @@ import {
 } from "@bankofai/agent-wallet";
 
 try {
-  const wallet = await provider.getWallet("nonexistent");
+  const wallet = await provider.getActiveWallet();
 } catch (e) {
   if (e instanceof WalletNotFoundError) {
     console.log("Wallet not found");
@@ -204,7 +216,8 @@ WalletError
 
 - [tron-sign-and-broadcast.ts](./examples/tron-sign-and-broadcast.ts) — Build tx via TronGrid, sign with SDK, broadcast
 - [bsc-sign-and-broadcast.ts](./examples/bsc-sign-and-broadcast.ts) — Build BSC testnet tx, sign with SDK, broadcast
-- [x402-sign-typed-data.ts](./examples/x402-sign-typed-data.ts) — EIP-712 typed data signing for x402 PaymentPermit
+- [tron-x402-sign-typed-data.ts](./examples/tron-x402-sign-typed-data.ts) — TRON x402 PaymentPermit signing
+- [bsc-x402-sign-typed-data.ts](./examples/bsc-x402-sign-typed-data.ts) — BSC/EVM x402 PaymentPermit signing
 - [switch-active-wallet.ts](./examples/switch-active-wallet.ts) — Set and switch active wallet via SDK
 
 ## Security

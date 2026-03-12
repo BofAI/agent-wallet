@@ -22,12 +22,6 @@
 
 import { WalletFactory } from '../src/index.js'
 
-// --- Configuration ---
-
-const SECRETS_DIR = process.env.AGENT_WALLET_DIR ?? `${process.env.HOME}/.agent-wallet`
-const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? ''
-const WALLET_ID = 'wallet-d'
-
 // Transfer parameters
 const TO_ADDRESS = 'TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr'
 const AMOUNT_SUN = 1_000_000 // 1 TRX = 1,000,000 SUN
@@ -41,31 +35,20 @@ const TRONGRID_URLS: Record<string, string> = {
 
 async function main() {
   // ----------------------------------------------------------------
-  // Step 1: Create provider (decrypts all keys, then discards password)
+  // Step 1: Create provider from env and resolve the active wallet
   // ----------------------------------------------------------------
-  const provider = WalletFactory({ secretsDir: SECRETS_DIR, password: PASSWORD })
+  const provider = WalletFactory()
 
   // ----------------------------------------------------------------
-  // Step 2: List wallets (optional — shows what's available)
+  // Step 2: Get wallet instance
   // ----------------------------------------------------------------
-  const wallets = await provider.listWallets()
-  console.log('Available wallets:')
-  for (const w of wallets) {
-    console.log(`  - ${w.id} (${w.type})`)
-  }
-  console.log()
-
-  // ----------------------------------------------------------------
-  // Step 3: Get wallet instance
-  // ----------------------------------------------------------------
-  const wallet = await provider.getWallet(WALLET_ID)
+  const wallet = await provider.getActiveWallet()
   const address = await wallet.getAddress()
-  console.log(`Using wallet: ${WALLET_ID}`)
   console.log(`Address:      ${address}`)
   console.log()
 
   // ----------------------------------------------------------------
-  // Step 4: Sign a message (pure local, no network)
+  // Step 3: Sign a message (pure local, no network)
   // ----------------------------------------------------------------
   const message = Buffer.from('Hello from agent-wallet!')
   const msgSig = await wallet.signMessage(message)
@@ -73,7 +56,7 @@ async function main() {
   console.log()
 
   // ----------------------------------------------------------------
-  // Step 5: Build unsigned tx via TronGrid, then sign with SDK
+  // Step 4: Build unsigned tx via TronGrid, then sign with SDK
   //
   // The caller builds the transaction using TronGrid's REST API.
   // The SDK only signs: it takes the unsigned tx { txID, raw_data_hex }
@@ -96,7 +79,7 @@ async function main() {
   console.log()
 
   // ----------------------------------------------------------------
-  // Step 6: Caller broadcasts the signed tx
+  // Step 5: Caller broadcasts the signed tx
   // ----------------------------------------------------------------
   console.log('Broadcasting...')
   const txid = await broadcastTransaction(signedTx, baseUrl)

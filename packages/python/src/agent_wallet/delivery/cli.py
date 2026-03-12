@@ -8,10 +8,8 @@ import os
 import secrets
 import stat
 import string
-from pathlib import Path
-from typing import Optional
-
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -32,13 +30,13 @@ def _interactive_select(prompt_text: str, choices: list[str]) -> str | None:
     except (ImportError, EOFError, OSError, ValueError):
         return None
 from agent_wallet.core.errors import DecryptionError, WalletError
-from agent_wallet.local.kv_store import SecureKVStore
 from agent_wallet.local.config import (
     WalletConfig,
     WalletsTopology,
     load_config,
     save_config,
 )
+from agent_wallet.local.kv_store import SecureKVStore
 
 app = typer.Typer(
     name="agent-wallet",
@@ -190,8 +188,8 @@ _START_TYPE_MAP: dict[str, WalletType] = {
 @app.command()
 def start(
     dir: str = _dir_option(),
-    password: Optional[str] = _password_option(),
-    import_type: Optional[str] = typer.Option(None, "--import", "-i", help="Import wallet type (tron or evm)"),
+    password: str | None = _password_option(),
+    import_type: str | None = typer.Option(None, "--import", "-i", help="Import wallet type (tron or evm)"),
 ) -> None:
     """Quick setup: initialize and create default wallets."""
     secrets_path = Path(dir)
@@ -318,7 +316,7 @@ def start(
 @app.command()
 def init(
     dir: str = _dir_option(),
-    password: Optional[str] = _password_option(),
+    password: str | None = _password_option(),
 ) -> None:
     """Initialize secrets directory and set master password."""
     secrets_path = Path(dir)
@@ -344,7 +342,7 @@ def init(
 @app.command()
 def add(
     dir: str = _dir_option(),
-    password: Optional[str] = _password_option(),
+    password: str | None = _password_option(),
 ) -> None:
     """Add a new wallet (interactive)."""
     pw = _get_password(explicit=password)
@@ -529,7 +527,7 @@ def use(
     console.print(f"Active wallet: {wallet_id} ({config.wallets[wallet_id].type.value})")
 
 
-def _resolve_wallet_id(explicit: Optional[str], dir: str) -> str:
+def _resolve_wallet_id(explicit: str | None, dir: str) -> str:
     """Resolve wallet ID from explicit flag, active wallet, or error."""
     if explicit:
         return explicit
@@ -550,18 +548,18 @@ def _resolve_wallet_id(explicit: Optional[str], dir: str) -> str:
 @sign_app.command("tx")
 def sign_tx(
     payload: str = typer.Argument(help="Transaction payload (JSON)"),
-    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
-    password: Optional[str] = _password_option(),
+    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    password: str | None = _password_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign a transaction."""
     wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password(explicit=password)
 
-    from agent_wallet.core.provider import WalletFactory
+    from agent_wallet.core.providers.local import LocalWalletProvider
 
     try:
-        provider = WalletFactory(secrets_dir=dir, password=pw)
+        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
         w = asyncio.run(provider.get_wallet(wallet_id))
         tx_data = json.loads(payload)
         signed = asyncio.run(w.sign_transaction(tx_data))
@@ -583,18 +581,18 @@ def sign_tx(
 @sign_app.command("msg")
 def sign_msg(
     message: str = typer.Argument(help="Message to sign"),
-    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
-    password: Optional[str] = _password_option(),
+    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    password: str | None = _password_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign a message."""
     wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password(explicit=password)
 
-    from agent_wallet.core.provider import WalletFactory
+    from agent_wallet.core.providers.local import LocalWalletProvider
 
     try:
-        provider = WalletFactory(secrets_dir=dir, password=pw)
+        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
         w = asyncio.run(provider.get_wallet(wallet_id))
         signature = asyncio.run(w.sign_message(message.encode()))
         console.print(f"[green]Signature:[/green] {signature}")
@@ -609,18 +607,18 @@ def sign_msg(
 @sign_app.command("typed-data")
 def sign_typed_data(
     data: str = typer.Argument(help="EIP-712 typed data (JSON)"),
-    wallet: Optional[str] = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
-    password: Optional[str] = _password_option(),
+    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    password: str | None = _password_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign EIP-712 typed data."""
     wallet_id = _resolve_wallet_id(wallet, dir)
     pw = _get_password(explicit=password)
 
-    from agent_wallet.core.provider import WalletFactory
+    from agent_wallet.core.providers.local import LocalWalletProvider
 
     try:
-        provider = WalletFactory(secrets_dir=dir, password=pw)
+        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
         w = asyncio.run(provider.get_wallet(wallet_id))
         if not isinstance(w, Eip712Capable):
             console.print("[red]This wallet does not support EIP-712 signing.[/red]")
@@ -639,7 +637,7 @@ def sign_typed_data(
 @app.command("change-password")
 def change_password(
     dir: str = _dir_option(),
-    password: Optional[str] = _password_option(),
+    password: str | None = _password_option(),
 ) -> None:
     """Change master password and re-encrypt all files."""
     old_pw = password or os.environ.get("AGENT_WALLET_PASSWORD") or Prompt.ask("[bold]Current password[/bold]", password=True)
@@ -721,5 +719,3 @@ def reset(
         console.print(f"  🗑️  Deleted: [dim]{f.name}[/dim]")
     console.print()
     console.print("[green]✅ Wallet data reset complete.[/green]")
-
-

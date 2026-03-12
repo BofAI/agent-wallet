@@ -14,7 +14,6 @@ const WalletConfigSchema = z.object({
   identity_file: z.string().optional(),
   cred_file: z.string().optional(),
   wallet_id: z.string().optional(),
-  remote_url: z.string().optional(),
 });
 
 export type WalletConfig = z.infer<typeof WalletConfigSchema>;

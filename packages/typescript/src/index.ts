@@ -16,16 +16,14 @@ export {
 // Wallet adapters
 export { EvmWallet } from "./core/adapters/evm.js";
 export { TronWallet } from "./core/adapters/tron.js";
-export { RemoteWallet } from "./core/adapters/remote.js";
 
 // Provider layer
 export {
   WalletProvider,
   LocalWalletProvider,
-  RemoteWalletProvider,
+  StaticWalletProvider,
   WalletFactory,
-  createProvider,
-} from "./core/provider.js";
+} from "./core/providers/index.js";
 
 // Local infrastructure (config + key storage)
 export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./local/config.js";

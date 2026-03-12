@@ -19,15 +19,16 @@ Usage:
 """
 
 import asyncio
-import os
+
+import base58
+from eth_account import Account
+from eth_account.messages import encode_typed_data
 
 from agent_wallet import WalletFactory
 
 # --- Configuration ---
 
-# SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
-PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
-WALLET_ID = "wallet-a"  # tron_local wallet
+# WalletFactory resolves the active wallet directly from environment.
 
 
 # --- x402 PaymentPermit typed data ---
@@ -93,12 +94,11 @@ STANDARD_TYPED_DATA = {
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider
+    # Step 1: Create provider from env and resolve the active wallet
     # ----------------------------------------------------------------
-    provider = WalletFactory(password=PASSWORD)
-    wallet = await provider.get_wallet(WALLET_ID)
+    provider = WalletFactory()
+    wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
-    print(f"Wallet:  {WALLET_ID}")
     print(f"Address: {address}")
     print()
 
@@ -131,9 +131,6 @@ async def main():
     # Step 4: Verify signature (optional — shows how to recover signer)
     # ----------------------------------------------------------------
     print("=== Verify Signature ===")
-    from eth_account import Account
-    from eth_account.messages import encode_typed_data
-    import base58
 
     signable = encode_typed_data(full_message=PAYMENT_PERMIT)
     recovered = Account.recover_message(signable, signature=bytes.fromhex(sig1))

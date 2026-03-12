@@ -24,10 +24,7 @@ import bs58check from "bs58check";
 
 // --- Configuration ---
 
-const SECRETS_DIR =
-  process.env.AGENT_WALLET_DIR ?? `${process.env.HOME}/.agent-wallet`;
-const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? "";
-const WALLET_ID = "wallet-b"; // tron_local wallet
+// WalletFactory resolves the active wallet directly from environment.
 
 // --- x402 PaymentPermit typed data ---
 
@@ -91,12 +88,11 @@ const STANDARD_TYPED_DATA = {
 
 async function main() {
   // ----------------------------------------------------------------
-  // Step 1: Create provider
+  // Step 1: Create provider from env and resolve the active wallet
   // ----------------------------------------------------------------
-  const provider = WalletFactory({ secretsDir: SECRETS_DIR, password: PASSWORD });
-  const wallet = await provider.getWallet(WALLET_ID);
+  const provider = WalletFactory();
+  const wallet = await provider.getActiveWallet();
   const address = await wallet.getAddress();
-  console.log(`Wallet:  ${WALLET_ID}`);
   console.log(`Address: ${address}`);
   console.log();
 

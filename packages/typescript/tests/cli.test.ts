@@ -2,7 +2,7 @@
  * Tests for the agent-wallet CLI.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -16,12 +16,15 @@ import {
   cmdInspect,
   cmdRemove,
   cmdUse,
+  cmdSignTx,
   cmdSignMsg,
+  cmdSignTypedData,
   cmdChangePassword,
   cmdStart,
   cmdReset,
   main,
 } from "../src/delivery/cli.js";
+import { LocalWalletProvider } from "../src/core/providers/local.js";
 
 const TEST_PASSWORD = "Test-password-123!";
 
@@ -197,6 +200,19 @@ describe("TestInspect", () => {
     await expect(cmdInspect("nonexistent", secretsDir, io)).rejects.toThrow(CliExit);
     expect(getOutput(io)).toContain("not found");
   });
+
+  it("inspect shows missing identity file status", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "inspect_missing", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(join(secretsDir, "id_inspect_missing.json"));
+
+    const io = mockIO();
+    await cmdInspect("inspect_missing", secretsDir, io);
+
+    expect(getOutput(io)).toContain("Identity    id_inspect_missing.json —");
+  });
 });
 
 describe("TestRemove", () => {
@@ -234,6 +250,16 @@ describe("TestRemove", () => {
     const io = mockIO();
     await expect(cmdRemove("nonexistent", secretsDir, true, io)).rejects.toThrow(CliExit);
     expect(getOutput(io)).toContain("not found");
+  });
+
+  it("remove cancelled by confirmation", async () => {
+    const io1 = mockIO([TEST_PASSWORD, "cancel_me", "evm_local", "generate"]);
+    await cmdAdd(secretsDir, io1);
+
+    const io = mockIO(["n"]);
+    await expect(cmdRemove("cancel_me", secretsDir, false, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Cancelled");
+    expect(existsSync(join(secretsDir, "id_cancel_me.json"))).toBe(true);
   });
 });
 
@@ -283,6 +309,65 @@ describe("TestSign", () => {
       else process.env.AGENT_WALLET_PASSWORD = oldPw;
     }
   });
+
+  it("sign tx returns raw output when signed payload is not JSON", async () => {
+    const io = mockIO([TEST_PASSWORD]);
+    const getWalletSpy = vi
+      .spyOn(LocalWalletProvider.prototype, "getWallet")
+      .mockResolvedValue({
+        getAddress: async () => "0x0",
+        signRaw: async () => "raw",
+        signTransaction: async () => "deadbeef",
+        signMessage: async () => "sig",
+      });
+
+    try {
+      await cmdSignTx("sign_wallet", "{}", secretsDir, io);
+      expect(getOutput(io)).toContain("Signed tx: deadbeef");
+    } finally {
+      getWalletSpy.mockRestore();
+    }
+  });
+
+  it("sign tx rejects invalid json", async () => {
+    const io = mockIO([TEST_PASSWORD]);
+    await expect(cmdSignTx("sign_wallet", "{", secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Error");
+  });
+
+  it("sign typed data works for evm wallet", async () => {
+    const io = mockIO([TEST_PASSWORD]);
+    const typedData = JSON.stringify({
+      types: {
+        EIP712Domain: [
+          { name: "name", type: "string" },
+          { name: "version", type: "string" },
+          { name: "chainId", type: "uint256" },
+          { name: "verifyingContract", type: "address" },
+        ],
+        Mail: [{ name: "contents", type: "string" }],
+      },
+      primaryType: "Mail",
+      domain: {
+        name: "Test",
+        version: "1",
+        chainId: 1,
+        verifyingContract: "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+      },
+      message: {
+        contents: "hello",
+      },
+    });
+
+    await cmdSignTypedData("sign_wallet", typedData, secretsDir, io);
+    expect(getOutput(io)).toContain("Signature:");
+  });
+
+  it("sign typed data rejects invalid json", async () => {
+    const io = mockIO([TEST_PASSWORD]);
+    await expect(cmdSignTypedData("sign_wallet", "{", secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Error");
+  });
 });
 
 describe("TestChangePassword", () => {
@@ -320,6 +405,18 @@ describe("TestChangePassword", () => {
 
     const output3 = getOutput(io3);
     expect(output3).toContain("0x");
+  });
+
+  it("change password rejects wrong current password", async () => {
+    const io = mockIO(["Wrong-password-1!"]);
+    await expect(cmdChangePassword(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Error:");
+  });
+
+  it("change password rejects mismatched confirmation", async () => {
+    const io = mockIO([TEST_PASSWORD, "New-password-456!", "Mismatch-password-456!"]);
+    await expect(cmdChangePassword(secretsDir, io)).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Passwords do not match");
   });
 });
 
@@ -632,6 +729,18 @@ describe("TestStart", () => {
     expect(getOutput(io)).toContain("Unknown wallet type");
   });
 
+  it("start import rejects invalid hex", async () => {
+    const io = mockIO(["not-hex"]);
+    await expect(cmdStart(secretsDir, io, { password: TEST_PASSWORD, importType: "evm" })).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Invalid private key length");
+  });
+
+  it("start import rejects invalid private key length", async () => {
+    const io = mockIO(["abcd"]);
+    await expect(cmdStart(secretsDir, io, { password: TEST_PASSWORD, importType: "tron" })).rejects.toThrow(CliExit);
+    expect(getOutput(io)).toContain("Invalid private key length");
+  });
+
   it("start shows quick guide", async () => {
     const io = mockIO();
     await cmdStart(secretsDir, io, { password: TEST_PASSWORD });
@@ -731,6 +840,48 @@ describe("TestMain", () => {
     expect(output).toContain("--wallet, -w");
     expect(output).toContain("--password, -p");
     expect(output).toContain("Sign a message");
+  });
+
+  it("sign tx --help shows transaction help", async () => {
+    const io = mockIO();
+    const code = await main(["sign", "tx", "--help"], io);
+    expect(code).toBe(0);
+    expect(getOutput(io)).toContain("Payload is a JSON string");
+  });
+
+  it("use without wallet id returns usage", async () => {
+    const io = mockIO();
+    const code = await main(["use"], io);
+    expect(code).toBe(1);
+    expect(getOutput(io)).toContain("Usage: agent-wallet use <wallet-id>");
+  });
+
+  it("inspect without wallet id returns usage", async () => {
+    const io = mockIO();
+    const code = await main(["inspect"], io);
+    expect(code).toBe(1);
+    expect(getOutput(io)).toContain("Usage: agent-wallet inspect <wallet-id>");
+  });
+
+  it("remove without wallet id returns usage", async () => {
+    const io = mockIO();
+    const code = await main(["remove"], io);
+    expect(code).toBe(1);
+    expect(getOutput(io)).toContain("Usage: agent-wallet remove <wallet-id>");
+  });
+
+  it("sign without subcommand returns usage", async () => {
+    const io = mockIO();
+    const code = await main(["sign"], io);
+    expect(code).toBe(1);
+    expect(getOutput(io)).toContain("Usage: agent-wallet sign <tx|msg|typed-data>");
+  });
+
+  it("unknown sign subcommand returns 1", async () => {
+    const io = mockIO();
+    const code = await main(["sign", "unknown"], io);
+    expect(code).toBe(1);
+    expect(getOutput(io)).toContain("Unknown sign subcommand");
   });
 
   it("unknown command returns 1", async () => {

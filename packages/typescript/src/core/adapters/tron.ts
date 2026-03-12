@@ -75,7 +75,7 @@ export class TronWallet implements BaseWallet, Eip712Capable {
         message: Record<string, unknown>
       }
 
-      const { EIP712Domain, ...messageTypes } = types
+      const { EIP712Domain: _domain, ...messageTypes } = types
 
       const sig = await account.signTypedData({
         domain: domain as any,

@@ -41,7 +41,7 @@ class TestMasterPassword:
 
     def test_missing_master_json(self, secrets_dir):
         store = SecureKVStore(secrets_dir, "any-password")
-        with pytest.raises(FileNotFoundError, match="master.json"):
+        with pytest.raises(FileNotFoundError, match=r"master\.json"):
             store.verify_password()
 
 

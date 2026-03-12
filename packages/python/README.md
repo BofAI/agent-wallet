@@ -7,47 +7,10 @@ Universal multi-chain secure signing SDK for AI agents — Python implementation
 
 Signing-only by design: handles key storage and signing locally, with no RPC or network dependencies. The caller builds and broadcasts transactions.
 
-## Install
-
-```bash
-pip install agent-wallet              # Core only (encryption, config)
-pip install agent-wallet[evm]         # + EVM signing (eth-account)
-pip install agent-wallet[tron]        # + TRON signing (tronpy)
-pip install agent-wallet[cli]         # + CLI (typer, rich, questionary)
-pip install agent-wallet[all]         # Everything
-```
-
 **Requires Python ≥ 3.10**
 
-## Quick Start
-
-### SDK
-
-```python
-import asyncio
-from agent_wallet import WalletFactory
-
-async def main():
-    # Initialize provider (decrypts keys, then discards password)
-    provider = WalletFactory(secrets_dir="~/.agent-wallet", password="my-password")
-
-    # List available wallets
-    wallets = await provider.list_wallets()
-    for w in wallets:
-        print(f"{w.id} ({w.type})")
-
-    # Get a wallet and sign
-    wallet = await provider.get_wallet("my-wallet")
-    address = await wallet.get_address()
-    signature = await wallet.sign_message(b"Hello from agent-wallet!")
-
-    # Active wallet — set once, use without specifying ID
-    provider.set_active("my-wallet")
-    active = await provider.get_active()
-    sig = await active.sign_message(b"Hello!")
-
-asyncio.run(main())
-```
+Python install and quick start instructions are intentionally omitted for now.
+The package is not currently published for direct installation.
 
 ### CLI
 
@@ -65,16 +28,16 @@ agent-wallet list
 agent-wallet use my-wallet
 
 # Sign a message (uses active wallet)
-agent-wallet sign msg --message "Hello"
+agent-wallet sign msg "Hello"
 
 # Override active wallet with explicit --wallet
-agent-wallet sign msg --wallet other --message "Hello"
+agent-wallet sign msg "Hello" --wallet other
 
-# Sign a transaction (from JSON file)
-agent-wallet sign tx --wallet my-wallet --payload '{"txID": "...", "raw_data_hex": "..."}'
+# Sign a transaction (JSON payload)
+agent-wallet sign tx '{"txID": "...", "raw_data_hex": "..."}' --wallet my-wallet
 
-# Sign EIP-712 typed data (from JSON file)
-agent-wallet sign typed --wallet my-wallet --payload '{"domain": {...}, "types": {...}, ...}'
+# Sign EIP-712 typed data (JSON payload)
+agent-wallet sign typed-data '{"domain": {...}, "types": {...}, ...}' --wallet my-wallet
 ```
 
 Environment variables:
@@ -88,12 +51,20 @@ Environment variables:
 ```python
 from agent_wallet import WalletFactory
 
-# Local mode — keys stored on disk, encrypted with Keystore V3
-provider = WalletFactory(secrets_dir="/path/to/secrets", password="master-pw")
-
-# Remote mode — proxy signing to a remote agent-wallet server
-provider = WalletFactory(remote_url="https://signer.example.com", token="bearer-token")
+provider = WalletFactory()
 ```
+
+`WalletFactory()` reads environment variables and returns:
+
+- `LocalWalletProvider` when `AGENT_WALLET_PASSWORD` is set
+- `StaticWalletProvider` with a `TronWallet` when `TRON_PRIVATE_KEY` or `TRON_MNEMONIC` is set
+- `StaticWalletProvider` with an `EvmWallet` when `EVM_PRIVATE_KEY` or `EVM_MNEMONIC` is set
+
+Environment variables:
+- `AGENT_WALLET_DIR` — Secrets directory for local mode (default: `~/.agent-wallet`)
+- `AGENT_WALLET_PASSWORD` — Master password for local mode
+- `TRON_PRIVATE_KEY` / `TRON_MNEMONIC` — TRON single-wallet mode
+- `EVM_PRIVATE_KEY` / `EVM_MNEMONIC` — EVM single-wallet mode
 
 ### BaseWallet
 
@@ -115,7 +86,7 @@ All signing methods return hex-encoded signature strings (no `0x` prefix).
 ### EVM Signing
 
 ```python
-wallet = await provider.get_wallet("my-evm-wallet")
+wallet = await provider.get_active_wallet()
 
 # Sign arbitrary message (EIP-191 personal sign)
 sig = await wallet.sign_message(b"Hello")
@@ -138,7 +109,7 @@ sig = await wallet.sign_transaction({"to": "0x...", "value": 0, "gas": 21000, ..
 ### TRON Signing
 
 ```python
-wallet = await provider.get_wallet("my-tron-wallet")
+wallet = await provider.get_active_wallet()
 
 # Sign message (keccak256 + secp256k1, no Ethereum prefix)
 sig = await wallet.sign_message(b"Hello")
@@ -161,7 +132,7 @@ sig = await wallet.sign_typed_data({...})
 from agent_wallet import WalletNotFoundError, SigningError, DecryptionError
 
 try:
-    wallet = await provider.get_wallet("nonexistent")
+    wallet = await provider.get_active_wallet()
 except WalletNotFoundError:
     print("Wallet not found")
 
@@ -194,7 +165,8 @@ WalletError
 
 - [tron_sign_and_broadcast.py](./examples/tron_sign_and_broadcast.py) — Build tx via TronGrid, sign with SDK, broadcast
 - [bsc_sign_and_broadcast.py](./examples/bsc_sign_and_broadcast.py) — Build BSC testnet tx, sign with SDK, broadcast
-- [x402_sign_typed_data.py](./examples/x402_sign_typed_data.py) — EIP-712 typed data signing for x402 PaymentPermit
+- [tron_x402_sign_typed_data.py](./examples/tron_x402_sign_typed_data.py) — TRON x402 PaymentPermit signing
+- [bsc_x402_sign_typed_data.py](./examples/bsc_x402_sign_typed_data.py) — BSC/EVM x402 PaymentPermit signing
 - [switch_active_wallet.py](./examples/switch_active_wallet.py) — Set and switch active wallet via SDK
 
 ## Security
