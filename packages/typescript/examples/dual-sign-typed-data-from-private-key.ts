@@ -7,6 +7,7 @@
  *   - `PRIVATE_KEY`
  *   - `MNEMONIC`
  *   - `WALLET_PASSWORD`
+ *   - `MNEMONIC_ACCOUNT_INDEX` (optional, mnemonic mode only)
  *
  * Then it resolves two wallet providers:
  *
@@ -16,6 +17,7 @@
  * Usage:
  *   PRIVATE_KEY=<hex> npx tsx examples/dual-sign-typed-data-from-private-key.ts
  *   MNEMONIC="word1 word2 ..." npx tsx examples/dual-sign-typed-data-from-private-key.ts
+ *   MNEMONIC="word1 word2 ..." MNEMONIC_ACCOUNT_INDEX=1 npx tsx examples/dual-sign-typed-data-from-private-key.ts
  *   WALLET_PASSWORD=<password> npx tsx examples/dual-sign-typed-data-from-private-key.ts
  */
 
@@ -51,6 +53,7 @@ async function main() {
   const privateKey = process.env.PRIVATE_KEY?.trim() ?? "";
   const mnemonic = process.env.MNEMONIC?.trim() ?? "";
   const walletPassword = process.env.WALLET_PASSWORD?.trim() ?? "";
+  const accountIndex = process.env.MNEMONIC_ACCOUNT_INDEX?.trim() ?? "";
   const configuredModes = [privateKey, mnemonic, walletPassword].filter(Boolean).length;
 
   if (configuredModes > 1) {
@@ -63,10 +66,14 @@ async function main() {
   delete process.env.AGENT_WALLET_PRIVATE_KEY;
   delete process.env.AGENT_WALLET_MNEMONIC;
   delete process.env.AGENT_WALLET_PASSWORD;
+  delete process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX;
   if (privateKey) {
     process.env.AGENT_WALLET_PRIVATE_KEY = privateKey;
   } else if (mnemonic) {
     process.env.AGENT_WALLET_MNEMONIC = mnemonic;
+    if (accountIndex) {
+      process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = accountIndex;
+    }
   } else {
     process.env.AGENT_WALLET_PASSWORD = walletPassword;
   }

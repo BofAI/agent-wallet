@@ -16,6 +16,7 @@ _ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD"
 _ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR"
 _ENV_AGENT_WALLET_PRIVATE_KEY = "AGENT_WALLET_PRIVATE_KEY"
 _ENV_AGENT_WALLET_MNEMONIC = "AGENT_WALLET_MNEMONIC"
+_ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX"
 
 _NetworkFamily = str
 
@@ -47,6 +48,9 @@ def _resolve_wallet_provider_from_env(
 def _create_wallet_from_env(env: Mapping[str, str], network: str | None) -> BaseWallet:
     private_key = _clean_env_value(env, _ENV_AGENT_WALLET_PRIVATE_KEY)
     mnemonic = _clean_env_value(env, _ENV_AGENT_WALLET_MNEMONIC)
+    account_index = _parse_account_index(
+        env.get(_ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX)
+    )
 
     _assert_single_wallet_source(
         private_key=private_key,
@@ -68,8 +72,8 @@ def _create_wallet_from_env(env: Mapping[str, str], network: str | None) -> Base
 
     assert mnemonic is not None
     if family == "tron":
-        return _create_tron_wallet_from_mnemonic(mnemonic)
-    return _create_evm_wallet_from_mnemonic(mnemonic)
+        return _create_tron_wallet_from_mnemonic(mnemonic, account_index)
+    return _create_evm_wallet_from_mnemonic(mnemonic, account_index)
 
 
 def _clean_env_value(env: Mapping[str, str], key: str) -> str | None:
@@ -106,17 +110,32 @@ def _parse_network_family(network: str | None) -> _NetworkFamily:
     raise ValueError("network must start with 'tron' or 'eip155'")
 
 
+def _parse_account_index(value: str | None) -> int:
+    if value is None:
+        return 0
+    normalized = value.strip()
+    if not normalized:
+        return 0
+    if not normalized.isdigit():
+        raise ValueError(
+            "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer"
+        )
+    return int(normalized)
+
+
 def _create_evm_wallet_from_private_key(private_key: str) -> BaseWallet:
     from agent_wallet.core.adapters.evm import EvmWallet
 
     return EvmWallet(private_key=_decode_private_key(private_key))
 
 
-def _create_evm_wallet_from_mnemonic(mnemonic: str) -> BaseWallet:
+def _create_evm_wallet_from_mnemonic(mnemonic: str, account_index: int) -> BaseWallet:
     from eth_account import Account
 
     Account.enable_unaudited_hdwallet_features()
-    account = Account.from_mnemonic(mnemonic)
+    account = Account.from_mnemonic(
+        mnemonic, account_path=f"m/44'/60'/0'/0/{account_index}"
+    )
     return _create_evm_wallet_from_private_key(account.key.hex())
 
 
@@ -126,11 +145,13 @@ def _create_tron_wallet_from_private_key(private_key: str) -> BaseWallet:
     return TronWallet(private_key=_decode_private_key(private_key))
 
 
-def _create_tron_wallet_from_mnemonic(mnemonic: str) -> BaseWallet:
+def _create_tron_wallet_from_mnemonic(mnemonic: str, account_index: int) -> BaseWallet:
     from eth_account import Account
 
     Account.enable_unaudited_hdwallet_features()
-    account = Account.from_mnemonic(mnemonic, account_path="m/44'/195'/0'/0/0")
+    account = Account.from_mnemonic(
+        mnemonic, account_path=f"m/44'/195'/0'/0/{account_index}"
+    )
     return _create_tron_wallet_from_private_key(account.key.hex())
 
 

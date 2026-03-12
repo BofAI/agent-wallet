@@ -7,6 +7,7 @@ expected env vars:
   - `PRIVATE_KEY`
   - `MNEMONIC`
   - `WALLET_PASSWORD`
+  - `MNEMONIC_ACCOUNT_INDEX` (optional, mnemonic mode only)
 
 Then it resolves two wallet providers:
 
@@ -16,6 +17,7 @@ Then it resolves two wallet providers:
 Usage:
   PRIVATE_KEY=<hex> python examples/dual_sign_typed_data_from_private_key.py
   MNEMONIC="<words>" python examples/dual_sign_typed_data_from_private_key.py
+  MNEMONIC="<words>" MNEMONIC_ACCOUNT_INDEX=1 python examples/dual_sign_typed_data_from_private_key.py
   WALLET_PASSWORD=<password> python examples/dual_sign_typed_data_from_private_key.py
 """
 
@@ -57,6 +59,7 @@ async def main():
     private_key = os.environ.get("PRIVATE_KEY", "").strip()
     mnemonic = os.environ.get("MNEMONIC", "").strip()
     wallet_password = os.environ.get("WALLET_PASSWORD", "").strip()
+    account_index = os.environ.get("MNEMONIC_ACCOUNT_INDEX", "").strip()
     configured_modes = sum(bool(value) for value in (private_key, mnemonic, wallet_password))
 
     if configured_modes > 1:
@@ -70,10 +73,13 @@ async def main():
     os.environ.pop("AGENT_WALLET_PRIVATE_KEY", None)
     os.environ.pop("AGENT_WALLET_MNEMONIC", None)
     os.environ.pop("AGENT_WALLET_PASSWORD", None)
+    os.environ.pop("AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX", None)
     if private_key:
         os.environ["AGENT_WALLET_PRIVATE_KEY"] = private_key
     elif mnemonic:
         os.environ["AGENT_WALLET_MNEMONIC"] = mnemonic
+        if account_index:
+            os.environ["AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX"] = account_index
     else:
         os.environ["AGENT_WALLET_PASSWORD"] = wallet_password
 

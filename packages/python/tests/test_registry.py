@@ -18,6 +18,7 @@ from agent_wallet.local.kv_store import SecureKVStore
 TEST_PRIVATE_KEY = "0x4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
 TEST_MNEMONIC = "test test test test test test test test test test test junk"
 TEST_EVM_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+TEST_EVM_ADDRESS_INDEX_1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 
 
 @pytest.fixture
@@ -52,6 +53,7 @@ def clear_wallet_env(monkeypatch):
         "AGENT_WALLET_DIR",
         "AGENT_WALLET_PRIVATE_KEY",
         "AGENT_WALLET_MNEMONIC",
+        "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -149,10 +151,27 @@ class TestResolveWalletProvider:
         wallet = await provider.get_active_wallet()
         assert (await wallet.get_address()).startswith("T")
 
+    @pytest.mark.asyncio
+    async def test_evm_mnemonic_mode_with_account_index(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WALLET_MNEMONIC", TEST_MNEMONIC)
+        monkeypatch.setenv("AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX", "1")
+        provider = resolve_wallet_provider(network="eip155:1")
+        wallet = await provider.get_active_wallet()
+        assert await wallet.get_address() == TEST_EVM_ADDRESS_INDEX_1
+
     def test_invalid_network_prefix(self, monkeypatch):
         monkeypatch.setenv("AGENT_WALLET_PRIVATE_KEY", TEST_PRIVATE_KEY)
         with pytest.raises(ValueError, match="network must start with 'tron' or 'eip155'"):
             resolve_wallet_provider(network="solana:devnet")
+
+    def test_invalid_account_index(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WALLET_MNEMONIC", TEST_MNEMONIC)
+        monkeypatch.setenv("AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX", "-1")
+        with pytest.raises(
+            ValueError,
+            match="AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer",
+        ):
+            resolve_wallet_provider(network="eip155")
 
 
 @pytest.mark.asyncio

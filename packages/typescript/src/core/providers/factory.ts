@@ -20,7 +20,8 @@ const ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD";
 const ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR";
 const ENV_AGENT_WALLET_PRIVATE_KEY = "AGENT_WALLET_PRIVATE_KEY";
 const ENV_AGENT_WALLET_MNEMONIC = "AGENT_WALLET_MNEMONIC";
-const TRON_MNEMONIC_PATH = "m/44'/195'/0'/0/0" as const;
+const ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX =
+  "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX";
 
 type NetworkFamily = "tron" | "eip155";
 
@@ -54,6 +55,9 @@ class ValueError extends Error {
 function createWalletFromEnv(env: NodeJS.ProcessEnv, network: string | undefined): BaseWallet {
   const privateKey = cleanEnvValue(env[ENV_AGENT_WALLET_PRIVATE_KEY]);
   const mnemonic = cleanEnvValue(env[ENV_AGENT_WALLET_MNEMONIC]);
+  const accountIndex = parseAccountIndex(
+    env[ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX],
+  );
 
   assertSingleWalletSource({ privateKey, mnemonic });
 
@@ -72,8 +76,8 @@ function createWalletFromEnv(env: NodeJS.ProcessEnv, network: string | undefined
   }
 
   return family === "tron"
-    ? createTronWalletFromMnemonic(mnemonic!)
-    : createEvmWalletFromMnemonic(mnemonic!);
+    ? createTronWalletFromMnemonic(mnemonic!, accountIndex)
+    : createEvmWalletFromMnemonic(mnemonic!, accountIndex);
 }
 
 function cleanEnvValue(value: string | undefined): string | undefined {
@@ -107,12 +111,25 @@ function parseNetworkFamily(network: string | undefined): NetworkFamily {
   throw new ValueError("options.network must start with 'tron' or 'eip155'");
 }
 
+function parseAccountIndex(value: string | undefined): number {
+  const normalized = cleanEnvValue(value);
+  if (!normalized) return 0;
+  if (!/^\d+$/.test(normalized)) {
+    throw new ValueError(
+      "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer",
+    );
+  }
+  return Number(normalized);
+}
+
 function createEvmWalletFromPrivateKey(privateKey: string): BaseWallet {
   return new EvmWallet(decodePrivateKey(privateKey));
 }
 
-function createEvmWalletFromMnemonic(mnemonic: string): BaseWallet {
-  const account = mnemonicToAccount(mnemonic);
+function createEvmWalletFromMnemonic(mnemonic: string, accountIndex: number): BaseWallet {
+  const account = mnemonicToAccount(mnemonic, {
+    addressIndex: accountIndex,
+  });
   const privateKey = account.getHdKey().privateKey;
   if (!privateKey)
     throw new ValueError(
@@ -125,9 +142,9 @@ function createTronWalletFromPrivateKey(privateKey: string): BaseWallet {
   return new TronWallet(decodePrivateKey(privateKey));
 }
 
-function createTronWalletFromMnemonic(mnemonic: string): BaseWallet {
+function createTronWalletFromMnemonic(mnemonic: string, accountIndex: number): BaseWallet {
   const account = mnemonicToAccount(mnemonic, {
-    path: TRON_MNEMONIC_PATH as unknown as `m/44'/60'/${string}`,
+    path: `m/44'/195'/0'/0/${accountIndex}` as unknown as `m/44'/60'/${string}`,
   });
   const privateKey = account.getHdKey().privateKey;
   if (!privateKey) {

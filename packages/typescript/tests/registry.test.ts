@@ -26,6 +26,7 @@ import { SecureKVStore } from '../src/local/kv-store.js'
 const TEST_PRIVATE_KEY = '0x4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
 const TEST_MNEMONIC = 'test test test test test test test test test test test junk'
 const TEST_EVM_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+const TEST_EVM_ADDRESS_INDEX_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 
 let secretsDir = ''
 let password = ''
@@ -55,6 +56,7 @@ function resetWalletEnv(): void {
     'AGENT_WALLET_DIR',
     'AGENT_WALLET_PRIVATE_KEY',
     'AGENT_WALLET_MNEMONIC',
+    'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
   ]) {
     delete process.env[key]
   }
@@ -194,10 +196,28 @@ describe('resolveWalletProvider', () => {
     expect((await wallet.getAddress()).startsWith('T')).toBe(true)
   })
 
+  it('should derive an EVM wallet from mnemonic with account index', async () => {
+    process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
+    process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = '1'
+
+    const provider = resolveWalletProvider({ network: 'eip155:1' })
+    const wallet = await provider.getActiveWallet()
+    expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS_INDEX_1)
+  })
+
   it('should reject unknown network prefixes', () => {
     process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
     expect(() => resolveWalletProvider({ network: 'solana:devnet' })).toThrow(/must start with 'tron' or 'eip155'/)
+  })
+
+  it('should reject invalid account index', () => {
+    process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
+    process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = '-1'
+
+    expect(() => resolveWalletProvider({ network: 'eip155' })).toThrow(
+      /AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer/,
+    )
   })
 })
 

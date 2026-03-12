@@ -75,24 +75,26 @@ Environment variables:
 | `AGENT_WALLET_DIR` | optional | Secrets directory, default `~/.agent-wallet` |
 | `AGENT_WALLET_PRIVATE_KEY` | static mode | Single-wallet private key |
 | `AGENT_WALLET_MNEMONIC` | static mode | Single-wallet mnemonic |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | optional | Address index for mnemonic derivation, default `0` |
 
 Configuration modes:
 
 | Mode | Required configuration | Optional configuration |
 |---|---|---|
 | `local` | `AGENT_WALLET_PASSWORD` | `AGENT_WALLET_DIR` |
-| `tron static` | `network="tron"` or `network="tron:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
-| `evm static` | `network="eip155"` or `network="eip155:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | none |
+| `tron static` | `network="tron"` or `network="tron:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` |
+| `evm static` | `network="eip155"` or `network="eip155:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` |
 
 Network routing:
 - `tron` or `tron:<chain>` uses the TRON adapter
 - `eip155` or `eip155:<chainId>` uses the EVM adapter
-- TRON mnemonic derivation uses `m/44'/195'/0'/0/0`
+- TRON mnemonic derivation uses `m/44'/195'/0'/0/{index}`
 
 Resolution rules:
 - `AGENT_WALLET_PASSWORD` takes precedence over `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`
 - Set exactly one of `AGENT_WALLET_PRIVATE_KEY` or `AGENT_WALLET_MNEMONIC`
 - `network` is required for single-wallet mode
+- `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` is only used with mnemonic mode and defaults to `0`
 
 ### BaseWallet
 
