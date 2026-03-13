@@ -13,7 +13,6 @@ class WalletType(StrEnum):
     # TODO: add more wallet types as needed, e.g.:
     # COINBASE_WAAS = "coinbase_waas"
     # PRIVY_WAAS = "privy_waas"
-    # REMOTE = "remote"
 
 
 

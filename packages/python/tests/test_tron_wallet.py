@@ -8,11 +8,10 @@ import os
 
 import pytest
 from eth_account import Account
-from eth_account.messages import encode_defunct, encode_typed_data
+from eth_account.messages import encode_typed_data
 from tronpy.keys import PrivateKey
 
 from agent_wallet.core.adapters.tron import TronWallet
-
 
 # Known test private key
 TEST_KEY = bytes.fromhex(

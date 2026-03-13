@@ -90,7 +90,6 @@ class TronWallet(BaseWallet, Eip712Capable):
         Used for transaction signing where the txID (SHA256 hash) is
         already computed by TronGrid. Returns r || s || v as hex string.
         """
-        from tronpy.keys import PrivateKey
 
         # tronpy's sign_msg_hash signs a raw 32-byte digest without hashing
         signature = self._tron_key.sign_msg_hash(digest)

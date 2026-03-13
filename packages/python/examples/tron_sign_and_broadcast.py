@@ -3,7 +3,7 @@ Demo: Sign a TRON transaction and broadcast it using agent-wallet SDK.
 
 This example shows how mcp-server-tron (or any other integration) can use
 the agent-wallet SDK to:
-  1. Initialize via WalletFactory (decrypt keys once)
+  1. Initialize via resolve_wallet_provider (decrypt keys once)
   2. Get a wallet by ID
   3. Sign a message (pure local, no network)
   4. Build an unsigned tx via TronGrid, sign it with the SDK, and broadcast
@@ -17,22 +17,17 @@ Prerequisites:
   - The wallet address must be activated (have received TRX at least once)
 
 Usage:
-  AGENT_WALLET_PASSWORD=<your-password> python examples/tron_sign_and_broadcast.py
+  AGENT_WALLET_PRIVATE_KEY=<hex> python examples/tron_sign_and_broadcast.py
 """
 
 import asyncio
 import json
-import os
 
 import httpx
 
-from agent_wallet import WalletFactory
+from agent_wallet import resolve_wallet_provider
 
 # --- Configuration ---
-
-SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
-PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
-WALLET_ID = "wallet-b"
 
 # Transfer parameters
 TO_ADDRESS = "TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr"
@@ -48,30 +43,20 @@ TRONGRID_URLS = {
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider (decrypts all keys, then discards password)
+    # Step 1: Create provider from env and resolve the active wallet
     # ----------------------------------------------------------------
-    provider = WalletFactory(secrets_dir=SECRETS_DIR, password=PASSWORD)
+    provider = resolve_wallet_provider(network="tron")
 
     # ----------------------------------------------------------------
-    # Step 2: List wallets (optional — shows what's available)
+    # Step 2: Get wallet instance
     # ----------------------------------------------------------------
-    wallets = await provider.list_wallets()
-    print("Available wallets:")
-    for w in wallets:
-        print(f"  - {w.id} ({w.type})")
-    print()
-
-    # ----------------------------------------------------------------
-    # Step 3: Get wallet instance
-    # ----------------------------------------------------------------
-    wallet = await provider.get_wallet(WALLET_ID)
+    wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
-    print(f"Using wallet: {WALLET_ID}")
     print(f"Address:      {address}")
     print()
 
     # ----------------------------------------------------------------
-    # Step 4: Sign a message (pure local, no network)
+    # Step 3: Sign a message (pure local, no network)
     # ----------------------------------------------------------------
     message = b"Hello from agent-wallet!"
     msg_sig = await wallet.sign_message(message)
@@ -79,7 +64,7 @@ async def main():
     print()
 
     # ----------------------------------------------------------------
-    # Step 5: Build unsigned tx via TronGrid, then sign with SDK
+    # Step 4: Build unsigned tx via TronGrid, then sign with SDK
     #
     # The caller builds the transaction using TronGrid's REST API.
     # The SDK only signs: it takes the unsigned tx { txID, raw_data_hex }
@@ -102,7 +87,7 @@ async def main():
     print()
 
     # ----------------------------------------------------------------
-    # Step 6: Caller broadcasts the signed tx
+    # Step 5: Caller broadcasts the signed tx
     # ----------------------------------------------------------------
     print("Broadcasting...")
     txid = await broadcast_transaction(signed_tx, base_url)

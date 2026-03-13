@@ -1,26 +1,29 @@
 {
   "name": "@bankofai/agent-wallet",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Universal multi-chain secure signing SDK for AI agents",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "default": "./dist/index.js"
+      "require": "./dist/index.cjs"
     }
   },
   "bin": {
     "agent-wallet": "./dist/delivery/bin.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit && eslint src/",
+    "format": "prettier --write src/ tests/",
+    "format:check": "prettier --check src/ tests/",
     "prepublishOnly": "pnpm build",
     "publish:beta": "pnpm publish --tag beta --access public",
     "publish:latest": "pnpm publish --access public"
@@ -60,9 +63,16 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "tronweb": "^6.2.2",
+    "tsup": "^8.5.1",
     "typescript": "^5.3.0",
+    "typescript-eslint": "^8.57.0",
     "vitest": "^2.0.0"
   }
 }

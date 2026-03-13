@@ -49,7 +49,7 @@ async def main():
     # Step 3: Sign a message using the active wallet (no ID needed)
     # ----------------------------------------------------------------
     if active_id:
-        wallet = await provider.get_active()
+        wallet = await provider.get_active_wallet()
         address = await wallet.get_address()
         sig = await wallet.sign_message(b"Hello from active wallet!")
         print(f"Signed with active wallet '{active_id}':")
@@ -73,7 +73,7 @@ async def main():
     # ----------------------------------------------------------------
     # Step 5: Sign again with the new active wallet
     # ----------------------------------------------------------------
-    wallet = await provider.get_active()
+    wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
     sig = await wallet.sign_message(b"Hello from active wallet!")
     print(f"Signed with new active wallet '{new_active}':")

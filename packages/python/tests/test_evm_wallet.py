@@ -8,7 +8,6 @@ from eth_account.messages import encode_defunct, encode_typed_data
 
 from agent_wallet.core.adapters.evm import EvmWallet
 
-
 # Known test private key (DO NOT use in production)
 TEST_KEY = bytes.fromhex(
     "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"

@@ -22,8 +22,8 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 - **Keystore V3 encryption** — Private keys encrypted at rest with scrypt + AES-128-CTR
 - **Password strength enforcement** — Master password requires 8+ chars, uppercase, lowercase, digit, and special character
 - **Active wallet** — Set a default wallet with `agent-wallet use <id>` to skip `--wallet` on every command
+- **Env-driven wallet selection** — `resolveWalletProvider()` can resolve local, EVM, or TRON wallets directly from environment variables
 - **EIP-712 typed data** — Full support for structured data signing (x402, Permit2, etc.)
-- **Local / Remote modes** — Same interface whether keys are local or proxied via HTTP
 - **Dual language** — Python and TypeScript SDKs with identical API and cross-compatible keystore format
 - **CLI included** — Key management and signing from the command line (Python & TypeScript)
 
@@ -37,10 +37,11 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
                        │
 ┌──────────────────────▼──────────────────────────┐
 │              Wallet Core Layer                   │
-│   WalletFactory → LocalProvider / RemoteProvider │
+│   resolveWalletProvider → LocalWalletProvider    │
+│                 → StaticWalletProvider           │
 │   BaseWallet: sign_message · sign_transaction    │
 │               sign_raw · sign_typed_data         │
-│   Adapters:  EvmWallet · TronWallet · Remote     │
+│   Adapters:  EvmWallet · TronWallet              │
 └──────────────────────┬──────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────┐
@@ -61,40 +62,52 @@ Available in both **Python** and **TypeScript** with identical interfaces and cr
 
 ## Quick Start
 
-### Python
-
-```bash
-$ pip install agent-wallet[tron]
-```
-
-```python
-from agent_wallet import WalletFactory
-
-provider = WalletFactory(secrets_dir="~/.agent-wallet", password="my-password")
-wallet = await provider.get_wallet("my-tron-wallet")
-
-address = await wallet.get_address()
-signature = await wallet.sign_message(b"Hello from agent-wallet!")
-```
-
 ### TypeScript
 
 ```bash
 $ npm install @bankofai/agent-wallet
+$ export AGENT_WALLET_PRIVATE_KEY=YOUR_PRIVATE_KEY
 ```
 
 ```typescript
-import { WalletFactory } from "@bankofai/agent-wallet";
+import { resolveWalletProvider } from "@bankofai/agent-wallet";
 
-const provider = WalletFactory({
-  secretsDir: "~/.agent-wallet",
-  password: "my-password",
-});
-const wallet = await provider.getWallet("my-evm-wallet");
+const provider = resolveWalletProvider({ network: "eip155:1" });
+const wallet = await provider.getActiveWallet();
 
 const address = await wallet.getAddress();
 const signature = await wallet.signMessage(new TextEncoder().encode("Hello!"));
 ```
+
+### SDK Environment
+
+Available environment variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `AGENT_WALLET_PASSWORD` | local mode | Enables local wallet mode |
+| `AGENT_WALLET_DIR` | optional | Secrets directory, default `~/.agent-wallet` |
+| `AGENT_WALLET_PRIVATE_KEY` | static mode | Single-wallet private key |
+| `AGENT_WALLET_MNEMONIC` | static mode | Single-wallet mnemonic |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | optional | Address index for mnemonic derivation, default `0` |
+
+Configuration modes:
+
+| Mode | Required configuration | Optional configuration |
+|---|---|---|
+| `local` | `AGENT_WALLET_PASSWORD` | `AGENT_WALLET_DIR` |
+| `tron static` | `network="tron"` or `network="tron:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` |
+| `evm static` | `network="eip155"` or `network="eip155:..."` and exactly one of `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC` | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` |
+
+Resolution rules:
+
+- `AGENT_WALLET_PASSWORD` takes precedence over `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`
+- `AGENT_WALLET_PRIVATE_KEY` and `AGENT_WALLET_MNEMONIC` cannot both be set
+- `network` is required for single-wallet mode
+- `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` is only used with mnemonic mode and defaults to `0`
+- `network: "tron"` and `network: "tron:..."` use the TRON adapter
+- `network: "eip155"` and `network: "eip155:..."` use the EVM adapter
+- TRON mnemonic derivation uses `m/44'/195'/0'/0/{index}`
 
 ### CLI
 
@@ -184,8 +197,8 @@ Both Python and TypeScript implementations produce identical outputs:
 - Private keys are encrypted at rest using **Keystore V3** (scrypt + AES-128-CTR)
 - Master password is verified via a sentinel value — never stored in plaintext
 - **Password strength enforced** — Minimum 8 characters with uppercase, lowercase, digit, and special character
-- Password is discarded from memory after provider initialization
-- No private keys are ever sent over the network (in Local mode)
+- Password is discarded from memory after local provider initialization
+- No private keys are ever sent over the network
 
 ## Examples
 
@@ -193,7 +206,9 @@ Both Python and TypeScript implementations produce identical outputs:
 |---|---|---|
 | Sign & broadcast TRON tx | [tron_sign_and_broadcast.py](./packages/python/examples/tron_sign_and_broadcast.py) | [tron-sign-and-broadcast.ts](./packages/typescript/examples/tron-sign-and-broadcast.ts) |
 | Sign & broadcast BSC tx | [bsc_sign_and_broadcast.py](./packages/python/examples/bsc_sign_and_broadcast.py) | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts) |
-| EIP-712 typed data (x402) | [x402_sign_typed_data.py](./packages/python/examples/x402_sign_typed_data.py) | [x402-sign-typed-data.ts](./packages/typescript/examples/x402-sign-typed-data.ts) |
+| TRON x402 typed data | [tron_x402_sign_typed_data.py](./packages/python/examples/tron_x402_sign_typed_data.py) | [tron-x402-sign-typed-data.ts](./packages/typescript/examples/tron-x402-sign-typed-data.ts) |
+| BSC x402 typed data | [bsc_x402_sign_typed_data.py](./packages/python/examples/bsc_x402_sign_typed_data.py) | [bsc-x402-sign-typed-data.ts](./packages/typescript/examples/bsc-x402-sign-typed-data.ts) |
+| Dual TRON/EVM typed data from one env input | [dual_sign_typed_data_from_private_key.py](./packages/python/examples/dual_sign_typed_data_from_private_key.py) | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts) |
 | Switch active wallet (SDK) | [switch_active_wallet.py](./packages/python/examples/switch_active_wallet.py) | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts) |
 
 ## Contributing

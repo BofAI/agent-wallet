@@ -1,5 +1,4 @@
 import { privateKeyToAccount } from "viem/accounts";
-import { type Account, type Chain, type Transport } from "viem";
 import type { BaseWallet, Eip712Capable } from "../base.js";
 import { SigningError } from "../errors.js";
 
@@ -58,7 +57,7 @@ export class EvmWallet implements BaseWallet, Eip712Capable {
       };
 
       // Remove EIP712Domain from types — viem adds it automatically
-      const { EIP712Domain, ...messageTypes } = types;
+      const { EIP712Domain: _domain, ...messageTypes } = types;
 
       const sig = await this.account.signTypedData({
         domain: domain as any,

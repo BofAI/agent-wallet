@@ -2,7 +2,7 @@
 Demo: Sign a BSC (BNB Smart Chain) transaction and broadcast it using agent-wallet SDK.
 
 This example shows how to use the agent-wallet SDK to:
-  1. Initialize via WalletFactory (decrypt keys once)
+  1. Initialize via resolve_wallet_provider (decrypt keys once)
   2. Get an EVM wallet by ID
   3. Sign a message (pure local, no network)
   4. Build a BNB transfer tx, sign it with the SDK, and broadcast via BSC testnet RPC
@@ -13,26 +13,20 @@ Prerequisites:
   - The wallet address must have testnet BNB (use https://www.bnbchain.org/en/testnet-faucet)
 
 Usage:
-  AGENT_WALLET_PASSWORD=<your-password> python examples/bsc_sign_and_broadcast.py
+  AGENT_WALLET_PRIVATE_KEY=<hex> python examples/bsc_sign_and_broadcast.py
 """
 
 import asyncio
-import json
-import os
 
 import httpx
 from eth_utils import to_checksum_address
 
-from agent_wallet import WalletFactory
+from agent_wallet import resolve_wallet_provider
 
 # --- Configuration ---
 
-SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
-PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
-WALLET_ID = "wallet-j"
-
 # Transfer parameters
-TO_ADDRESS = "0xcafce5363a2dec41e0597b6b3c6c1a11ab219698"  # replace with recipient
+TO_ADDRESS = "0x565d490806a6d8ef532f4d29ec00ef6aac71a17a"  # replace with recipient
 AMOUNT_WEI = 1_000_000_000_000_000  # 0.001 BNB
 
 # BSC testnet RPC
@@ -42,30 +36,20 @@ CHAIN_ID = 97  # BSC testnet
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider (decrypts all keys, then discards password)
+    # Step 1: Create provider from env and resolve the active wallet
     # ----------------------------------------------------------------
-    provider = WalletFactory(secrets_dir=SECRETS_DIR, password=PASSWORD)
+    provider = resolve_wallet_provider(network="eip155:97")
 
     # ----------------------------------------------------------------
-    # Step 2: List wallets (optional)
+    # Step 2: Get wallet instance
     # ----------------------------------------------------------------
-    wallets = await provider.list_wallets()
-    print("Available wallets:")
-    for w in wallets:
-        print(f"  - {w.id} ({w.type})")
-    print()
-
-    # ----------------------------------------------------------------
-    # Step 3: Get wallet instance
-    # ----------------------------------------------------------------
-    wallet = await provider.get_wallet(WALLET_ID)
+    wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
-    print(f"Using wallet: {WALLET_ID}")
     print(f"Address:      {address}")
     print()
 
     # ----------------------------------------------------------------
-    # Step 4: Sign a message (pure local, no network)
+    # Step 3: Sign a message (pure local, no network)
     # ----------------------------------------------------------------
     message = b"Hello from agent-wallet on BSC!"
     msg_sig = await wallet.sign_message(message)
@@ -73,7 +57,7 @@ async def main():
     print()
 
     # ----------------------------------------------------------------
-    # Step 5: Build tx, sign with SDK, and broadcast
+    # Step 4: Build tx, sign with SDK, and broadcast
     #
     # For EVM chains, sign_transaction accepts a standard tx dict with
     # fields like to, value, gas, gasPrice, nonce, chainId.

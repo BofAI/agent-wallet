@@ -99,8 +99,8 @@ class SecureKVStore:
     """Keystore V3 based encryption engine for keys and credentials.
 
     Holds the password for the duration of its lifetime (typically only during
-    WalletRegistry.__init__). After WalletRegistry init completes, both the
-    password and this KVStore instance go out of scope.
+    LocalWalletProvider.__init__). After init completes, both the password
+    and this KVStore instance go out of scope.
     """
 
     def __init__(self, secrets_dir: str | Path, password: str) -> None:

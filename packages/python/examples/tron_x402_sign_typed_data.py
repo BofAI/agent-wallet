@@ -15,19 +15,20 @@ Prerequisites:
   - agent-wallet add (a tron_local or evm_local wallet)
 
 Usage:
-  AGENT_WALLET_PASSWORD=<your-password> python examples/x402_sign_typed_data.py
+  AGENT_WALLET_PRIVATE_KEY=<hex> python examples/tron_x402_sign_typed_data.py
 """
 
 import asyncio
-import os
 
-from agent_wallet import WalletFactory
+import base58
+from eth_account import Account
+from eth_account.messages import encode_typed_data
+
+from agent_wallet import resolve_wallet_provider
 
 # --- Configuration ---
 
-# SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
-PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
-WALLET_ID = "wallet-a"  # tron_local wallet
+# resolve_wallet_provider resolves the active wallet directly from environment.
 
 
 # --- x402 PaymentPermit typed data ---
@@ -93,12 +94,11 @@ STANDARD_TYPED_DATA = {
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider
+    # Step 1: Create provider from env and resolve the active wallet
     # ----------------------------------------------------------------
-    provider = WalletFactory(password=PASSWORD)
-    wallet = await provider.get_wallet(WALLET_ID)
+    provider = resolve_wallet_provider(network="tron")
+    wallet = await provider.get_active_wallet()
     address = await wallet.get_address()
-    print(f"Wallet:  {WALLET_ID}")
     print(f"Address: {address}")
     print()
 
@@ -131,9 +131,6 @@ async def main():
     # Step 4: Verify signature (optional — shows how to recover signer)
     # ----------------------------------------------------------------
     print("=== Verify Signature ===")
-    from eth_account import Account
-    from eth_account.messages import encode_typed_data
-    import base58
 
     signable = encode_typed_data(full_message=PAYMENT_PERMIT)
     recovered = Account.recover_message(signable, signature=bytes.fromhex(sig1))

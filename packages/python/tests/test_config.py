@@ -67,7 +67,7 @@ class TestLoadSaveConfig:
 
     def test_invalid_json(self, secrets_dir):
         (secrets_dir / "wallets_config.json").write_text("not json")
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             load_config(secrets_dir)
 
     def test_save_stamps_current_version(self, secrets_dir):

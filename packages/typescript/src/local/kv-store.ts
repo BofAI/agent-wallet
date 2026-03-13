@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { keccak256, toHex } from "viem";
+import { keccak256 } from "viem";
 import { DecryptionError } from "../core/errors.js";
 
 const SCRYPT_N = 262144;

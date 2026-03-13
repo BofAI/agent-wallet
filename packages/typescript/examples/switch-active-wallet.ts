@@ -47,7 +47,7 @@ async function main() {
   // Step 3: Sign a message using the active wallet (no ID needed)
   // ----------------------------------------------------------------
   if (activeId) {
-    const wallet = await provider.getActive();
+    const wallet = await provider.getActiveWallet();
     const address = await wallet.getAddress();
     const sig = await wallet.signMessage(Buffer.from("Hello from active wallet!"));
     console.log(`Signed with active wallet '${activeId}':`);
@@ -73,7 +73,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 5: Sign again with the new active wallet
   // ----------------------------------------------------------------
-  const wallet = await provider.getActive();
+  const wallet = await provider.getActiveWallet();
   const address = await wallet.getAddress();
   const sig = await wallet.signMessage(Buffer.from("Hello from active wallet!"));
   console.log(`Signed with new active wallet '${newActive}':`);

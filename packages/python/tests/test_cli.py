@@ -1,7 +1,6 @@
 """Tests for the agent-wallet CLI."""
 
 import json
-import os
 import tempfile
 
 import pytest

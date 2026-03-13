@@ -15,7 +15,7 @@ import { WalletType, type Eip712Capable } from '../core/base.js'
 import { type WalletConfig, type WalletsTopology, loadConfig, saveConfig } from '../local/config.js'
 import { SecureKVStore } from '../local/kv-store.js'
 import { DecryptionError, WalletError } from '../core/errors.js'
-import { WalletFactory } from '../core/provider.js'
+import { LocalWalletProvider } from '../core/providers/local.js'
 
 // --- Helpers ---
 
@@ -450,7 +450,7 @@ export async function cmdSignTx(wallet: string | undefined, payload: string, dir
   const pw = await getPassword(io, { explicit: opts?.password })
 
   try {
-    const provider = WalletFactory({ secretsDir: dir, password: pw })
+    const provider = new LocalWalletProvider(dir, pw)
     const w = await provider.getWallet(walletId)
     const txData = JSON.parse(payload)
     const signed = await w.signTransaction(txData)
@@ -479,7 +479,7 @@ export async function cmdSignMsg(wallet: string | undefined, message: string, di
   const pw = await getPassword(io, { explicit: opts?.password })
 
   try {
-    const provider = WalletFactory({ secretsDir: dir, password: pw })
+    const provider = new LocalWalletProvider(dir, pw)
     const w = await provider.getWallet(walletId)
     const signature = await w.signMessage(Buffer.from(message, 'utf-8'))
     io.print(`Signature: ${signature}`)
@@ -501,7 +501,7 @@ export async function cmdSignTypedData(wallet: string | undefined, data: string,
   const pw = await getPassword(io, { explicit: opts?.password })
 
   try {
-    const provider = WalletFactory({ secretsDir: dir, password: pw })
+    const provider = new LocalWalletProvider(dir, pw)
     const w = await provider.getWallet(walletId)
     if (!('signTypedData' in w)) {
       io.print('This wallet does not support EIP-712 signing.')
@@ -1082,11 +1082,4 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
   }
 
   return 0
-}
-
-// Run when executed directly
-const isMainModule = typeof import.meta.url !== 'undefined' && import.meta.url === `file://${process.argv[1]}`
-
-if (isMainModule) {
-  main().then((code) => process.exit(code))
 }
