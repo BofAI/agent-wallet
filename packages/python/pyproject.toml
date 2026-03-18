@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-wallet"
-version = "2.1.0"
+name = "bankofai-agent-wallet"
+version = "2.2.1b0"
 description = "Universal multi-chain secure signing SDK for AI agents"
 readme = "README.md"
 license = {text = "MIT"}
