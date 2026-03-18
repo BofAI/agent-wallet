@@ -7,9 +7,14 @@ import pytest
 
 from agent_wallet.core.errors import DecryptionError, WalletNotFoundError
 from agent_wallet.core.providers import (
+    EnvProviderOptions,
+    LocalProviderOptions,
     LocalWalletProvider,
+    MnemonicProviderOptions,
+    PrivateKeyProviderOptions,
     StaticWalletProvider,
     WalletProvider,
+    create_wallet_provider,
     resolve_wallet_provider,
 )
 from agent_wallet.local.config import WalletConfig, WalletsTopology, save_config
@@ -172,6 +177,101 @@ class TestResolveWalletProvider:
             match="AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer",
         ):
             resolve_wallet_provider(network="eip155")
+
+
+class TestCreateWalletProvider:
+    def test_explicit_local_mode(self, setup_evm_secrets):
+        tmpdir, password = setup_evm_secrets
+        provider = create_wallet_provider(
+            LocalProviderOptions(secrets_dir=tmpdir, password=password)
+        )
+        assert isinstance(provider, LocalWalletProvider)
+
+    @pytest.mark.asyncio
+    async def test_explicit_private_key(self):
+        provider = create_wallet_provider(
+            PrivateKeyProviderOptions(private_key=TEST_PRIVATE_KEY, network="eip155")
+        )
+        assert isinstance(provider, StaticWalletProvider)
+        wallet = await provider.get_active_wallet()
+        assert (await wallet.get_address()).startswith("0x")
+
+    @pytest.mark.asyncio
+    async def test_explicit_mnemonic_evm(self):
+        provider = create_wallet_provider(
+            MnemonicProviderOptions(mnemonic=TEST_MNEMONIC, network="eip155:1")
+        )
+        wallet = await provider.get_active_wallet()
+        assert await wallet.get_address() == TEST_EVM_ADDRESS
+
+    @pytest.mark.asyncio
+    async def test_explicit_mnemonic_tron(self):
+        provider = create_wallet_provider(
+            MnemonicProviderOptions(mnemonic=TEST_MNEMONIC, network="tron:nile")
+        )
+        wallet = await provider.get_active_wallet()
+        assert (await wallet.get_address()).startswith("T")
+
+    @pytest.mark.asyncio
+    async def test_explicit_mnemonic_with_account_index(self):
+        provider = create_wallet_provider(
+            MnemonicProviderOptions(
+                mnemonic=TEST_MNEMONIC, network="eip155:1", account_index=1
+            )
+        )
+        wallet = await provider.get_active_wallet()
+        assert await wallet.get_address() == TEST_EVM_ADDRESS_INDEX_1
+
+    @pytest.mark.asyncio
+    async def test_explicit_tron_private_key(self):
+        provider = create_wallet_provider(
+            PrivateKeyProviderOptions(private_key=TEST_PRIVATE_KEY, network="tron")
+        )
+        assert isinstance(provider, StaticWalletProvider)
+        wallet = await provider.get_active_wallet()
+        assert (await wallet.get_address()).startswith("T")
+
+    def test_no_options_no_env(self):
+        with pytest.raises(ValueError, match="resolve_wallet_provider requires one of"):
+            create_wallet_provider()
+
+    def test_invalid_private_key_wrong_length(self):
+        with pytest.raises(ValueError, match="Private key must be 32 bytes"):
+            create_wallet_provider(
+                PrivateKeyProviderOptions(private_key="0xabc", network="eip155")
+            )
+
+    def test_invalid_private_key_bad_hex(self):
+        with pytest.raises(ValueError, match="Private key must be a valid hex string"):
+            create_wallet_provider(
+                PrivateKeyProviderOptions(
+                    private_key="z" * 64, network="eip155"
+                )
+            )
+
+    def test_missing_network_for_private_key(self):
+        with pytest.raises(ValueError, match="requires network"):
+            create_wallet_provider(
+                PrivateKeyProviderOptions(private_key=TEST_PRIVATE_KEY, network="")
+            )
+
+    def test_missing_network_for_mnemonic(self):
+        with pytest.raises(ValueError, match="requires network"):
+            create_wallet_provider(
+                MnemonicProviderOptions(mnemonic=TEST_MNEMONIC, network="")
+            )
+
+    def test_fallback_to_env(self, setup_evm_secrets, monkeypatch):
+        tmpdir, password = setup_evm_secrets
+        monkeypatch.setenv("AGENT_WALLET_PASSWORD", password)
+        monkeypatch.setenv("AGENT_WALLET_DIR", tmpdir)
+        provider = create_wallet_provider()
+        assert isinstance(provider, LocalWalletProvider)
+
+    def test_fallback_to_env_with_explicit_options(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WALLET_PRIVATE_KEY", TEST_PRIVATE_KEY)
+        provider = create_wallet_provider(EnvProviderOptions(network="eip155"))
+        assert isinstance(provider, StaticWalletProvider)
 
 
 @pytest.mark.asyncio

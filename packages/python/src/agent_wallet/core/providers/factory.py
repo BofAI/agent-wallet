@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent_wallet.core.base import BaseWallet
@@ -21,11 +22,109 @@ _ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX"
 _NetworkFamily = str
 
 
+# ------------------------------------------------------------------ #
+#  Option types                                                       #
+# ------------------------------------------------------------------ #
+
+
+@dataclass(frozen=True, slots=True)
+class LocalProviderOptions:
+    """File-backed wallet provider with encrypted keystore."""
+
+    password: str
+    secrets_dir: str = _DEFAULT_SECRETS_DIR
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateKeyProviderOptions:
+    """Single wallet from a raw private key hex string."""
+
+    private_key: str
+    network: str
+
+
+@dataclass(frozen=True, slots=True)
+class MnemonicProviderOptions:
+    """Single wallet derived from a BIP-39 mnemonic."""
+
+    mnemonic: str
+    network: str
+    account_index: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EnvProviderOptions:
+    """Resolve provider entirely from environment variables."""
+
+    network: str | None = None
+
+
+CreateWalletProviderOptions = (
+    LocalProviderOptions
+    | PrivateKeyProviderOptions
+    | MnemonicProviderOptions
+    | EnvProviderOptions
+)
+
+
+# ------------------------------------------------------------------ #
+#  Unified factory                                                    #
+# ------------------------------------------------------------------ #
+
+
+def create_wallet_provider(
+    options: CreateWalletProviderOptions | None = None,
+) -> WalletProvider:
+    """Create a wallet provider from explicit options or environment variables.
+
+    Resolution order:
+      1. :class:`LocalProviderOptions`       → ``LocalWalletProvider``
+      2. :class:`PrivateKeyProviderOptions`   → ``StaticWalletProvider`` (from key)
+      3. :class:`MnemonicProviderOptions`     → ``StaticWalletProvider`` (from mnemonic)
+      4. :class:`EnvProviderOptions` / None   → fall back to environment variables
+    """
+    if options is None:
+        options = EnvProviderOptions()
+
+    if isinstance(options, LocalProviderOptions):
+        return LocalWalletProvider(
+            os.path.expanduser(options.secrets_dir), options.password
+        )
+
+    if isinstance(options, PrivateKeyProviderOptions):
+        family = _parse_network_family(options.network)
+        wallet = (
+            _create_tron_wallet_from_private_key(options.private_key)
+            if family == "tron"
+            else _create_evm_wallet_from_private_key(options.private_key)
+        )
+        return StaticWalletProvider(wallet)
+
+    if isinstance(options, MnemonicProviderOptions):
+        family = _parse_network_family(options.network)
+        wallet = (
+            _create_tron_wallet_from_mnemonic(options.mnemonic, options.account_index)
+            if family == "tron"
+            else _create_evm_wallet_from_mnemonic(
+                options.mnemonic, options.account_index
+            )
+        )
+        return StaticWalletProvider(wallet)
+
+    # EnvProviderOptions — fall back to environment variables
+    return _resolve_wallet_provider_from_env(os.environ, network=options.network)
+
+
 def resolve_wallet_provider(
     *,
     network: str | None = None,
 ) -> WalletProvider:
-    """Resolve the appropriate provider from environment variables."""
+    """Resolve a wallet provider purely from environment variables.
+
+    Convenience shorthand for ``create_wallet_provider()`` when all
+    credentials live in env vars.  Pass *network* when using
+    ``AGENT_WALLET_PRIVATE_KEY`` or ``AGENT_WALLET_MNEMONIC``.
+    """
     return _resolve_wallet_provider_from_env(os.environ, network=network)
 
 

@@ -10,18 +10,29 @@ from agent_wallet.core.errors import (
     WalletNotFoundError,
 )
 from agent_wallet.core.providers import (
+    CreateWalletProviderOptions,
+    EnvProviderOptions,
+    LocalProviderOptions,
     LocalWalletProvider,
+    MnemonicProviderOptions,
+    PrivateKeyProviderOptions,
     StaticWalletProvider,
     WalletProvider,
+    create_wallet_provider,
     resolve_wallet_provider,
 )
 
 __all__ = [
     "BaseWallet",
+    "CreateWalletProviderOptions",
     "DecryptionError",
     "Eip712Capable",
+    "EnvProviderOptions",
+    "LocalProviderOptions",
     "LocalWalletProvider",
+    "MnemonicProviderOptions",
     "NetworkError",
+    "PrivateKeyProviderOptions",
     "SigningError",
     "StaticWalletProvider",
     "UnsupportedOperationError",
@@ -29,5 +40,6 @@ __all__ = [
     "WalletNotFoundError",
     "WalletProvider",
     "WalletType",
+    "create_wallet_provider",
     "resolve_wallet_provider",
 ]
