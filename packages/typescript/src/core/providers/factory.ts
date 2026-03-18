@@ -25,10 +25,90 @@ const ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX =
 
 type NetworkFamily = "tron" | "eip155";
 
-export interface ResolveWalletProviderOptions {
+/* ------------------------------------------------------------------ */
+/*  Public types                                                      */
+/* ------------------------------------------------------------------ */
+
+export interface LocalProviderOptions {
+  password: string;
+  secretsDir?: string;
+}
+
+export interface PrivateKeyProviderOptions {
+  privateKey: string;
+  network: string;
+}
+
+export interface MnemonicProviderOptions {
+  mnemonic: string;
+  network: string;
+  accountIndex?: number;
+}
+
+export interface EnvProviderOptions {
   network?: string;
 }
 
+export type CreateWalletProviderOptions =
+  | LocalProviderOptions
+  | PrivateKeyProviderOptions
+  | MnemonicProviderOptions
+  | EnvProviderOptions;
+
+/** Shorthand alias — equivalent to {@link EnvProviderOptions}. */
+export type ResolveWalletProviderOptions = EnvProviderOptions;
+
+/* ------------------------------------------------------------------ */
+/*  Unified factory                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Create a wallet provider from explicit options or environment variables.
+ *
+ * Resolution order:
+ *   1. `secretsDir` + `password`  → LocalWalletProvider
+ *   2. `privateKey` + `network`   → StaticWalletProvider (from key)
+ *   3. `mnemonic`  + `network`    → StaticWalletProvider (from mnemonic)
+ *   4. No explicit credentials    → fall back to environment variables
+ */
+export function createWalletProvider(options: CreateWalletProviderOptions = {}): WalletProvider {
+  // 1. Explicit local mode
+  if ("password" in options) {
+    const { secretsDir = DEFAULT_SECRETS_DIR, password } = options as LocalProviderOptions;
+    return new LocalWalletProvider(expandTilde(secretsDir), password);
+  }
+
+  // 2. Explicit private key
+  if ("privateKey" in options) {
+    const { privateKey, network } = options as PrivateKeyProviderOptions;
+    const family = parseNetworkFamily(network);
+    const wallet = family === "tron"
+      ? createTronWalletFromPrivateKey(privateKey)
+      : createEvmWalletFromPrivateKey(privateKey);
+    return new StaticWalletProvider(wallet);
+  }
+
+  // 3. Explicit mnemonic
+  if ("mnemonic" in options) {
+    const { mnemonic, network, accountIndex = 0 } = options as MnemonicProviderOptions;
+    const family = parseNetworkFamily(network);
+    const wallet = family === "tron"
+      ? createTronWalletFromMnemonic(mnemonic, accountIndex)
+      : createEvmWalletFromMnemonic(mnemonic, accountIndex);
+    return new StaticWalletProvider(wallet);
+  }
+
+  // 4. Fall back to environment variables
+  return resolveWalletProviderFromEnv(process.env, options as EnvProviderOptions);
+}
+
+/**
+ * Resolve a wallet provider purely from environment variables.
+ *
+ * Convenience shorthand for `createWalletProvider()` when all credentials
+ * live in env vars. Pass `network` when using AGENT_WALLET_PRIVATE_KEY
+ * or AGENT_WALLET_MNEMONIC.
+ */
 export function resolveWalletProvider(options: ResolveWalletProviderOptions = {}): WalletProvider {
   return resolveWalletProviderFromEnv(process.env, options);
 }

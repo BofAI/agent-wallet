@@ -18,6 +18,7 @@ import {
   LocalWalletProvider,
   StaticWalletProvider,
   WalletProvider,
+  createWalletProvider,
   resolveWalletProvider,
 } from '../src/core/providers/index.js'
 import { saveConfig } from '../src/local/config.js'
@@ -218,6 +219,107 @@ describe('resolveWalletProvider', () => {
     expect(() => resolveWalletProvider({ network: 'eip155' })).toThrow(
       /AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer/,
     )
+  })
+})
+
+describe('createWalletProvider', () => {
+  it('should create local provider from explicit options', () => {
+    const provider = createWalletProvider({ secretsDir, password })
+    expect(provider).toBeInstanceOf(LocalWalletProvider)
+  })
+
+  it('should create static provider from explicit private key', async () => {
+    const provider = createWalletProvider({
+      privateKey: TEST_PRIVATE_KEY,
+      network: 'eip155',
+    })
+    expect(provider).toBeInstanceOf(StaticWalletProvider)
+    const wallet = await provider.getActiveWallet()
+    expect((await wallet.getAddress()).startsWith('0x')).toBe(true)
+  })
+
+  it('should create static provider from explicit mnemonic', async () => {
+    const provider = createWalletProvider({
+      mnemonic: TEST_MNEMONIC,
+      network: 'eip155:1',
+    })
+    const wallet = await provider.getActiveWallet()
+    expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS)
+  })
+
+  it('should create tron provider from explicit mnemonic', async () => {
+    const provider = createWalletProvider({
+      mnemonic: TEST_MNEMONIC,
+      network: 'tron:nile',
+    })
+    const wallet = await provider.getActiveWallet()
+    expect((await wallet.getAddress()).startsWith('T')).toBe(true)
+  })
+
+  it('should support accountIndex for mnemonic', async () => {
+    const provider = createWalletProvider({
+      mnemonic: TEST_MNEMONIC,
+      network: 'eip155:1',
+      accountIndex: 1,
+    })
+    const wallet = await provider.getActiveWallet()
+    expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS_INDEX_1)
+  })
+
+  it('should create static provider from explicit tron private key', async () => {
+    const provider = createWalletProvider({
+      privateKey: TEST_PRIVATE_KEY,
+      network: 'tron',
+    })
+    expect(provider).toBeInstanceOf(StaticWalletProvider)
+    const wallet = await provider.getActiveWallet()
+    expect((await wallet.getAddress()).startsWith('T')).toBe(true)
+  })
+
+  it('should throw when no options and no env', () => {
+    expect(() => createWalletProvider()).toThrow(/requires one of/)
+  })
+
+  it('should throw on invalid private key (wrong length)', () => {
+    expect(() =>
+      createWalletProvider({ privateKey: '0xabc', network: 'eip155' }),
+    ).toThrow(/Private key must be 32 bytes/)
+  })
+
+  it('should throw on invalid private key (bad hex)', () => {
+    expect(() =>
+      createWalletProvider({
+        privateKey: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
+        network: 'eip155',
+      }),
+    ).toThrow(/Private key must be a valid hex string/)
+  })
+
+  it('should throw when network missing for explicit private key', () => {
+    expect(() =>
+      createWalletProvider({ privateKey: TEST_PRIVATE_KEY, network: '' }),
+    ).toThrow(/requires options\.network/)
+  })
+
+  it('should throw when network missing for explicit mnemonic', () => {
+    expect(() =>
+      createWalletProvider({ mnemonic: TEST_MNEMONIC, network: '' }),
+    ).toThrow(/requires options\.network/)
+  })
+
+  it('should fall back to env when no explicit options', () => {
+    process.env.AGENT_WALLET_PASSWORD = password
+    process.env.AGENT_WALLET_DIR = secretsDir
+
+    const provider = createWalletProvider()
+    expect(provider).toBeInstanceOf(LocalWalletProvider)
+  })
+
+  it('should fall back to env private key', async () => {
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
+
+    const provider = createWalletProvider({ network: 'eip155' })
+    expect(provider).toBeInstanceOf(StaticWalletProvider)
   })
 })
 
