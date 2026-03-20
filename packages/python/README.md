@@ -5,28 +5,15 @@
 
 Universal multi-chain signing SDK for AI agents — Python implementation.
 
-The Python package is built around two public entry points:
+## Install
 
-- `resolve_wallet(...)`
-- `resolve_wallet_provider(...)`
-
-It supports two config-backed wallet types:
-
-- `local_secure`
-- `raw_secret`
-
-## Public API
-
-```python
-from agent_wallet import (
-    ConfigWalletProvider,
-    EnvWalletProvider,
-    resolve_wallet,
-    resolve_wallet_provider,
-)
+```bash
+pip install bankofai-agent-wallet
 ```
 
-### resolve_wallet
+Includes CLI (`agent-wallet`), EVM and TRON support — no extras needed.
+
+## Quick Start
 
 ```python
 from agent_wallet import resolve_wallet
@@ -35,128 +22,47 @@ wallet = await resolve_wallet(network="tron:nile")
 signature = await wallet.sign_message(b"hello")
 ```
 
-### resolve_wallet_provider
+`resolve_wallet` automatically finds your wallet config in `~/.agent-wallet` (or `AGENT_WALLET_DIR`).
+
+## Public API
 
 ```python
-from agent_wallet import ConfigWalletProvider, resolve_wallet_provider
-
-provider = resolve_wallet_provider(dir="~/.agent-wallet", network="eip155:1")
-if isinstance(provider, ConfigWalletProvider):
-    print(provider.get_active_id())
+from agent_wallet import (
+    resolve_wallet,           # → Wallet (one-shot)
+    resolve_wallet_provider,  # → WalletProvider (manage multiple wallets)
+    ConfigWalletProvider,     # file-backed provider (local_secure / raw_secret)
+    EnvWalletProvider,        # env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
+)
 ```
 
-Provider resolution is config-first:
+### resolve_wallet
 
-1. If a password is available from `runtime_secrets.json` or `AGENT_WALLET_PASSWORD`, resolve `ConfigWalletProvider`
-2. Otherwise, if `wallets_config.json` contains wallets, resolve `ConfigWalletProvider`
-3. Otherwise, fall back to `EnvWalletProvider`
+Returns a ready-to-sign `Wallet` for the given network:
 
-## Config Model
-
-`wallets_config.json` stores:
-
-- `active_wallet`
-- `wallets`
-
-Top-level wallet types:
-
-- `local_secure`
-  - config stores `secret_ref`
-  - secret bytes live in `secret_<wallet-id>.json`
-- `raw_secret`
-  - config stores secret material directly
-  - raw material may be:
-    - `private_key`
-    - `mnemonic`
-
-Related files in the wallet directory:
-
-- `wallets_config.json`
-- `runtime_secrets.json`
-- `secret_*.json`
-- `master.json`
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `AGENT_WALLET_DIR` | Wallet directory, default `~/.agent-wallet` |
-| `AGENT_WALLET_PASSWORD` | Password fallback for `local_secure` |
-| `AGENT_WALLET_PRIVATE_KEY` | Env fallback private key |
-| `AGENT_WALLET_MNEMONIC` | Env fallback mnemonic |
-| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Optional mnemonic account index |
-
-`runtime_secrets.json` is an optional local fallback for secrets that cannot be passed via env. Today it stores:
-
-```json
-{
-  "password": "..."
-}
+```python
+wallet = await resolve_wallet(network="eip155:1")
+sig = await wallet.sign_transaction({"to": "0x...", "value": 0})
 ```
 
-## CLI
+### resolve_wallet_provider
 
-### Quick start
+Returns a `WalletProvider` based on what's available — useful when you need to manage or inspect wallets:
 
-```bash
-# Create a secure local wallet
-agent-wallet start local_secure -w default -p 'Abc12345!' -g
+```python
+provider = resolve_wallet_provider(network="eip155:1")
 
-# Create a raw secret wallet from a private key
-agent-wallet start raw_secret -w hot -k 0x...
+# Get the active wallet
+wallet = await provider.get_active_wallet()
 
-# Create a raw secret wallet from a mnemonic
-agent-wallet start raw_secret -w seed -m "word1 word2 ..." -mi 1
+# Or a specific wallet
+wallet = await provider.get_wallet("my_wallet", network="tron:nile")
 ```
 
-### Storage initialization
+### Provider resolution order
 
-```bash
-agent-wallet init -p 'Abc12345!'
-```
-
-### Add wallets
-
-```bash
-agent-wallet add local_secure -w signer2 -g
-agent-wallet add local_secure -w signer3 -m "word1 ..." --derive-as eip155
-agent-wallet add raw_secret -w hot2 -k 0x...
-```
-
-### Active wallet management
-
-```bash
-agent-wallet list
-agent-wallet use my-wallet
-agent-wallet inspect my-wallet
-agent-wallet remove my-wallet
-```
-
-### Signing
-
-```bash
-agent-wallet sign msg "Hello" --network eip155:1
-agent-wallet sign tx '{"to":"0x..."}' --network eip155:1 -w other-wallet
-agent-wallet sign typed-data '{"types": {...}}' --network tron:nile
-```
-
-Important CLI flags:
-
-- `--wallet-id`, `-w`
-- `--password`, `-p`
-- `--network`, `-n`
-- `--generate`, `-g`
-- `--private-key`, `-k`
-- `--mnemonic`, `-m`
-- `--mnemonic-index`, `-mi`
-- `--derive-as`
-- `--save-runtime-secrets`
-
-## Network Routing
-
-- `tron` or `tron:<chain>` uses the TRON adapter
-- `eip155` or `eip155:<chainId>` uses the EVM adapter
-- TRON mnemonic derivation uses `m/44'/195'/0'/0/{index}`
+1. Password available (from `runtime_secrets.json` or `AGENT_WALLET_PASSWORD`) → `ConfigWalletProvider`
+2. `wallets_config.json` exists with wallets → `ConfigWalletProvider`
+3. Otherwise → `EnvWalletProvider` (reads `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`)
 
 ## Wallet Interface
 
@@ -171,6 +77,25 @@ class Eip712Capable(ABC):
     async def sign_typed_data(data: dict) -> str
 ```
 
+Both EVM and TRON adapters implement `Wallet` + `Eip712Capable`.
+
+## Network Routing
+
+| Network string | Adapter | Mnemonic derivation |
+|---|---|---|
+| `eip155` or `eip155:<chainId>` | EVM | `m/44'/60'/0'/0/{index}` |
+| `tron` or `tron:<chain>` | TRON | `m/44'/195'/0'/0/{index}` |
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `AGENT_WALLET_DIR` | Wallet directory (default `~/.agent-wallet`) |
+| `AGENT_WALLET_PASSWORD` | Password for `local_secure` wallets |
+| `AGENT_WALLET_PRIVATE_KEY` | Env fallback private key (hex) |
+| `AGENT_WALLET_MNEMONIC` | Env fallback mnemonic phrase |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Mnemonic account index (default `0`) |
+
 ## Examples
 
 - [tron_sign_and_broadcast.py](./examples/tron_sign_and_broadcast.py)
@@ -180,17 +105,10 @@ class Eip712Capable(ABC):
 - [dual_sign_typed_data_from_private_key.py](./examples/dual_sign_typed_data_from_private_key.py)
 - [switch_active_wallet.py](./examples/switch_active_wallet.py)
 
-## Security
-
-- `local_secure` uses encrypted local storage
-- `raw_secret` stores secret material in plaintext config
-- Password strength is enforced for secure local setup
-- Signing is local-only
-
 ## Development
 
 ```bash
-pip install -e ".[all]"
+pip install -e ".[dev]"
 pytest
 ```
 

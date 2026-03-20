@@ -41,13 +41,27 @@ from agent_wallet.local.kv_store import SecureKVStore
 from agent_wallet.local.secret_loader import load_local_secret
 
 
-def _interactive_select(prompt_text: str, choices: list[str]) -> str | None:
+def _interactive_select(
+    prompt_text: str,
+    choices: list[str],
+    descriptions: dict[str, str] | None = None,
+) -> str | None:
     """Try questionary arrow-key select; return None if unavailable."""
     if not sys.stdin.isatty():
         return None
     try:
         import questionary
 
+        if descriptions:
+            from questionary import Choice
+
+            q_choices = [
+                Choice(title=f"{c}  — {descriptions[c]}", value=c)
+                if c in descriptions
+                else Choice(title=c, value=c)
+                for c in choices
+            ]
+            return questionary.select(prompt_text, choices=q_choices).unsafe_ask()
         return questionary.select(prompt_text, choices=choices).unsafe_ask()
     except (ImportError, EOFError, OSError, ValueError):
         return None
@@ -174,7 +188,8 @@ def _get_password(
         return pw
     if not prompt_if_missing:
         return None
-    pw = _prompt_password_value("Master password")
+    label = "Master password (min 8 chars, upper+lower+digit+special)" if confirm else "Master password"
+    pw = _prompt_password_value(label)
     if confirm:
         errors = _validate_password_strength(pw)
         if errors:
@@ -314,7 +329,11 @@ def _select_start_type(explicit: str | None) -> WalletType:
         return wtype
 
     choices = [t.value for t in WalletType]
-    selected = _interactive_select("Quick start type:", choices)
+    descriptions = {
+        "local_secure": "Encrypted key stored locally (recommended)",
+        "raw_secret": "Private key/mnemonic saved in plaintext config",
+    }
+    selected = _interactive_select("Quick start type:", choices, descriptions)
     if selected is None:
         selected = Prompt.ask("[bold]Quick start type[/bold]", choices=choices)
     return WalletType(selected)
@@ -349,7 +368,12 @@ def _select_import_source(
     if allow_generate:
         choices.insert(0, "generate")
 
-    selected = _interactive_select("Import source:", choices)
+    descriptions = {
+        "generate": "Generate a new random private key",
+        "private_key": "Import an existing hex private key",
+        "mnemonic": "Derive from a BIP-39 mnemonic phrase",
+    }
+    selected = _interactive_select("Import source:", choices, descriptions)
     if selected is None:
         selected = Prompt.ask("[bold]Import source[/bold]", choices=choices, default=choices[0])
     return selected
@@ -359,7 +383,11 @@ def _prompt_derivation_profile() -> str:
     """Prompt for mnemonic derivation profile."""
     _require_interactive("mnemonic derivation profile")
     choices = ["eip155", "tron"]
-    selected = _interactive_select("Derive mnemonic as:", choices)
+    descriptions = {
+        "eip155": "EVM chains (Ethereum, BSC, Polygon, etc.)",
+        "tron": "TRON network",
+    }
+    selected = _interactive_select("Derive mnemonic as:", choices, descriptions)
     if selected is None:
         selected = Prompt.ask("[bold]Derive mnemonic as[/bold]", choices=choices, default="eip155")
     return selected
@@ -401,7 +429,7 @@ def _resolve_private_key_input(
     mnemonic = explicit_mnemonic
     if mnemonic is None:
         mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
-        index_value = Prompt.ask("[bold]Account index[/bold]", default=str(mnemonic_index))
+        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
         try:
             mnemonic_index = int(index_value)
         except ValueError:
@@ -446,7 +474,7 @@ def _build_raw_secret_config(
     source_mnemonic = explicit_mnemonic
     if source_mnemonic is None:
         source_mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
-        index_value = Prompt.ask("[bold]Account index[/bold]", default=str(mnemonic_index))
+        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
         try:
             mnemonic_index = int(index_value)
         except ValueError:
@@ -465,7 +493,7 @@ def _build_raw_secret_config(
 
 def _prompt_wallet_id(default: str) -> str:
     """Prompt for a wallet id with an interactive default."""
-    return Prompt.ask("[bold]Wallet ID[/bold]", default=default)
+    return Prompt.ask("[bold]Wallet ID[/bold] (e.g. my_wallet_1)", default=default)
 
 
 # --- Commands ---
@@ -810,6 +838,16 @@ def use(
     console.print(f"Active wallet: {wallet_id} ({conf.type})")
 
 
+def _needs_password(dir: str, wallet_id: str) -> bool:
+    """Check if the given wallet requires a password (i.e. is local_secure)."""
+    try:
+        provider = _get_provider(dir)
+        conf = provider.get_wallet_config(wallet_id)
+        return conf.type == "local_secure"
+    except (WalletNotFoundError, SystemExit):
+        return True  # default to requiring password if we can't determine
+
+
 def _resolve_wallet_id(explicit: str | None, dir: str) -> str:
     """Resolve wallet ID from explicit flag, active wallet, or error."""
     if explicit:
@@ -844,7 +882,7 @@ def sign_tx(
     pw = _get_password(
         provider=_get_provider(dir),
         explicit=password,
-        prompt_if_missing=False,
+        prompt_if_missing=_needs_password(dir, wallet_id),
     )
     provider = _get_provider(dir, pw)
     _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
@@ -885,7 +923,7 @@ def sign_msg(
     pw = _get_password(
         provider=_get_provider(dir),
         explicit=password,
-        prompt_if_missing=False,
+        prompt_if_missing=_needs_password(dir, wallet_id),
     )
     provider = _get_provider(dir, pw)
     _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
@@ -920,7 +958,7 @@ def sign_typed_data(
     pw = _get_password(
         provider=_get_provider(dir),
         explicit=password,
-        prompt_if_missing=False,
+        prompt_if_missing=_needs_password(dir, wallet_id),
     )
     provider = _get_provider(dir, pw)
     _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
@@ -963,7 +1001,7 @@ def change_password(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    new_pw = Prompt.ask("[bold]New password[/bold]", password=True)
+    new_pw = Prompt.ask("[bold]New password[/bold] (min 8 chars, upper+lower+digit+special)", password=True)
     errors = _validate_password_strength(new_pw)
     if errors:
         console.print(_format_password_error(errors))

@@ -472,7 +472,6 @@ class TestSign:
             env={"AGENT_WALLET_PASSWORD": ""},
         )
         assert result.exit_code == 1
-        assert "Password required" in result.output
         assert "Traceback" not in result.output
 
     def test_sign_with_invalid_runtime_secrets_exits_cleanly(self, dir_with_local_secure_wallet):

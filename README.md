@@ -12,8 +12,6 @@
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
-  - [CLI (npm)](#cli-npm)
-  - [Environment variables only (no wallet files)](#environment-variables-only-no-wallet-files)
 - [Examples](#examples)
 - [Documentation](#documentation)
 - [Security](#security)
@@ -34,41 +32,83 @@ It fits workflows where an **MCP server** or **agent** needs a consistent way to
 
 Pick **one** path below. CLI data lives under `~/.agent-wallet` unless you set **`AGENT_WALLET_DIR`**.
 
-### CLI (npm)
+### CLI
 
-Install the CLI (Node.js 18+):
+Install the CLI:
 
 ```bash
 npm install -g @bankofai/agent-wallet
+#or
+pip install bankofai-agent-wallet
 ```
 
-Create your first **encrypted** wallet (a strong master password is generated and shown once if you omit `-p` / `--password`):
+Create your first **encrypted** wallet — just run `start` and follow the prompts (a strong master password is generated and shown once if you omit `-p` / `--password`):
 
 ```bash
-agent-wallet start local_secure --generate
+agent-wallet start
 ```
 
-Check that it worked:
+```
+? Quick start type: local_secure  — Encrypted key stored locally (recommended)
+Wallet ID (e.g. my_wallet_1) (default):
+
+Wallet initialized!
+? Import source: generate  — Generate a new random private key
+
+Wallets:
+┌───────────┬──────────────┐
+│ Wallet ID │ Type         │
+├───────────┼──────────────┤
+│ default   │ local_secure │
+└───────────┴──────────────┘
+
+Your master password: WiJxcI#t6@73K#OE
+   Save this password! You'll need it for signing and other operations.
+
+Active wallet: default
+
+Quick guide:
+   agent-wallet list              -- View your wallets
+   agent-wallet sign tx '{...}'   -- Sign a transaction
+   agent-wallet start -h          -- See all options
+```
+
+Check your wallets:
 
 ```bash
 agent-wallet list
 ```
 
-**Next steps:** `agent-wallet use <id>` for the active wallet, then `agent-wallet sign ... --network <chain>`. Full walkthrough: [Getting started](./doc/getting-started.md).
-
-> **Python:** there is also a Typer-based CLI via `pip install 'bankofai-agent-wallet[evm,tron,cli]'` — flags and help text can differ; see [`packages/python/README.md`](./packages/python/README.md).
-
-### Environment variables only (no wallet files)
-
-For **quick tests** or minimal setups, you can point libraries at a key or mnemonic via env (no `wallets_config.json`):
-
-```bash
-export AGENT_WALLET_PRIVATE_KEY=0x...   # or AGENT_WALLET_MNEMONIC="word1 word2 ..."
+```
+             Wallets
+┌────┬───────────┬──────────────┐
+│    │ Wallet ID │ Type         │
+├────┼───────────┼──────────────┤
+│ *  │ default   │ local_secure │
+└────┴───────────┴──────────────┘
 ```
 
-Optional: `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` (default `0`), `AGENT_WALLET_DIR` for file-based config when you use the CLI/SDK together.
+Sign a message:
 
-> **Security:** keys in environment variables are easy to leak (shell history, `.env` files). Prefer **encrypted local storage** (`local_secure`) for real funds.
+```bash
+agent-wallet sign msg "MESSAGE" -n tron -p 'WiJxcI#t6@73K#OE'
+```
+
+```
+Signature: d220de880cbc1c3f936bf8bbf363dfeb9490173dbbf8db435ad1ab746f7542f0319032808af046bcdca45327cfc75d105b50bc54f835d9682b6e49d7d1b282fc00
+```
+
+To skip the `-p` flag every time, set the password in your environment:
+
+```bash
+export AGENT_WALLET_PASSWORD='WiJxcI#t6@73K#OE'
+agent-wallet sign msg "MESSAGE" -n tron   # no -p needed
+```
+
+Or use `--save-runtime-secrets` on any command to persist it to `~/.agent-wallet/runtime_secrets.json` (auto-detected on next run).
+
+**Next steps:** `agent-wallet use <id>` to switch the active wallet, `agent-wallet sign -h` for all sign options. Full walkthrough: [Getting started](./doc/getting-started.md).
+
 
 ## Examples
 

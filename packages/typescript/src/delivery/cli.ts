@@ -56,12 +56,19 @@ async function loadInquirer() {
   }
 }
 
-async function interactiveSelect(promptText: string, choices: string[]): Promise<string | null> {
+async function interactiveSelect(
+  promptText: string,
+  choices: string[],
+  descriptions?: Record<string, string>,
+): Promise<string | null> {
   const inquirer = await loadInquirer()
   if (!inquirer) return null
   return inquirer.select({
     message: promptText,
-    choices: choices.map((c) => ({ name: c, value: c })),
+    choices: choices.map((c) => ({
+      name: descriptions?.[c] ? `${c}  — ${descriptions[c]}` : c,
+      value: c,
+    })),
   })
 }
 
@@ -165,7 +172,10 @@ async function getPassword(
   if (opts?.promptIfMissing === false) {
     return undefined
   }
-  pw = await io.prompt('Master password', { password: true })
+  const pwLabel = opts?.confirm
+    ? 'Master password (min 8 chars, upper+lower+digit+special)'
+    : 'Master password'
+  pw = await io.prompt(pwLabel, { password: true })
   if (opts?.confirm) {
     const errors = validatePasswordStrength(pw)
     if (errors.length > 0) {
@@ -272,8 +282,13 @@ async function selectWalletType(explicit: string | undefined, io: CliIO): Promis
     )
     throw new CliExit(1)
   }
-  const choices = Object.values(WalletType)
+  const choices = Object.values(WalletType) as string[]
+  const descriptions: Record<string, string> = {
+    local_secure: 'Encrypted key stored locally (recommended)',
+    raw_secret: 'Private key/mnemonic saved in plaintext config',
+  }
   const selected =
+    (await interactiveSelect('Quick start type', choices, descriptions)) ??
     (await io.select?.('Quick start type', choices)) ??
     (await io.prompt('Quick start type', { choices }))
 
@@ -305,7 +320,7 @@ function selectImportSource(opts: {
 }
 
 async function promptWalletId(io: CliIO, defaultValue: string): Promise<string> {
-  return await io.prompt('Wallet ID', { defaultValue })
+  return await io.prompt('Wallet ID (e.g. my_wallet_1)', { defaultValue })
 }
 
 async function selectImportSourceInteractive(
@@ -328,7 +343,13 @@ async function selectImportSourceInteractive(
   const choices = opts.allowGenerate
     ? ['generate', 'private_key', 'mnemonic']
     : ['private_key', 'mnemonic']
+  const descriptions: Record<string, string> = {
+    generate: 'Generate a new random private key',
+    private_key: 'Import an existing hex private key',
+    mnemonic: 'Derive from a BIP-39 mnemonic phrase',
+  }
   return (
+    (await interactiveSelect('Import source', choices, descriptions)) ??
     (await io.select?.('Import source', choices)) ??
     (await io.prompt('Import source', { choices, defaultValue: choices[0] }))
   )
@@ -336,7 +357,12 @@ async function selectImportSourceInteractive(
 
 async function promptDerivationProfile(io: CliIO): Promise<string> {
   const choices = ['eip155', 'tron']
+  const descriptions: Record<string, string> = {
+    eip155: 'EVM chains (Ethereum, BSC, Polygon, etc.)',
+    tron: 'TRON network',
+  }
   return (
+    (await interactiveSelect('Derive mnemonic as', choices, descriptions)) ??
     (await io.select?.('Derive mnemonic as', choices)) ??
     (await io.prompt('Derive mnemonic as', { choices, defaultValue: 'eip155' }))
   )
@@ -352,7 +378,7 @@ async function promptMnemonicMaterial(
   }
 
   const promptedMnemonic = await io.prompt('Paste mnemonic phrase', { password: true })
-  const promptedIndex = await io.prompt('Account index', {
+  const promptedIndex = await io.prompt('Account index (0 = first account)', {
     defaultValue: String(mnemonicIndex),
   })
   const parsedIndex = Number(promptedIndex)
@@ -808,6 +834,16 @@ function resolveWalletId(explicit: string | undefined, dir: string, io: CliIO): 
   throw new CliExit(1)
 }
 
+function needsPassword(dir: string, walletId: string): boolean {
+  try {
+    const provider = getProvider(dir)
+    const conf = provider.getWalletConfig(walletId)
+    return conf.type === 'local_secure'
+  } catch {
+    return true // default to requiring password if we can't determine
+  }
+}
+
 // --- Sign subcommands ---
 
 export async function cmdSignTx(
@@ -824,7 +860,7 @@ export async function cmdSignTx(
   }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
-  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: false })
+  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: needsPassword(dir, walletId) })
   const provider = getProvider(dir, pw)
   maybeSaveRuntimeSecrets(provider, pw, opts?.saveRuntimeSecrets ?? false)
 
@@ -866,7 +902,7 @@ export async function cmdSignMsg(
   }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
-  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: false })
+  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: needsPassword(dir, walletId) })
   const provider = getProvider(dir, pw)
   maybeSaveRuntimeSecrets(provider, pw, opts?.saveRuntimeSecrets ?? false)
 
@@ -901,7 +937,7 @@ export async function cmdSignTypedData(
   }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
-  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: false })
+  const pw = await getPassword(io, { explicit: opts?.password, provider: baseProvider, promptIfMissing: needsPassword(dir, walletId) })
   const provider = getProvider(dir, pw)
   maybeSaveRuntimeSecrets(provider, pw, opts?.saveRuntimeSecrets ?? false)
 
@@ -950,7 +986,7 @@ export async function cmdChangePassword(
     throw e
   }
 
-  const newPw = await io.prompt('New password', { password: true })
+  const newPw = await io.prompt('New password (min 8 chars, upper+lower+digit+special)', { password: true })
   const strengthErrors = validatePasswordStrength(newPw)
   if (strengthErrors.length > 0) {
     io.print(`Password too weak. Requirements: ${strengthErrors.join(', ')}.`)

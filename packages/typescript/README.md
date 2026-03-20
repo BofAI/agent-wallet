@@ -5,112 +5,66 @@
 
 Universal multi-chain signing SDK for AI agents — TypeScript implementation.
 
-This README is written to match the current unified project model:
-
-- `resolveWallet(...)`
-- `resolveWalletProvider(...)`
-- `ConfigWalletProvider`
-- `EnvWalletProvider`
-- config-backed wallet types `local_secure` and `raw_secret`
-
 ## Install
 
 ```bash
+npm install @bankofai/agent-wallet
+# or
 pnpm add @bankofai/agent-wallet
 ```
+
+Includes CLI (`agent-wallet`), EVM and TRON support.
+
+## Quick Start
+
+```ts
+import { resolveWallet } from "@bankofai/agent-wallet";
+
+const wallet = await resolveWallet({ network: "tron:nile" });
+const signature = await wallet.signMessage(new TextEncoder().encode("hello"));
+```
+
+`resolveWallet` automatically finds your wallet config in `~/.agent-wallet` (or `AGENT_WALLET_DIR`).
 
 ## Public API
 
 ```ts
 import {
-  ConfigWalletProvider,
-  EnvWalletProvider,
-  resolveWallet,
-  resolveWalletProvider,
+  resolveWallet,          // → Wallet (one-shot)
+  resolveWalletProvider,  // → WalletProvider (manage multiple wallets)
+  ConfigWalletProvider,   // file-backed provider (local_secure / raw_secret)
+  EnvWalletProvider,      // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
 } from "@bankofai/agent-wallet";
 ```
 
 ### resolveWallet
 
+Returns a ready-to-sign `Wallet` for the given network:
+
 ```ts
 const wallet = await resolveWallet({ network: "eip155:1" });
-const signature = await wallet.signMessage(new TextEncoder().encode("hello"));
+const sig = await wallet.signTransaction({ to: "0x...", value: 0 });
 ```
 
 ### resolveWalletProvider
 
+Returns a `WalletProvider` based on what's available — useful when you need to manage or inspect wallets:
+
 ```ts
-const provider = resolveWalletProvider({
-  dir: "~/.agent-wallet",
-  network: "tron:nile",
-});
+const provider = resolveWalletProvider({ network: "eip155:1" });
+
+// Get the active wallet
+const wallet = await provider.getActiveWallet();
+
+// Or a specific wallet (ConfigWalletProvider only)
+const wallet2 = await provider.getWallet("my_wallet", "tron:nile");
 ```
 
-Provider resolution should follow the same config-first model as Python:
+### Provider resolution order
 
-1. If a password is available from `runtime_secrets.json` or `AGENT_WALLET_PASSWORD`, use `ConfigWalletProvider`
-2. Otherwise, if `wallets_config.json` contains wallets, use `ConfigWalletProvider`
-3. Otherwise, fall back to `EnvWalletProvider`
-
-## Config Model
-
-The TypeScript package is expected to align with the same config shape:
-
-- `wallets_config.json`
-- `runtime_secrets.json`
-- `secret_*.json`
-- `master.json`
-
-Top-level wallet types:
-
-- `local_secure`
-- `raw_secret`
-
-`raw_secret` material kinds:
-
-- `private_key`
-- `mnemonic`
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `AGENT_WALLET_DIR` | Wallet directory, default `~/.agent-wallet` |
-| `AGENT_WALLET_PASSWORD` | Password fallback for `local_secure` |
-| `AGENT_WALLET_PRIVATE_KEY` | Env fallback private key |
-| `AGENT_WALLET_MNEMONIC` | Env fallback mnemonic |
-| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Optional mnemonic account index |
-
-## CLI Model
-
-The intended CLI model is the same as Python:
-
-```bash
-agent-wallet start local_secure -w default -p 'Abc12345!' -g
-agent-wallet start raw_secret -w hot -k 0x...
-agent-wallet add local_secure -w signer2 -g
-agent-wallet add raw_secret -w seed -m "word1 word2 ..."
-agent-wallet sign msg "Hello" --network eip155:1
-agent-wallet use my-wallet
-```
-
-Important flags:
-
-- `--wallet-id`, `-w`
-- `--password`, `-p`
-- `--network`, `-n`
-- `--generate`, `-g`
-- `--private-key`, `-k`
-- `--mnemonic`, `-m`
-- `--mnemonic-index`, `-mi`
-- `--derive-as`
-- `--save-runtime-secrets`
-
-## Network Routing
-
-- `tron` or `tron:<chain>` uses the TRON adapter
-- `eip155` or `eip155:<chainId>` uses the EVM adapter
-- TRON mnemonic derivation uses `m/44'/195'/0'/0/{index}`
+1. Password available (from `runtime_secrets.json` or `AGENT_WALLET_PASSWORD`) → `ConfigWalletProvider`
+2. `wallets_config.json` exists with wallets → `ConfigWalletProvider`
+3. Otherwise → `EnvWalletProvider` (reads `AGENT_WALLET_PRIVATE_KEY` / `AGENT_WALLET_MNEMONIC`)
 
 ## Wallet Interface
 
@@ -127,6 +81,25 @@ interface Eip712Capable {
 }
 ```
 
+Both EVM and TRON adapters implement `Wallet` + `Eip712Capable`.
+
+## Network Routing
+
+| Network string | Adapter | Mnemonic derivation |
+|---|---|---|
+| `eip155` or `eip155:<chainId>` | EVM | `m/44'/60'/0'/0/{index}` |
+| `tron` or `tron:<chain>` | TRON | `m/44'/195'/0'/0/{index}` |
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `AGENT_WALLET_DIR` | Wallet directory (default `~/.agent-wallet`) |
+| `AGENT_WALLET_PASSWORD` | Password for `local_secure` wallets |
+| `AGENT_WALLET_PRIVATE_KEY` | Env fallback private key (hex) |
+| `AGENT_WALLET_MNEMONIC` | Env fallback mnemonic phrase |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Mnemonic account index (default `0`) |
+
 ## Examples
 
 - [tron-sign-and-broadcast.ts](./examples/tron-sign-and-broadcast.ts)
@@ -135,12 +108,6 @@ interface Eip712Capable {
 - [bsc-x402-sign-typed-data.ts](./examples/bsc-x402-sign-typed-data.ts)
 - [dual-sign-typed-data-from-private-key.ts](./examples/dual-sign-typed-data-from-private-key.ts)
 - [switch-active-wallet.ts](./examples/switch-active-wallet.ts)
-
-## Security
-
-- `local_secure` uses encrypted local storage
-- `raw_secret` stores secret material in plaintext config
-- Signing is local-only
 
 ## Development
 
