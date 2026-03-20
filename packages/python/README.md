@@ -1,7 +1,7 @@
 # agent-wallet (Python)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
-![Python](https://img.shields.io/badge/python-≥3.10-blue.svg)
+![Python](https://img.shields.io/badge/python-≥3.11-blue.svg)
 
 Universal multi-chain signing SDK for AI agents — Python implementation.
 

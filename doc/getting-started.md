@@ -79,7 +79,7 @@ Common options:
 
 | Option | Description |
 |--------|-------------|
-| `--wallet-id` | Wallet ID (default in prompts: `default` for `local_secure`, `raw_wallet` for `raw_secret`) |
+| `--wallet-id` | Wallet ID (default in prompts: `default_secure` for `local_secure`, `default_raw` for `raw_secret`) |
 | `-g` / `--generate` | Generate a new key (`local_secure` only) |
 | `-k` / `--private-key` | Import hex private key |
 | `-m` / `--mnemonic` | Import mnemonic |
@@ -89,9 +89,9 @@ Common options:
 | `--save-runtime-secrets` | If set **and** a master password is used, write `runtime_secrets.json` (plain JSON with password — sensitive) |
 | `-d` / `--dir` | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`) |
 
-**`local_secure` (first time):** creates `master.json`, `wallets_config.json`, encrypts secrets. If you omit `-p`, a strong password is generated and printed once.
+**`local_secure` (first time):** creates `master.json`, `wallets_config.json`, and encrypts secrets. If you omit `-p`, the CLI first prints the password requirements, then prompts for **New Master Password**; press Enter to auto-generate a strong password and print it once.
 
-**`local_secure` (already initialized):** asks for master password (or env / runtime file), then adds or shows the wallet for `--wallet-id`.
+**`local_secure` (already initialized):** asks for the existing master password (or uses env / runtime file), then adds or shows the wallet for `--wallet-id`.
 
 **`raw_secret`:** warns about plaintext storage; cannot use `-p` or `--generate` (`--generate` is rejected for non–`local_secure` flows).
 
@@ -106,7 +106,7 @@ agent-wallet init [-d DIR] [-p PASSWORD] [--save-runtime-secrets]
 ```
 
 - Fails if `master.json` already exists (`Already initialized`).
-- New password is **strength-checked**; interactive flow asks for confirmation.
+- New password is **strength-checked**; interactive flow prints the requirements hint and asks for confirmation.
 
 ## 5. `add`
 

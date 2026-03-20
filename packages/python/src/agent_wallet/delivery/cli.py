@@ -140,7 +140,14 @@ def _validate_password_strength(password: str) -> list[str]:
 
 
 def _format_password_error(errors: list[str]) -> str:
-    return f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]\n  Example of a strong password: MyWallet#2024"
+    return f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]\n  Example of a strong password: Abc12345!@"
+
+
+PASSWORD_REQUIREMENTS_HINT = (
+    "Password requirements: at least 8 characters, with uppercase, lowercase, digit, and special character. "
+    "e.g. Abc12345!@"
+)
+NEW_MASTER_PASSWORD_LABEL = "New Master Password"
 
 
 def _require_interactive(action: str) -> None:
@@ -153,10 +160,10 @@ def _require_interactive(action: str) -> None:
     raise typer.Exit(1)
 
 
-def _prompt_password_value(label: str) -> str:
+def _prompt_password_value(label: str, *, allow_empty: bool = False) -> str:
     _require_interactive(label.lower())
     value = Prompt.ask(f"[bold]{label}[/bold]", password=True)
-    if not value:
+    if not value and not allow_empty:
         console.print("[red]Password cannot be empty.[/red]")
         raise typer.Exit(1)
     return value
@@ -188,14 +195,18 @@ def _get_password(
         return pw
     if not prompt_if_missing:
         return None
-    label = "Master password (min 8 chars, upper+lower+digit+special)" if confirm else "Master password"
+    label = (
+        NEW_MASTER_PASSWORD_LABEL
+        if confirm
+        else "Master Password (enter your existing password to unlock)"
+    )
     pw = _prompt_password_value(label)
     if confirm:
         errors = _validate_password_strength(pw)
         if errors:
             console.print(_format_password_error(errors))
             raise typer.Exit(1)
-        pw2 = _prompt_password_value("Confirm password")
+        pw2 = _prompt_password_value("Confirm New Master Password")
         if pw != pw2:
             console.print("[red]Passwords do not match.[/red]")
             raise typer.Exit(1)
@@ -239,7 +250,7 @@ def _get_verified_password(
     # Interactive retry loop
     for _attempt in range(2):  # 2 more attempts (3 total)
         console.print("[red]✖ Wrong password, please try again.[/red]")
-        pw = _prompt_password_value("Master password")
+        pw = _prompt_password_value("Master Password (enter your existing password to unlock)")
         kv_store = SecureKVStore(dir, pw)
         try:
             kv_store.verify_password()
@@ -365,8 +376,8 @@ def _get_provider(dir: str, pw: str | None = None):
         raise typer.Exit(1) from exc
 
 
-def _select_start_type(explicit: str | None) -> WalletType:
-    """Resolve quick-start type from argument or interactive prompt."""
+def _select_wallet_type(explicit: str | None, *, prompt_text: str = "Quick start type") -> WalletType:
+    """Resolve wallet type from argument or interactive prompt."""
     if explicit is not None:
         try:
             wtype = WalletType(explicit)
@@ -382,9 +393,9 @@ def _select_start_type(explicit: str | None) -> WalletType:
         "local_secure": "Encrypted key stored locally (recommended)",
         "raw_secret": "Private key/mnemonic saved in plaintext config",
     }
-    selected = _interactive_select("Quick start type:", choices, descriptions)
+    selected = _interactive_select(f"{prompt_text}:", choices, descriptions)
     if selected is None:
-        selected = Prompt.ask("[bold]Quick start type[/bold]", choices=choices)
+        selected = Prompt.ask(f"[bold]{prompt_text}[/bold]", choices=choices)
     return WalletType(selected)
 
 
@@ -493,6 +504,7 @@ def _build_raw_secret_config(
     *,
     explicit_private_key: str | None,
     explicit_mnemonic: str | None,
+    derive_as: str | None,
     mnemonic_index: int,
 ) -> WalletConfig:
     """Resolve and build a raw_secret config from flags or interactive input."""
@@ -529,6 +541,8 @@ def _build_raw_secret_config(
         except ValueError:
             console.print("[red]Invalid account index.[/red]")
             raise typer.Exit(1)
+
+    parse_network_family(derive_as or _prompt_derivation_profile())
 
     return WalletConfig(
         type="raw_secret",
@@ -594,7 +608,7 @@ def start(
         except Exception:
             pass  # No existing config — continue with normal start
 
-    wtype = _select_start_type(wallet_type)
+    wtype = _select_wallet_type(wallet_type)
     provider: ConfigWalletProvider | None = None
 
     secrets_path = Path(dir)
@@ -609,7 +623,6 @@ def start(
                 raise typer.Exit(1)
             except WalletNotFoundError:
                 pass
-        target_name = wallet_id or _prompt_wallet_id("default", provider)
         # Local secure mode: needs password and master key
         if (secrets_path / "master.json").exists():
             pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
@@ -623,8 +636,23 @@ def start(
                     raise typer.Exit(1)
                 pw = explicit_pw
             else:
-                pw = _generate_password()
-                auto_generated = True
+                console.print(PASSWORD_REQUIREMENTS_HINT)
+                pw = _prompt_password_value(
+                    "New Master Password (press Enter to auto-generate a strong password)",
+                    allow_empty=True,
+                )
+                if pw:
+                    errors = _validate_password_strength(pw)
+                    if errors:
+                        console.print(_format_password_error(errors))
+                        raise typer.Exit(1)
+                    pw2 = _prompt_password_value("Confirm New Master Password")
+                    if pw != pw2:
+                        console.print("[red]Passwords do not match.[/red]")
+                        raise typer.Exit(1)
+                else:
+                    pw = _generate_password()
+                    auto_generated = True
 
             secrets_path.mkdir(parents=True, exist_ok=True)
             os.chmod(secrets_path, stat.S_IRWXU)
@@ -633,6 +661,7 @@ def start(
             provider.ensure_storage()
             console.print("\nWallet initialized!")
         _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
+        target_name = wallet_id or _prompt_wallet_id("default_secure", provider)
 
         secret = _resolve_private_key_input(
             explicit_generate=generate,
@@ -661,8 +690,10 @@ def start(
         _print_wallet_table(rows)
 
         if auto_generated:
-            console.print(f"\nYour master password: {pw}")
-            console.print("   Save this password! You'll need it for signing and other operations.")
+            console.print(f"\n🔑 Your master password: {pw}")
+            console.print(
+                "[red]⚠️  Keep this password safe.[/red] You'll need it for signing and other operations."
+            )
 
     elif wtype == WalletType.RAW_SECRET:
         if password:
@@ -677,10 +708,11 @@ def start(
                 raise typer.Exit(1)
             except WalletNotFoundError:
                 pass
-        target_name = wallet_id or _prompt_wallet_id("raw_wallet", provider)
+        target_name = wallet_id or _prompt_wallet_id("default_raw", provider)
         raw_secret_config = _build_raw_secret_config(
             explicit_private_key=private_key,
             explicit_mnemonic=mnemonic,
+            derive_as=derive_as,
             mnemonic_index=mnemonic_index,
         )
 
@@ -723,6 +755,7 @@ def init(
     os.chmod(secrets_path, stat.S_IRWXU)  # 700
 
     provider = _get_provider(dir)
+    console.print(PASSWORD_REQUIREMENTS_HINT)
     pw = _get_password(provider=provider, confirm=True, explicit=password)
 
     kv_store = SecureKVStore(dir, pw)
@@ -737,7 +770,7 @@ def init(
 
 @app.command()
 def add(
-    wallet_type: str = typer.Argument(..., help="Wallet type: local_secure or raw_secret"),
+    wallet_type: str | None = typer.Argument(None, help="Wallet type: local_secure or raw_secret"),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
     generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
     private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
@@ -750,7 +783,7 @@ def add(
 ) -> None:
     """Add a new wallet (interactive)."""
     try:
-        wtype = WalletType(wallet_type)
+        wtype = _select_wallet_type(wallet_type, prompt_text="Wallet type")
     except ValueError:
         console.print(f"[red]Unknown wallet type: {wallet_type}. Use: {', '.join(t.value for t in WalletType)}[/red]")
         raise typer.Exit(1)
@@ -767,8 +800,6 @@ def add(
             raise typer.Exit(1)
         except WalletNotFoundError:
             pass
-    target_name = wallet_id or _prompt_wallet_id("wallet", provider)
-
     if wtype == WalletType.LOCAL_SECURE:
         try:
             pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
@@ -777,6 +808,7 @@ def add(
             raise typer.Exit(1)
         secure_provider = _get_provider(dir, pw)
         _maybe_save_runtime_secrets(secure_provider, pw, save_runtime_secrets)
+        target_name = wallet_id or _prompt_wallet_id("default_secure", provider)
 
         secret = _resolve_private_key_input(
             explicit_generate=generate,
@@ -807,11 +839,13 @@ def add(
             console.print("[red]--password is only valid for local_secure wallets.[/red]")
             raise typer.Exit(1)
         console.print("[yellow]Warning: Raw secret material will be stored in plaintext in wallets_config.json.[/yellow]")
+        target_name = wallet_id or _prompt_wallet_id("default_raw", provider)
         provider.add_wallet(
             target_name,
             _build_raw_secret_config(
                 explicit_private_key=private_key,
                 explicit_mnemonic=mnemonic,
+                derive_as=derive_as,
                 mnemonic_index=mnemonic_index,
             ),
         )
@@ -905,17 +939,32 @@ def remove(
 
 @app.command()
 def use(
-    wallet_id: str = typer.Argument(help="Wallet ID to set as active"),
+    wallet_id: str | None = typer.Argument(None, help="Wallet ID to set as active"),
     dir: str = _dir_option(),
 ) -> None:
     """Set the active wallet."""
     provider = _get_provider(dir)
+    target_id = wallet_id
+    if target_id is None:
+        rows = provider.list_wallets()
+        if not rows:
+            console.print("[red]No wallets configured.[/red]")
+            raise typer.Exit(1)
+        choices = [wid for wid, _conf, _is_active in rows]
+        descriptions = {
+            wid: f"{conf.type}{' (active)' if is_active else ''}"
+            for wid, conf, is_active in rows
+        }
+        selected = _interactive_select("Select wallet:", choices, descriptions)
+        if selected is None:
+            selected = Prompt.ask("[bold]Select wallet[/bold]", choices=choices, default=choices[0])
+        target_id = selected
     try:
-        conf = provider.set_active(wallet_id)
+        conf = provider.set_active(target_id)
     except WalletNotFoundError:
-        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+        console.print(f"[red]Wallet '{target_id}' not found.[/red]")
         raise typer.Exit(1)
-    console.print(f"Active wallet: {wallet_id} ({conf.type})")
+    console.print(f"Active wallet: {target_id} ({conf.type})")
 
 
 def _needs_password(dir: str, wallet_id: str) -> bool:
@@ -1074,12 +1123,16 @@ def change_password(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    new_pw = Prompt.ask("[bold]New password[/bold] (min 8 chars, upper+lower+digit+special)", password=True)
+    console.print(PASSWORD_REQUIREMENTS_HINT)
+    new_pw = Prompt.ask(
+        f"[bold]{NEW_MASTER_PASSWORD_LABEL}[/bold]",
+        password=True,
+    )
     errors = _validate_password_strength(new_pw)
     if errors:
         console.print(_format_password_error(errors))
         raise typer.Exit(1)
-    new_pw2 = Prompt.ask("[bold]Confirm new password[/bold]", password=True)
+    new_pw2 = Prompt.ask("[bold]Confirm New Master Password[/bold]", password=True)
     if new_pw != new_pw2:
         console.print("[red]Passwords do not match.[/red]")
         raise typer.Exit(1)

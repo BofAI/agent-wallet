@@ -42,7 +42,7 @@ npm install -g @bankofai/agent-wallet
 pip install bankofai-agent-wallet
 ```
 
-Create your first **encrypted** wallet — just run `start` and follow the prompts (a strong master password is generated and shown once if you omit `-p` / `--password`):
+Create your first **encrypted** wallet. If you omit `-p` / `--password`, the CLI shows the password requirements, lets you enter a new master password, or auto-generates one if you press Enter:
 
 ```bash
 agent-wallet start
@@ -50,7 +50,9 @@ agent-wallet start
 
 ```
 ? Quick start type: local_secure  — Encrypted key stored locally (recommended)
-Wallet ID (e.g. my_wallet_1) (default):
+Password requirements: at least 8 characters, with uppercase, lowercase, digit, and special character. e.g. Abc12345!@
+? New Master Password (press Enter to auto-generate a strong password)
+Wallet ID (e.g. my_wallet_1) (default_secure):
 
 Wallet initialized!
 ? Import source: generate  — Generate a new random private key
@@ -59,13 +61,13 @@ Wallets:
 ┌───────────┬──────────────┐
 │ Wallet ID │ Type         │
 ├───────────┼──────────────┤
-│ default   │ local_secure │
+│ default_secure │ local_secure │
 └───────────┴──────────────┘
 
-Your master password: WiJxcI#t6@73K#OE
-   Save this password! You'll need it for signing and other operations.
+🔑 Your master password: WiJxcI#t6@73K#OE
+⚠️ Keep this password safe. You'll need it for signing and other operations.
 
-Active wallet: default
+Active wallet: default_secure
 
 Quick guide:
    agent-wallet list              -- View your wallets
@@ -84,7 +86,7 @@ agent-wallet list
 ┌────┬───────────┬──────────────┐
 │    │ Wallet ID │ Type         │
 ├────┼───────────┼──────────────┤
-│ *  │ default   │ local_secure │
+│ *  │ default_secure │ local_secure │
 └────┴───────────┴──────────────┘
 ```
 

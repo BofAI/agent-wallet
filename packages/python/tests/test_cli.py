@@ -87,6 +87,7 @@ class TestInit:
         )
         assert result.exit_code == 0
         assert "Initialized" in result.output
+        assert "Password requirements:" in result.output
         assert (Path(secrets_dir) / "master.json").exists()
         assert (Path(secrets_dir) / "wallets_config.json").exists()
 
@@ -113,6 +114,16 @@ class TestInit:
 
 
 class TestAdd:
+    def test_add_prompts_for_wallet_type_when_missing(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["add", "--dir", initialized_dir],
+            input=f"raw_secret\nwallet\nprivate_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(initialized_dir)
+        assert config["wallets"]["wallet"]["type"] == "raw_secret"
+
     def test_add_local_secure_generate_shortcut(self, initialized_dir):
         result = runner.invoke(
             app,
@@ -138,6 +149,16 @@ class TestAdd:
         assert config["wallets"]["my_key"]["params"]["secret_ref"] == "my_key"
         assert (Path(initialized_dir) / "secret_my_key.json").exists()
 
+    def test_add_uses_wallet_type_default_id_when_prompt_is_empty(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["add", "raw_secret", "--dir", initialized_dir],
+            input=f"\nprivate_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(initialized_dir)
+        assert config["wallets"]["default_raw"]["type"] == "raw_secret"
+
     def test_add_local_secure_import(self, initialized_dir):
         result = runner.invoke(
             app,
@@ -148,6 +169,16 @@ class TestAdd:
         assert result.exit_code == 0
         assert "Imported secret material" in result.output
         assert (Path(initialized_dir) / "secret_imported.json").exists()
+
+    def test_add_local_secure_prompts_for_existing_password_before_wallet_id(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["add", "local_secure", "--dir", initialized_dir],
+            input=f"{TEST_PASSWORD}\nordered_wallet\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": ""},
+        )
+        assert result.exit_code == 0
+        assert (Path(initialized_dir) / "secret_ordered_wallet.json").exists()
 
     def test_add_local_secure_mnemonic_shortcut_with_derive_as(self, initialized_dir):
         result = runner.invoke(
@@ -186,11 +217,34 @@ class TestAdd:
         result = runner.invoke(
             app,
             ["add", "raw_secret", "--dir", initialized_dir],
-            input=f"seed_key\nmnemonic\n{TEST_MNEMONIC}\n1\n",
+            input=f"seed_key\nmnemonic\n{TEST_MNEMONIC}\n1\ntron\n",
         )
         assert result.exit_code == 0
         config = _read_config(initialized_dir)
         assert config["wallets"]["seed_key"]["type"] == "raw_secret"
+        assert config["wallets"]["seed_key"]["params"]["source"] == "mnemonic"
+        assert config["wallets"]["seed_key"]["params"]["account_index"] == 1
+
+    def test_add_raw_secret_mnemonic_wallet_supports_derive_as_flag(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            [
+                "add",
+                "raw_secret",
+                "--wallet-id",
+                "seed_key",
+                "--mnemonic",
+                TEST_MNEMONIC,
+                "--mnemonic-index",
+                "1",
+                "--derive-as",
+                "tron",
+                "--dir",
+                initialized_dir,
+            ],
+        )
+        assert result.exit_code == 0
+        config = _read_config(initialized_dir)
         assert config["wallets"]["seed_key"]["params"]["source"] == "mnemonic"
         assert config["wallets"]["seed_key"]["params"]["account_index"] == 1
 
@@ -580,18 +634,16 @@ class TestStart:
                 "local_secure",
                 "-p",
                 TEST_PASSWORD,
-                "--wallet-id",
-                "default",
                 "--dir",
                 secrets_dir,
             ],
-            input="generate\n",
+            input="\ngenerate\n",
         )
         assert result.exit_code == 0
-        assert "default" in result.output
+        assert "default_secure" in result.output
         config = _read_config(secrets_dir)
-        assert config["wallets"]["default"]["type"] == "local_secure"
-        assert config["wallets"]["default"]["params"]["secret_ref"] == "default"
+        assert config["wallets"]["default_secure"]["type"] == "local_secure"
+        assert config["wallets"]["default_secure"]["params"]["secret_ref"] == "default_secure"
 
     def test_start_local_secure_generate_shortcut(self, secrets_dir):
         result = runner.invoke(
@@ -613,6 +665,43 @@ class TestStart:
         assert config["wallets"]["shortcut"]["type"] == "local_secure"
         assert config["wallets"]["shortcut"]["params"]["secret_ref"] == "shortcut"
         assert config["active_wallet"] == "shortcut"
+
+    def test_start_local_secure_uses_manual_password_when_prompt_is_filled(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            [
+                "start",
+                "local_secure",
+                "--wallet-id",
+                "manual",
+                "--dir",
+                secrets_dir,
+            ],
+            input=f"{TEST_PASSWORD}\n{TEST_PASSWORD}\ngenerate\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(secrets_dir)
+        assert config["wallets"]["manual"]["type"] == "local_secure"
+        assert "Your master password:" not in result.output
+
+    def test_start_local_secure_auto_generates_when_password_prompt_is_empty(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            [
+                "start",
+                "local_secure",
+                "--wallet-id",
+                "auto",
+                "--dir",
+                secrets_dir,
+            ],
+            input="\ngenerate\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(secrets_dir)
+        assert config["wallets"]["auto"]["type"] == "local_secure"
+        assert "Your master password:" in result.output
+        assert "Keep this password safe." in result.output
 
     def test_start_local_secure_mnemonic_shortcut_with_derive_as(self, secrets_dir):
         result = runner.invoke(
@@ -648,6 +737,17 @@ class TestStart:
         assert config["wallets"]["hot_wallet"]["type"] == "raw_secret"
         assert config["wallets"]["hot_wallet"]["params"]["source"] == "private_key"
         assert config["active_wallet"] == "hot_wallet"
+
+    def test_start_raw_secret_mnemonic_wallet_prompts_for_derivation_profile(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "hot_wallet", "--dir", secrets_dir],
+            input=f"mnemonic\n{TEST_MNEMONIC}\n1\ntron\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(secrets_dir)
+        assert config["wallets"]["hot_wallet"]["params"]["source"] == "mnemonic"
+        assert config["wallets"]["hot_wallet"]["params"]["account_index"] == 1
 
     def test_start_created_wallet_becomes_active_even_when_active_exists(self, secrets_dir):
         first = runner.invoke(
@@ -856,6 +956,22 @@ class TestActiveWallet:
             input=f"w2\nprivate_key\n{TEST_PRIVATE_KEY}\n",
         )
         result = runner.invoke(app, ["use", "w2", "--dir", initialized_dir])
+        assert result.exit_code == 0
+        assert _read_config(initialized_dir)["active_wallet"] == "w2"
+
+    def test_use_command_prompts_to_select_wallet_when_missing(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "local_secure", "--dir", initialized_dir],
+            input="w1\ngenerate\n",
+            env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+        )
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--dir", initialized_dir],
+            input=f"w2\nprivate_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(app, ["use", "--dir", initialized_dir], input="w2\n")
         assert result.exit_code == 0
         assert _read_config(initialized_dir)["active_wallet"] == "w2"
 
