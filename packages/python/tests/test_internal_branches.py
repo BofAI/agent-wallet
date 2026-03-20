@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -170,3 +171,49 @@ def test_resolver_has_available_config_wallet_with_active_nonlocal():
 def test_network_enum_values_are_stable():
     assert Network.EVM == "evm"
     assert Network.TRON == "tron"
+
+
+def test_signer_modules_and_public_exports_load():
+    import agent_wallet
+    from agent_wallet import (
+        EvmSigner,
+        LocalSecureSigner,
+        LocalSigner,
+        RawSecretSigner,
+        TronSigner,
+    )
+    from agent_wallet.core.adapters import local, local_secure, raw_secret
+    from agent_wallet.core.config import (
+        LocalSecureWalletParams,
+        RawSecretPrivateKeyParams,
+    )
+
+    assert agent_wallet.LocalSigner is LocalSigner
+    assert agent_wallet.LocalSecureSigner is LocalSecureSigner
+    assert agent_wallet.RawSecretSigner is RawSecretSigner
+    assert agent_wallet.EvmSigner is EvmSigner
+    assert agent_wallet.TronSigner is TronSigner
+
+    assert local.LocalSigner is LocalSigner
+    assert local_secure.LocalSecureSigner is LocalSecureSigner
+    assert raw_secret.RawSecretSigner is RawSecretSigner
+
+    secure = LocalSecureSigner(
+        params=LocalSecureWalletParams(secret_ref="secure"),
+        config_dir=".",
+        password="pw",
+        network="eip155:1",
+        secret_loader=lambda _dir, _pw, _ref: TEST_KEY,
+    )
+    raw = RawSecretSigner(
+        params=RawSecretPrivateKeyParams(
+            source="private_key",
+            private_key="0x" + TEST_KEY.hex(),
+        ),
+        network="tron",
+    )
+
+    assert isinstance(secure, LocalSigner)
+    assert isinstance(raw, LocalSigner)
+    assert asyncio.run(secure.get_address()).startswith("0x")
+    assert asyncio.run(raw.get_address()).startswith("T")
