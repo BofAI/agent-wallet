@@ -19,9 +19,9 @@ from agent_wallet.local.secret_loader import load_local_secret
 _DEFAULT_SECRETS_DIR = os.path.join(Path.home(), ".agent-wallet")
 _ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD"
 _ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR"
-_ENV_AGENT_WALLET_PRIVATE_KEY = "AGENT_WALLET_PRIVATE_KEY"
-_ENV_AGENT_WALLET_MNEMONIC = "AGENT_WALLET_MNEMONIC"
-_ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX"
+_ENV_PRIVATE_KEY_KEYS = ("AGENT_WALLET_PRIVATE_KEY", "TRON_PRIVATE_KEY")
+_ENV_MNEMONIC_KEYS = ("AGENT_WALLET_MNEMONIC", "TRON_MNEMONIC")
+_ENV_ACCOUNT_INDEX_KEYS = ("AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX", "TRON_ACCOUNT_INDEX")
 
 def resolve_wallet_provider(
     *,
@@ -51,10 +51,10 @@ def resolve_wallet_provider(
 
     return EnvWalletProvider(
         network=network,
-        private_key=_clean_env_value(env, _ENV_AGENT_WALLET_PRIVATE_KEY),
-        mnemonic=_clean_env_value(env, _ENV_AGENT_WALLET_MNEMONIC),
+        private_key=_first_env(env, _ENV_PRIVATE_KEY_KEYS),
+        mnemonic=_first_env(env, _ENV_MNEMONIC_KEYS),
         account_index=_parse_account_index(
-            env.get(_ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX)
+            _first_env(env, _ENV_ACCOUNT_INDEX_KEYS)
         ),
     )
 
@@ -105,6 +105,15 @@ def _load_config_safe(secrets_dir: str) -> WalletsTopology | None:
 
 def _has_available_config_wallet(config: WalletsTopology | None) -> bool:
     return bool(config and config.wallets)
+
+
+def _first_env(env: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
+    """Return the first non-empty env value from a list of fallback keys."""
+    for key in keys:
+        value = _clean_env_value(env, key)
+        if value is not None:
+            return value
+    return None
 
 
 def _clean_env_value(env: Mapping[str, str], key: str) -> str | None:

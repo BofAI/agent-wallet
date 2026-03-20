@@ -29,7 +29,7 @@ signature = await wallet.sign_message(b"hello")
 ```python
 from agent_wallet import (
     resolve_wallet,           # → Wallet (one-shot)
-    resolve_wallet_provider,  # → WalletProvider (manage multiple wallets)
+    resolve_wallet_provider,  # → ConfigWalletProvider | EnvWalletProvider
     ConfigWalletProvider,     # file-backed provider (local_secure / raw_secret)
     EnvWalletProvider,        # env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
 )
@@ -46,7 +46,7 @@ sig = await wallet.sign_transaction({"to": "0x...", "value": 0})
 
 ### resolve_wallet_provider
 
-Returns a `WalletProvider` based on what's available — useful when you need to manage or inspect wallets:
+Returns either `ConfigWalletProvider` or `EnvWalletProvider` based on what's available:
 
 ```python
 provider = resolve_wallet_provider(network="eip155:1")
@@ -77,7 +77,7 @@ class Eip712Capable(ABC):
     async def sign_typed_data(data: dict) -> str
 ```
 
-Both EVM and TRON adapters implement `Wallet` + `Eip712Capable`.
+Both EVM and TRON network-specific signers implement `Wallet` + `Eip712Capable`.
 
 ## Network Routing
 

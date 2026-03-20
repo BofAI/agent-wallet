@@ -5,12 +5,12 @@ import json
 import pytest
 
 from agent_wallet.core import resolver
-from agent_wallet.core.adapters.evm import EvmAdapter
-from agent_wallet.core.adapters.tron import TronAdapter
+from agent_wallet.core.adapters.evm import EvmSigner
+from agent_wallet.core.adapters.tron import TronSigner
 from agent_wallet.core.base import Network
 from agent_wallet.core.config import (
-    RawSecretPrivateKeyConfig,
-    RawSecretWalletConfig,
+    RawSecretPrivateKeyParams,
+    WalletConfig,
     load_runtime_secrets_password,
 )
 from agent_wallet.core.errors import SigningError
@@ -23,7 +23,7 @@ TEST_KEY = bytes.fromhex(
 
 @pytest.mark.asyncio
 async def test_evm_sign_raw_wraps_errors(monkeypatch):
-    wallet = EvmAdapter(TEST_KEY)
+    wallet = EvmSigner(TEST_KEY)
 
     def boom(_raw_tx):
         raise RuntimeError("boom")
@@ -35,7 +35,7 @@ async def test_evm_sign_raw_wraps_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_evm_sign_transaction_wraps_errors(monkeypatch):
-    wallet = EvmAdapter(TEST_KEY)
+    wallet = EvmSigner(TEST_KEY)
 
     def boom(_payload):
         raise RuntimeError("boom")
@@ -47,7 +47,7 @@ async def test_evm_sign_transaction_wraps_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_evm_sign_message_wraps_errors(monkeypatch):
-    wallet = EvmAdapter(TEST_KEY)
+    wallet = EvmSigner(TEST_KEY)
 
     def boom(_signable):
         raise RuntimeError("boom")
@@ -59,14 +59,14 @@ async def test_evm_sign_message_wraps_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_evm_sign_typed_data_wraps_errors():
-    wallet = EvmAdapter(TEST_KEY)
+    wallet = EvmSigner(TEST_KEY)
     with pytest.raises(SigningError, match="EVM sign_typed_data failed"):
         await wallet.sign_typed_data({"not": "typed-data"})
 
 
 @pytest.mark.asyncio
 async def test_tron_sign_raw_wraps_errors(monkeypatch):
-    wallet = TronAdapter(TEST_KEY)
+    wallet = TronSigner(TEST_KEY)
 
     def boom(_raw_tx):
         raise RuntimeError("boom")
@@ -78,14 +78,14 @@ async def test_tron_sign_raw_wraps_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tron_sign_transaction_invalid_payload_is_wrapped():
-    wallet = TronAdapter(TEST_KEY)
+    wallet = TronSigner(TEST_KEY)
     with pytest.raises(SigningError, match="Tron sign_transaction failed"):
         await wallet.sign_transaction({"raw_data_hex": "deadbeef"})
 
 
 @pytest.mark.asyncio
 async def test_tron_sign_message_wraps_errors(monkeypatch):
-    wallet = TronAdapter(TEST_KEY)
+    wallet = TronSigner(TEST_KEY)
 
     def boom(_msg):
         raise RuntimeError("boom")
@@ -97,7 +97,7 @@ async def test_tron_sign_message_wraps_errors(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tron_sign_typed_data_wraps_errors():
-    wallet = TronAdapter(TEST_KEY)
+    wallet = TronSigner(TEST_KEY)
     with pytest.raises(SigningError, match="Tron sign_typed_data failed"):
         await wallet.sign_typed_data({"not": "typed-data"})
 
@@ -114,8 +114,8 @@ def test_config_provider_network_validation_errors():
     with pytest.raises(ValueError, match="network must start with"):
         wallet_builder.parse_network_family("solana:devnet")
 
-    with pytest.raises(ValueError, match="Unknown network"):
-        wallet_builder.create_adapter("bad-network", TEST_KEY)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="network is required"):
+        wallet_builder.parse_network_family(None)
 
 
 def test_env_provider_private_key_validation_errors():
@@ -127,8 +127,8 @@ def test_env_provider_private_key_validation_errors():
 
 
 def test_env_provider_invalid_network_hits_error_branch():
-    with pytest.raises(ValueError, match="Unknown network"):
-        wallet_builder.create_adapter("bad-network", TEST_KEY)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="network must start with"):
+        wallet_builder.parse_network_family("solana:devnet")
 
 
 def test_resolver_load_password_from_runtime_secrets_validation(tmp_path):
@@ -155,9 +155,9 @@ def test_resolver_has_available_config_wallet_with_active_nonlocal():
     topology = resolver.WalletsTopology(
         active_wallet="hot",
         wallets={
-            "hot": RawSecretWalletConfig(
+            "hot": WalletConfig(
                 type="raw_secret",
-                material=RawSecretPrivateKeyConfig(
+                params=RawSecretPrivateKeyParams(
                     source="private_key",
                     private_key="0x" + TEST_KEY.hex(),
                 ),

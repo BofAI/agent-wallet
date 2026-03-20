@@ -16,7 +16,7 @@ import {
   saveConfig,
 } from '../config.js'
 import { RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME } from '../constants.js'
-import { createAdapter, decodePrivateKey, deriveKeyFromMnemonic, parseNetworkFamily } from './wallet-builder.js'
+import { createAdapter } from './wallet-builder.js'
 
 export type SecretLoaderFn = (configDir: string, password: string, secretRef: string) => Uint8Array
 
@@ -105,7 +105,7 @@ export class ConfigWalletProvider implements WalletProvider {
   removeWallet(walletId: string): WalletConfig {
     const conf = this.getWalletConfig(walletId)
     if (conf.type === 'local_secure') {
-      const secretPath = this.secretPath(conf.secret_ref)
+      const secretPath = this.secretPath((conf.params as { secret_ref: string }).secret_ref)
       if (existsSync(secretPath)) unlinkSync(secretPath)
     }
     delete this.config.wallets[walletId]
@@ -123,7 +123,7 @@ export class ConfigWalletProvider implements WalletProvider {
   hasSecretFile(walletId: string): boolean {
     const conf = this.getWalletConfig(walletId)
     if (conf.type !== 'local_secure') return false
-    return existsSync(this.secretPath(conf.secret_ref))
+    return existsSync(this.secretPath((conf.params as { secret_ref: string }).secret_ref))
   }
 
   hasRuntimeSecrets(): boolean {
@@ -158,7 +158,7 @@ export class ConfigWalletProvider implements WalletProvider {
       const conf = this.config.wallets[walletId]
       this.wallets.set(
         cacheKey,
-        createWalletFromConfig(conf, this.configDir, this.password, resolvedNetwork, this.secretLoader),
+        createAdapter(conf, this.configDir, this.password, resolvedNetwork, this.secretLoader),
       )
     }
     return this.wallets.get(cacheKey)!
@@ -210,36 +210,6 @@ export class ConfigWalletProvider implements WalletProvider {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function createWalletFromConfig(
-  conf: WalletConfig,
-  configDir: string,
-  password: string | undefined,
-  network: string,
-  secretLoader: SecretLoaderFn | undefined,
-): Wallet {
-  if (conf.type === 'local_secure') {
-    if (!password) throw new Error('Password required for local_secure wallets')
-    if (!secretLoader) throw new Error('local_secure wallets require a configured secret loader')
-    const privateKey = secretLoader(configDir, password, conf.secret_ref)
-    return createAdapter(network, privateKey)
-  }
-
-  if (conf.type === 'raw_secret') {
-    const material = conf.material
-    if (material.source === 'private_key') {
-      const privateKey = decodePrivateKey(material.private_key)
-      return createAdapter(network, privateKey)
-    }
-    if (material.source === 'mnemonic') {
-      const family = parseNetworkFamily(network)
-      const privateKey = deriveKeyFromMnemonic(family, material.mnemonic, material.account_index)
-      return createAdapter(network, privateKey)
-    }
-  }
-
-  throw new Error(`Unknown wallet config type: ${conf.type}`)
-}
 
 function walletIsAvailableWithoutPassword(
   conf: WalletConfig,

@@ -19,7 +19,7 @@ const bs58check: typeof bs58checkModule =
 import type { Wallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'
 
-export class TronAdapter implements Wallet, Eip712Capable {
+export class TronSigner implements Wallet, Eip712Capable {
   private readonly privateKeyBytes: Uint8Array
   private readonly address: string
   private readonly network: string

@@ -19,10 +19,10 @@ from rich.table import Table
 
 from agent_wallet.core.base import Eip712Capable, WalletType
 from agent_wallet.core.config import (
-    LocalSecureWalletConfig,
-    RawSecretMnemonicConfig,
-    RawSecretPrivateKeyConfig,
-    RawSecretWalletConfig,
+    LocalSecureWalletParams,
+    RawSecretMnemonicParams,
+    RawSecretPrivateKeyParams,
+    WalletConfig,
 )
 from agent_wallet.core.constants import RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME
 from agent_wallet.core.errors import (
@@ -494,7 +494,7 @@ def _build_raw_secret_config(
     explicit_private_key: str | None,
     explicit_mnemonic: str | None,
     mnemonic_index: int,
-) -> RawSecretWalletConfig:
+) -> WalletConfig:
     """Resolve and build a raw_secret config from flags or interactive input."""
     source = _select_import_source(
         generate=False,
@@ -512,9 +512,9 @@ def _build_raw_secret_config(
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1) from exc
-        return RawSecretWalletConfig(
+        return WalletConfig(
             type="raw_secret",
-            material=RawSecretPrivateKeyConfig(
+            params=RawSecretPrivateKeyParams(
                 source="private_key",
                 private_key=normalized,
             ),
@@ -530,9 +530,9 @@ def _build_raw_secret_config(
             console.print("[red]Invalid account index.[/red]")
             raise typer.Exit(1)
 
-    return RawSecretWalletConfig(
+    return WalletConfig(
         type="raw_secret",
-        material=RawSecretMnemonicConfig(
+        params=RawSecretMnemonicParams(
             source="mnemonic",
             mnemonic=source_mnemonic.strip(),
             account_index=mnemonic_index,
@@ -649,9 +649,9 @@ def start(
             kv_store.save_secret(target_name, secret)
         provider.add_wallet(
             target_name,
-            LocalSecureWalletConfig(
+            WalletConfig(
                 type="local_secure",
-                secret_ref=target_name,
+                params=LocalSecureWalletParams(secret_ref=target_name),
             ),
         )
         provider.set_active(target_name)
@@ -795,9 +795,9 @@ def add(
 
         provider.add_wallet(
             target_name,
-            LocalSecureWalletConfig(
+            WalletConfig(
                 type="local_secure",
-                secret_ref=target_name,
+                params=LocalSecureWalletParams(secret_ref=target_name),
             ),
         )
         console.print(f"  Saved:   [dim]secret_{target_name}.json[/dim]")
@@ -864,16 +864,17 @@ def inspect(
     table.add_row("Wallet", wallet_id)
     table.add_row("Type", conf.type)
 
-    if isinstance(conf, LocalSecureWalletConfig):
+    if conf.type == "local_secure":
         secret_status = "ok" if provider.has_secret_file(wallet_id) else "-"
         table.add_row("Secret", f"secret_{conf.secret_ref}.json {secret_status}")
-    elif isinstance(conf, RawSecretWalletConfig):
-        table.add_row("Source Type", conf.material.source)
-        if isinstance(conf.material, RawSecretPrivateKeyConfig):
+    elif conf.type == "raw_secret":
+        params = conf.params
+        table.add_row("Source Type", params.source)
+        if isinstance(params, RawSecretPrivateKeyParams):
             table.add_row("Private Key", "[redacted]")
-        elif isinstance(conf.material, RawSecretMnemonicConfig):
+        elif isinstance(params, RawSecretMnemonicParams):
             table.add_row("Mnemonic", "[redacted]")
-            table.add_row("Account Index", str(conf.material.account_index))
+            table.add_row("Account Index", str(params.account_index))
 
     console.print(table)
 
@@ -896,7 +897,7 @@ def remove(
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(0)
 
-    if isinstance(conf, LocalSecureWalletConfig) and provider.has_secret_file(wallet_id):
+    if conf.type == "local_secure" and provider.has_secret_file(wallet_id):
         console.print(f"  Deleted: [dim]secret_{conf.secret_ref}.json[/dim]")
     provider.remove_wallet(wallet_id)
     console.print(f"[green]Wallet '{wallet_id}' removed.[/green]")

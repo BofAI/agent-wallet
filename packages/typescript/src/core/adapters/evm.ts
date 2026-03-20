@@ -3,7 +3,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import type { Wallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'
 
-export class EvmAdapter implements Wallet, Eip712Capable {
+export class EvmSigner implements Wallet, Eip712Capable {
   private readonly account: ReturnType<typeof privateKeyToAccount>
   private readonly network: string
 

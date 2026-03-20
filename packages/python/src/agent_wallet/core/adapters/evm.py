@@ -1,4 +1,4 @@
-"""EvmAdapter — Local EVM signing adapter using eth-account."""
+"""EvmSigner — Local EVM signing helper using eth-account."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from agent_wallet.core.base import Eip712Capable, Wallet
 from agent_wallet.core.errors import SigningError
 
 
-class EvmAdapter(Wallet, Eip712Capable):
+class EvmSigner(Wallet, Eip712Capable):
     """EVM wallet using local ECDSA signing via eth-account."""
 
     def __init__(self, private_key: bytes, network: str = "eip155") -> None:

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from agent_wallet.core.base import Network, Wallet
+from collections.abc import Callable
+from pathlib import Path
+
+from agent_wallet.core.base import Network, Wallet, WalletType
+from agent_wallet.core.config import WalletConfig
 
 
 def parse_network_family(network: str | None) -> Network:
@@ -16,16 +20,28 @@ def parse_network_family(network: str | None) -> Network:
     raise ValueError("network must start with 'tron' or 'eip155'")
 
 
-def create_adapter(network: Network, private_key: bytes) -> Wallet:
-    if network == Network.EVM:
-        from agent_wallet.core.adapters.evm import EvmAdapter
+def create_adapter(
+    conf: WalletConfig,
+    config_dir: str | Path,
+    password: str | None,
+    network: str,
+    secret_loader: Callable[[str | Path, str, str], bytes] | None,
+) -> Wallet:
+    if conf.type == WalletType.LOCAL_SECURE:
+        from agent_wallet.core.adapters.local_secure import LocalSecureSigner
 
-        return EvmAdapter(private_key=private_key, network=network)
-    if network == Network.TRON:
-        from agent_wallet.core.adapters.tron import TronAdapter
+        return LocalSecureSigner(
+            params=conf.params,
+            config_dir=config_dir,
+            password=password,
+            network=network,
+            secret_loader=secret_loader,
+        )
+    if conf.type == WalletType.RAW_SECRET:
+        from agent_wallet.core.adapters.raw_secret import RawSecretSigner
 
-        return TronAdapter(private_key=private_key, network=network)
-    raise ValueError(f"Unknown network: {network}")
+        return RawSecretSigner(params=conf.params, network=network)
+    raise ValueError(f"Unknown wallet config type: {conf.type}")
 
 
 def decode_private_key(private_key: str) -> bytes:

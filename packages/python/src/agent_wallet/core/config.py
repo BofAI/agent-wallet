@@ -4,31 +4,31 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Discriminator
+from pydantic import BaseModel, model_validator
 
+from agent_wallet.core.base import WalletType
 from agent_wallet.core.constants import (
     RUNTIME_SECRETS_FILENAME,
     WALLETS_CONFIG_FILENAME,
 )
 
 
-class LocalSecureWalletConfig(BaseModel):
-    """Encrypted local keystore wallet."""
+class LocalSecureWalletParams(BaseModel):
+    """Encrypted local keystore wallet params."""
 
-    type: Literal["local_secure"]
     secret_ref: str
 
 
-class RawSecretPrivateKeyConfig(BaseModel):
+class RawSecretPrivateKeyParams(BaseModel):
     """Raw private key secret stored directly in config."""
 
     source: Literal["private_key"]
     private_key: str
 
 
-class RawSecretMnemonicConfig(BaseModel):
+class RawSecretMnemonicParams(BaseModel):
     """Raw mnemonic secret stored directly in config."""
 
     source: Literal["mnemonic"]
@@ -36,23 +36,34 @@ class RawSecretMnemonicConfig(BaseModel):
     account_index: int = 0
 
 
-RawSecretMaterial = Annotated[
-    RawSecretPrivateKeyConfig | RawSecretMnemonicConfig,
-    Discriminator("source"),
-]
+RawSecretParams = RawSecretPrivateKeyParams | RawSecretMnemonicParams
 
 
-class RawSecretWalletConfig(BaseModel):
-    """Raw secret wallet stored directly in wallets_config.json."""
+class WalletConfig(BaseModel):
+    """Single wallet entry in wallets_config.json."""
 
-    type: Literal["raw_secret"]
-    material: RawSecretMaterial
+    type: WalletType
+    params: LocalSecureWalletParams | RawSecretParams
 
+    @model_validator(mode="after")
+    def _validate_params(self) -> WalletConfig:
+        if self.type == WalletType.LOCAL_SECURE:
+            if not isinstance(self.params, LocalSecureWalletParams):
+                raise ValueError("local_secure wallets require LocalSecureWalletParams")
+            return self
 
-WalletConfig = Annotated[
-    LocalSecureWalletConfig | RawSecretWalletConfig,
-    Discriminator("type"),
-]
+        if self.type == WalletType.RAW_SECRET:
+            if isinstance(self.params, (RawSecretPrivateKeyParams, RawSecretMnemonicParams)):
+                return self
+            raise ValueError("raw_secret wallets require raw secret params")
+
+        raise ValueError(f"Unknown wallet config type: {self.type}")
+
+    @property
+    def secret_ref(self) -> str:
+        if self.type != WalletType.LOCAL_SECURE:
+            raise AttributeError("secret_ref is only available for local_secure wallets")
+        return self.params.secret_ref
 
 
 class WalletsTopology(BaseModel):

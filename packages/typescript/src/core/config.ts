@@ -18,39 +18,46 @@ export class ConfigNotFoundError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Zod schemas
+// Zod schemas — params models
 // ---------------------------------------------------------------------------
 
-export const LocalSecureWalletConfigSchema = z.object({
-  type: z.literal('local_secure'),
+export const LocalSecureWalletParamsSchema = z.object({
   secret_ref: z.string(),
 })
 
-export const RawSecretPrivateKeyConfigSchema = z.object({
+export const RawSecretPrivateKeyParamsSchema = z.object({
   source: z.literal('private_key'),
   private_key: z.string(),
 })
 
-export const RawSecretMnemonicConfigSchema = z.object({
+export const RawSecretMnemonicParamsSchema = z.object({
   source: z.literal('mnemonic'),
   mnemonic: z.string(),
   account_index: z.number().int().nonnegative().default(0),
 })
 
-export const RawSecretMaterialSchema = z.discriminatedUnion('source', [
-  RawSecretPrivateKeyConfigSchema,
-  RawSecretMnemonicConfigSchema,
+export const RawSecretParamsSchema = z.discriminatedUnion('source', [
+  RawSecretPrivateKeyParamsSchema,
+  RawSecretMnemonicParamsSchema,
 ])
 
-export const RawSecretWalletConfigSchema = z.object({
-  type: z.literal('raw_secret'),
-  material: RawSecretMaterialSchema,
-})
+// ---------------------------------------------------------------------------
+// Zod schemas — WalletConfig (unified type + params)
+// ---------------------------------------------------------------------------
 
-export const WalletConfigSchema = z.discriminatedUnion('type', [
-  LocalSecureWalletConfigSchema,
-  RawSecretWalletConfigSchema,
-])
+export const WalletConfigSchema = z
+  .object({
+    type: z.enum(['local_secure', 'raw_secret']),
+    params: z.union([LocalSecureWalletParamsSchema, RawSecretParamsSchema]),
+  })
+  .refine(
+    (data) => {
+      if (data.type === 'local_secure') return 'secret_ref' in data.params
+      if (data.type === 'raw_secret') return 'source' in data.params
+      return false
+    },
+    { message: 'params must match wallet type' },
+  )
 
 export const WalletsTopologySchema = z.object({
   active_wallet: z.string().nullable().optional().default(null),
@@ -61,11 +68,10 @@ export const WalletsTopologySchema = z.object({
 // Type exports
 // ---------------------------------------------------------------------------
 
-export type LocalSecureWalletConfig = z.infer<typeof LocalSecureWalletConfigSchema>
-export type RawSecretPrivateKeyConfig = z.infer<typeof RawSecretPrivateKeyConfigSchema>
-export type RawSecretMnemonicConfig = z.infer<typeof RawSecretMnemonicConfigSchema>
-export type RawSecretMaterial = z.infer<typeof RawSecretMaterialSchema>
-export type RawSecretWalletConfig = z.infer<typeof RawSecretWalletConfigSchema>
+export type LocalSecureWalletParams = z.infer<typeof LocalSecureWalletParamsSchema>
+export type RawSecretPrivateKeyParams = z.infer<typeof RawSecretPrivateKeyParamsSchema>
+export type RawSecretMnemonicParams = z.infer<typeof RawSecretMnemonicParamsSchema>
+export type RawSecretParams = z.infer<typeof RawSecretParamsSchema>
 export type WalletConfig = z.infer<typeof WalletConfigSchema>
 export type WalletsTopology = z.infer<typeof WalletsTopologySchema>
 

@@ -19,9 +19,9 @@ import { loadLocalSecret } from '../local/secret-loader.js'
 const DEFAULT_SECRETS_DIR = join(homedir(), '.agent-wallet')
 const ENV_AGENT_WALLET_PASSWORD = 'AGENT_WALLET_PASSWORD'
 const ENV_AGENT_WALLET_DIR = 'AGENT_WALLET_DIR'
-const ENV_AGENT_WALLET_PRIVATE_KEY = 'AGENT_WALLET_PRIVATE_KEY'
-const ENV_AGENT_WALLET_MNEMONIC = 'AGENT_WALLET_MNEMONIC'
-const ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = 'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX'
+const ENV_PRIVATE_KEY_KEYS = ['AGENT_WALLET_PRIVATE_KEY', 'TRON_PRIVATE_KEY'] as const
+const ENV_MNEMONIC_KEYS = ['AGENT_WALLET_MNEMONIC', 'TRON_MNEMONIC'] as const
+const ENV_ACCOUNT_INDEX_KEYS = ['AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX', 'TRON_ACCOUNT_INDEX'] as const
 
 export type ResolvedWalletProvider = ConfigWalletProvider | EnvWalletProvider
 
@@ -49,9 +49,9 @@ export function resolveWalletProvider(options?: {
 
   return new EnvWalletProvider({
     network: options?.network,
-    privateKey: cleanEnvValue(process.env[ENV_AGENT_WALLET_PRIVATE_KEY]),
-    mnemonic: cleanEnvValue(process.env[ENV_AGENT_WALLET_MNEMONIC]),
-    accountIndex: parseAccountIndex(process.env[ENV_AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX]),
+    privateKey: firstEnv(ENV_PRIVATE_KEY_KEYS),
+    mnemonic: firstEnv(ENV_MNEMONIC_KEYS),
+    accountIndex: parseAccountIndex(firstEnv(ENV_ACCOUNT_INDEX_KEYS)),
   })
 }
 
@@ -110,6 +110,14 @@ function loadConfigSafe(secretsDir: string): WalletsTopology | null {
 
 function hasAvailableConfigWallet(config: WalletsTopology | null): boolean {
   return Boolean(config && Object.keys(config.wallets).length > 0)
+}
+
+function firstEnv(keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const value = cleanEnvValue(process.env[key])
+    if (value !== undefined) return value
+  }
+  return undefined
 }
 
 function cleanEnvValue(value: string | undefined): string | undefined {

@@ -10,9 +10,9 @@ import pytest
 
 from agent_wallet import resolve_wallet, resolve_wallet_provider
 from agent_wallet.core.config import (
-    LocalSecureWalletConfig,
-    RawSecretPrivateKeyConfig,
-    RawSecretWalletConfig,
+    LocalSecureWalletParams,
+    RawSecretPrivateKeyParams,
+    WalletConfig,
     WalletsTopology,
     save_config,
 )
@@ -44,7 +44,7 @@ def _write_raw_private_key_config(tmp_path: Path, *, active_wallet: str = "hot")
                 "wallets": {
                     active_wallet: {
                         "type": "raw_secret",
-                        "material": {
+                        "params": {
                             "source": "private_key",
                             "private_key": TEST_PRIVATE_KEY,
                         },
@@ -66,9 +66,9 @@ def setup_local_secure_dir():
         config = WalletsTopology(
             active_wallet="eth_test",
             wallets={
-                "eth_test": LocalSecureWalletConfig(
+                "eth_test": WalletConfig(
                     type="local_secure",
-                    secret_ref="eth_test",
+                    params=LocalSecureWalletParams(secret_ref="eth_test"),
                 ),
             },
         )
@@ -148,11 +148,11 @@ class TestConfigWalletProvider:
                     "wallets": {
                         "secure": {
                             "type": "local_secure",
-                            "secret_ref": "secure",
+                            "params": {"secret_ref": "secure"},
                         },
                         "hot": {
                             "type": "raw_secret",
-                            "material": {
+                            "params": {
                                 "source": "private_key",
                                 "private_key": TEST_PRIVATE_KEY,
                             },
@@ -175,7 +175,7 @@ class TestConfigWalletProvider:
                     "wallets": {
                         "secure": {
                             "type": "local_secure",
-                            "secret_ref": "secure",
+                            "params": {"secret_ref": "secure"},
                         }
                     },
                 }
@@ -195,7 +195,7 @@ class TestConfigWalletProvider:
                     "wallets": {
                         "seed": {
                             "type": "raw_secret",
-                            "material": {
+                            "params": {
                                 "source": "mnemonic",
                                 "mnemonic": TEST_MNEMONIC,
                                 "account_index": 1,
@@ -216,9 +216,9 @@ class TestConfigWalletProvider:
         with pytest.raises(ValueError, match="already exists"):
             provider.add_wallet(
                 "hot",
-                RawSecretWalletConfig(
+                WalletConfig(
                     type="raw_secret",
-                    material=RawSecretPrivateKeyConfig(
+                    params=RawSecretPrivateKeyParams(
                         source="private_key",
                         private_key=TEST_PRIVATE_KEY,
                     ),
@@ -231,9 +231,9 @@ class TestConfigWalletProvider:
         provider = ConfigWalletProvider(str(tmp_path), secret_loader=load_local_secret)
         provider.add_wallet(
             "b",
-            RawSecretWalletConfig(
+            WalletConfig(
                 type="raw_secret",
-                material=RawSecretPrivateKeyConfig(
+                params=RawSecretPrivateKeyParams(
                     source="private_key",
                     private_key=TEST_PRIVATE_KEY,
                 ),
@@ -389,11 +389,11 @@ class TestResolveWallet:
                     "wallets": {
                         "secure": {
                             "type": "local_secure",
-                            "secret_ref": "secure",
+                            "params": {"secret_ref": "secure"},
                         },
                         "hot": {
                             "type": "raw_secret",
-                            "material": {
+                            "params": {
                                 "source": "private_key",
                                 "private_key": TEST_PRIVATE_KEY,
                             },

@@ -5,10 +5,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  LocalSecureWalletConfigSchema,
-  RawSecretMnemonicConfigSchema,
-  RawSecretPrivateKeyConfigSchema,
-  RawSecretWalletConfigSchema,
+  LocalSecureWalletParamsSchema,
+  RawSecretPrivateKeyParamsSchema,
+  RawSecretMnemonicParamsSchema,
   WalletConfigSchema,
   WalletsTopologySchema,
   loadConfig,
@@ -29,57 +28,68 @@ afterEach(() => {
 
 describe('config schemas', () => {
   it('accepts local_secure wallet config', () => {
-    const parsed = LocalSecureWalletConfigSchema.parse({
+    const parsed = WalletConfigSchema.parse({
       type: 'local_secure',
-      secret_ref: 'wallet-a',
+      params: { secret_ref: 'wallet-a' },
     })
-    expect(parsed.secret_ref).toBe('wallet-a')
+    expect(parsed.type).toBe('local_secure')
+    expect((parsed.params as { secret_ref: string }).secret_ref).toBe('wallet-a')
   })
 
   it('accepts raw_secret private key config', () => {
-    const parsed = RawSecretWalletConfigSchema.parse({
+    const parsed = WalletConfigSchema.parse({
       type: 'raw_secret',
-      material: {
+      params: {
         source: 'private_key',
         private_key: '0xabc',
       },
     })
-    expect(parsed.material.source).toBe('private_key')
+    expect(parsed.type).toBe('raw_secret')
+    expect((parsed.params as { source: string }).source).toBe('private_key')
   })
 
   it('accepts raw_secret mnemonic config', () => {
-    const parsed = RawSecretWalletConfigSchema.parse({
+    const parsed = WalletConfigSchema.parse({
       type: 'raw_secret',
-      material: {
+      params: {
         source: 'mnemonic',
         mnemonic: 'test test test test test test test test test test test junk',
       },
     })
-    expect(parsed.material.source).toBe('mnemonic')
-    if (parsed.material.source === 'mnemonic') {
-      expect(parsed.material.account_index).toBe(0)
-    }
+    expect((parsed.params as { source: string }).source).toBe('mnemonic')
+    expect((parsed.params as { account_index: number }).account_index).toBe(0)
   })
 
   it('rejects invalid wallet type', () => {
     expect(() =>
       WalletConfigSchema.parse({
         type: 'legacy_local',
-        secret_ref: 'old',
+        params: { secret_ref: 'old' },
       }),
     ).toThrow()
   })
 
-  it('rejects invalid raw_secret material type', () => {
+  it('rejects invalid raw_secret params source', () => {
     expect(() =>
-      RawSecretWalletConfigSchema.parse({
+      WalletConfigSchema.parse({
         type: 'raw_secret',
-        material: {
+        params: {
           source: 'api_key',
           value: 'secret',
         },
       }),
     ).toThrow()
+  })
+
+  it('parses params sub-schemas independently', () => {
+    const lsp = LocalSecureWalletParamsSchema.parse({ secret_ref: 'w1' })
+    expect(lsp.secret_ref).toBe('w1')
+
+    const pkp = RawSecretPrivateKeyParamsSchema.parse({ source: 'private_key', private_key: '0x1' })
+    expect(pkp.source).toBe('private_key')
+
+    const mp = RawSecretMnemonicParamsSchema.parse({ source: 'mnemonic', mnemonic: 'test', account_index: 2 })
+    expect(mp.account_index).toBe(2)
   })
 })
 
@@ -90,11 +100,11 @@ describe('loadConfig / saveConfig', () => {
       wallets: {
         'wallet-a': {
           type: 'local_secure',
-          secret_ref: 'wallet-a',
+          params: { secret_ref: 'wallet-a' },
         },
         hot: {
           type: 'raw_secret',
-          material: {
+          params: {
             source: 'private_key',
             private_key: '0x1234',
           },
@@ -125,7 +135,7 @@ describe('loadConfig / saveConfig', () => {
       wallets: {
         seed: {
           type: 'raw_secret',
-          material: {
+          params: {
             source: 'mnemonic',
             mnemonic: 'test test test test test test test test test test test junk',
             account_index: 1,
@@ -138,8 +148,8 @@ describe('loadConfig / saveConfig', () => {
     const raw = JSON.parse(readFileSync(join(secretsDir, 'wallets_config.json'), 'utf-8'))
 
     expect(raw.active_wallet).toBe('seed')
-    expect(raw.wallets.seed.material.account_index).toBe(1)
-    expect(raw.wallets.seed.material.mnemonic).toBeTypeOf('string')
+    expect(raw.wallets.seed.params.account_index).toBe(1)
+    expect(raw.wallets.seed.params.mnemonic).toBeTypeOf('string')
   })
 
   it('omits null active_wallet on save', () => {

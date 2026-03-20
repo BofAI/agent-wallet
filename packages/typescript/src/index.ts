@@ -14,8 +14,11 @@ export {
 } from './core/errors.js'
 
 // Wallet adapters
-export { EvmAdapter } from './core/adapters/evm.js'
-export { TronAdapter } from './core/adapters/tron.js'
+export { EvmSigner } from './core/adapters/evm.js'
+export { TronSigner } from './core/adapters/tron.js'
+export { LocalSigner } from './core/adapters/local.js'
+export { LocalSecureSigner } from './core/adapters/local-secure.js'
+export { RawSecretSigner } from './core/adapters/raw-secret.js'
 
 // Provider layer
 export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'
@@ -34,11 +37,10 @@ export {
 export type {
   WalletConfig,
   WalletsTopology,
-  LocalSecureWalletConfig,
-  RawSecretWalletConfig,
-  RawSecretPrivateKeyConfig,
-  RawSecretMnemonicConfig,
-  RawSecretMaterial,
+  LocalSecureWalletParams,
+  RawSecretPrivateKeyParams,
+  RawSecretMnemonicParams,
+  RawSecretParams,
 } from './core/config.js'
 
 // KV Store

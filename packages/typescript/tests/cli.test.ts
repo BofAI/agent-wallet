@@ -110,7 +110,7 @@ describe('cmdStart', () => {
 
     const config = readConfig(secretsDir)
     expect(config.wallets.default.type).toBe('local_secure')
-    expect(config.wallets.default.secret_ref).toBe('default')
+    expect(config.wallets.default.params.secret_ref).toBe('default')
     expect(config.active_wallet).toBe('default')
     expect(existsSync(join(secretsDir, 'secret_default.json'))).toBe(true)
   })
@@ -125,7 +125,7 @@ describe('cmdStart', () => {
 
     const config = readConfig(secretsDir)
     expect(config.wallets.hot.type).toBe('raw_secret')
-    expect(config.wallets.hot.material.source).toBe('private_key')
+    expect(config.wallets.hot.params.source).toBe('private_key')
     expect(config.active_wallet).toBe('hot')
   })
 
@@ -164,7 +164,7 @@ describe('cmdStart', () => {
 
     expect(code).toBe(0)
     const config = readConfig(secretsDir)
-    expect(config.wallets.seed.material.account_index).toBe(2)
+    expect(config.wallets.seed.params.account_index).toBe(2)
   })
 
   it('prompts for wallet type when start is called without one', async () => {
@@ -235,8 +235,8 @@ describe('cmdStart', () => {
     })
 
     const config = readConfig(secretsDir)
-    expect(config.wallets['custom-wallet'].material.source).toBe('mnemonic')
-    expect(config.wallets['custom-wallet'].material.account_index).toBe(2)
+    expect(config.wallets['custom-wallet'].params.source).toBe('mnemonic')
+    expect(config.wallets['custom-wallet'].params.account_index).toBe(2)
   })
 
   it('prompts for private key material in local_secure start when selected interactively', async () => {
@@ -416,19 +416,19 @@ describe('cmdAdd / active wallet', () => {
     })
     const config = readConfig(secretsDir)
     expect(config.wallets.seed.type).toBe('raw_secret')
-    expect(config.wallets.seed.material.source).toBe('mnemonic')
-    expect(config.wallets.seed.material.account_index).toBe(1)
+    expect(config.wallets.seed.params.source).toBe('mnemonic')
+    expect(config.wallets.seed.params.account_index).toBe(1)
   })
 
-  it('prompts for wallet type when add is called without one', async () => {
-    const io = mockIO(['raw_secret'])
-    await cmdAdd(secretsDir, io, {
-      walletId: 'hot',
-      privateKey: TEST_PRIVATE_KEY,
-    })
-
-    const config = readConfig(secretsDir)
-    expect(config.wallets.hot.type).toBe('raw_secret')
+  it('errors when wallet type is missing for add', async () => {
+    const io = mockIO()
+    await expect(
+      cmdAdd(secretsDir, io, {
+        walletId: 'hot',
+        privateKey: TEST_PRIVATE_KEY,
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('Wallet type required')
   })
 
   it('prompts for wallet id when add is called without one', async () => {
@@ -461,8 +461,8 @@ describe('cmdAdd / active wallet', () => {
     })
 
     const config = readConfig(secretsDir)
-    expect(config.wallets['interactive-raw'].material.source).toBe('mnemonic')
-    expect(config.wallets['interactive-raw'].material.account_index).toBe(3)
+    expect(config.wallets['interactive-raw'].params.source).toBe('mnemonic')
+    expect(config.wallets['interactive-raw'].params.account_index).toBe(3)
   })
 
   it('use command sets active wallet', async () => {

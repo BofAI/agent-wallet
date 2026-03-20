@@ -4,8 +4,12 @@
 
 import { mnemonicToAccount } from 'viem/accounts'
 import { Network, type Wallet } from '../base.js'
-import { EvmAdapter } from '../adapters/evm.js'
-import { TronAdapter } from '../adapters/tron.js'
+import type { WalletConfig } from '../config.js'
+import { WalletType } from '../base.js'
+import { LocalSecureSigner } from '../adapters/local-secure.js'
+import type { SecretLoaderFn } from '../adapters/local-secure.js'
+import { RawSecretSigner } from '../adapters/raw-secret.js'
+import type { RawSecretPrivateKeyParams, RawSecretMnemonicParams } from '../config.js'
 
 export function parseNetworkFamily(network: string | undefined): Network {
   const normalized = network?.trim().toLowerCase()
@@ -15,11 +19,29 @@ export function parseNetworkFamily(network: string | undefined): Network {
   throw new Error("network must start with 'tron' or 'eip155'")
 }
 
-export function createAdapter(network: string, privateKey: Uint8Array): Wallet {
-  const family = parseNetworkFamily(network)
-  if (family === Network.EVM) return new EvmAdapter(privateKey, network)
-  if (family === Network.TRON) return new TronAdapter(privateKey, network)
-  throw new Error(`Unknown network: ${network}`)
+export function createAdapter(
+  conf: WalletConfig,
+  configDir: string,
+  password: string | undefined,
+  network: string,
+  secretLoader: SecretLoaderFn | undefined,
+): Wallet {
+  if (conf.type === WalletType.LOCAL_SECURE) {
+    return new LocalSecureSigner(
+      conf.params as { secret_ref: string },
+      configDir,
+      password,
+      network,
+      secretLoader,
+    )
+  }
+  if (conf.type === WalletType.RAW_SECRET) {
+    return new RawSecretSigner(
+      conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams,
+      network,
+    )
+  }
+  throw new Error(`Unknown wallet config type: ${conf.type}`)
 }
 
 export function decodePrivateKey(privateKey: string): Uint8Array {

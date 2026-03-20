@@ -1,4 +1,4 @@
-"""Tests for TronAdapter — sign/verify roundtrip.
+"""Tests for TronSigner — sign/verify roundtrip.
 
 Tron uses the same ECDSA curve (secp256k1) as Ethereum, so we can
 cross-verify signatures using both tronpy and eth_account.
@@ -11,7 +11,7 @@ from eth_account import Account
 from eth_account.messages import encode_typed_data
 from tronpy.keys import PrivateKey
 
-from agent_wallet.core.adapters.tron import TronAdapter
+from agent_wallet.core.adapters.tron import TronSigner
 
 # Known test private key
 TEST_KEY = bytes.fromhex(
@@ -23,7 +23,7 @@ TEST_ADDRESS = TEST_TRON_KEY.public_key.to_base58check_address()
 
 @pytest.fixture
 def tron_wallet():
-    return TronAdapter(private_key=TEST_KEY)
+    return TronSigner(private_key=TEST_KEY)
 
 
 # --- Address ---
@@ -39,7 +39,7 @@ async def test_get_address(tron_wallet):
 async def test_address_is_base58():
     """Tron address must be base58check format starting with T."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     addr = await wallet.get_address()
     assert addr.startswith("T")
     assert len(addr) == 34  # standard Tron address length
@@ -49,7 +49,7 @@ async def test_address_is_base58():
 async def test_address_matches_tronpy():
     """Our address must match tronpy's derivation."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     expected = PrivateKey(key).public_key.to_base58check_address()
     assert await wallet.get_address() == expected
 
@@ -75,7 +75,7 @@ async def test_sign_message_different_messages(tron_wallet):
 async def test_sign_message_matches_tronpy():
     """Our sign_message must produce the same result as tronpy PrivateKey.sign_msg."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     tron_key = PrivateKey(key)
 
     msg = b"verify this tron message"
@@ -108,7 +108,7 @@ async def test_sign_raw_deterministic(tron_wallet):
 async def test_sign_raw_matches_tronpy():
     """sign_raw must match tronpy PrivateKey.sign_msg for same input."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     tron_key = PrivateKey(key)
 
     raw_data = os.urandom(32)
@@ -158,7 +158,7 @@ async def test_sign_typed_data_recover():
     should correspond to the same private key.
     """
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     eth_addr = Account.from_key(key).address
 
     sig_hex = await wallet.sign_typed_data(EIP712_DATA)
@@ -176,7 +176,7 @@ async def test_sign_typed_data_matches_eth_account():
     because the underlying ECDSA operation is identical.
     """
     key = os.urandom(32)
-    tron_wallet = TronAdapter(private_key=key)
+    tron_wallet = TronSigner(private_key=key)
     eth_account = Account.from_key(key)
 
     tron_sig = await tron_wallet.sign_typed_data(EIP712_DATA)
@@ -257,7 +257,7 @@ def _x402_tron_sign_typed_data(private_key_hex: str, domain, types, message):
 async def test_x402_compat_no_version():
     """Our sign_typed_data must match x402 TronClientSigner for no-version domain."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
 
     our_sig = await wallet.sign_typed_data(EIP712_NO_VERSION)
     x402_sig = _x402_tron_sign_typed_data(
@@ -274,7 +274,7 @@ async def test_x402_compat_no_version():
 async def test_x402_compat_with_version():
     """Our sign_typed_data must also match x402 style for domain WITH version."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
 
     our_sig = await wallet.sign_typed_data(EIP712_DATA)
 
@@ -304,7 +304,7 @@ async def test_x402_compat_with_version():
 async def test_x402_compat_no_version_recover():
     """No-version domain: signature must still be recoverable."""
     key = os.urandom(32)
-    wallet = TronAdapter(private_key=key)
+    wallet = TronSigner(private_key=key)
     eth_addr = Account.from_key(key).address
 
     sig_hex = await wallet.sign_typed_data(EIP712_NO_VERSION)
@@ -317,11 +317,11 @@ async def test_x402_compat_no_version_recover():
 @pytest.mark.asyncio
 async def test_x402_compat_evm_tron_no_version_same_sig():
     """Same key, same no-version domain → EVM and Tron must produce identical signature."""
-    from agent_wallet.core.adapters.evm import EvmAdapter
+    from agent_wallet.core.adapters.evm import EvmSigner
 
     key = os.urandom(32)
-    evm_wallet = EvmAdapter(private_key=key)
-    tron_wallet = TronAdapter(private_key=key)
+    evm_wallet = EvmSigner(private_key=key)
+    tron_wallet = TronSigner(private_key=key)
 
     evm_sig = await evm_wallet.sign_typed_data(EIP712_NO_VERSION)
     tron_sig = await tron_wallet.sign_typed_data(EIP712_NO_VERSION)
@@ -334,8 +334,8 @@ async def test_x402_compat_evm_tron_no_version_same_sig():
 
 @pytest.mark.asyncio
 async def test_different_keys_different_signatures():
-    wallet_a = TronAdapter(private_key=os.urandom(32))
-    wallet_b = TronAdapter(private_key=os.urandom(32))
+    wallet_a = TronSigner(private_key=os.urandom(32))
+    wallet_b = TronSigner(private_key=os.urandom(32))
 
     msg = b"same message"
     sig_a = await wallet_a.sign_message(msg)
@@ -349,13 +349,13 @@ async def test_different_keys_different_signatures():
 
 @pytest.mark.asyncio
 async def test_evm_tron_typed_data_same_key_same_sig():
-    """Same private key signing same EIP-712 data via EvmAdapter and TronAdapter
+    """Same private key signing same EIP-712 data via EvmSigner and TronSigner
     must produce identical signatures."""
-    from agent_wallet.core.adapters.evm import EvmAdapter
+    from agent_wallet.core.adapters.evm import EvmSigner
 
     key = os.urandom(32)
-    evm_wallet = EvmAdapter(private_key=key)
-    tron_wallet = TronAdapter(private_key=key)
+    evm_wallet = EvmSigner(private_key=key)
+    tron_wallet = TronSigner(private_key=key)
 
     evm_sig = await evm_wallet.sign_typed_data(EIP712_DATA)
     tron_sig = await tron_wallet.sign_typed_data(EIP712_DATA)
@@ -407,7 +407,7 @@ PERMIT2_TYPED_DATA = {
 @pytest.mark.asyncio
 async def test_cross_lang_transfer_signature():
     """Transfer signature must match TypeScript output for same key."""
-    wallet = TronAdapter(private_key=TEST_KEY)
+    wallet = TronSigner(private_key=TEST_KEY)
     sig = await wallet.sign_typed_data(EIP712_DATA)
     assert sig == (
         "22008ffd588b4b370146bfd2e23426a53f945e32f32e1d8d2443769b69272b9a"
@@ -418,7 +418,7 @@ async def test_cross_lang_transfer_signature():
 @pytest.mark.asyncio
 async def test_cross_lang_permit_single_signature():
     """PermitSingle (nested struct) signature must match TypeScript output."""
-    wallet = TronAdapter(private_key=TEST_KEY)
+    wallet = TronSigner(private_key=TEST_KEY)
     sig = await wallet.sign_typed_data(PERMIT2_TYPED_DATA)
     assert sig == (
         "b2d374f840a447528ec3b9cedf394ded8000bcb79e3e1b9715859126db7350a5"
@@ -429,7 +429,7 @@ async def test_cross_lang_permit_single_signature():
 @pytest.mark.asyncio
 async def test_cross_lang_x402_signature():
     """x402 PaymentPermit (no version) signature must match TypeScript output."""
-    wallet = TronAdapter(private_key=TEST_KEY)
+    wallet = TronSigner(private_key=TEST_KEY)
     sig = await wallet.sign_typed_data(EIP712_NO_VERSION)
     assert sig == (
         "790cdd6f8f4e827bd3619c627994922cbcb70e52f828f204ddc51a733de72ded"

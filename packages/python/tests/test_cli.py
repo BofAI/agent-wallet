@@ -135,7 +135,7 @@ class TestAdd:
         assert "added" in result.output
         config = _read_config(initialized_dir)
         assert config["wallets"]["my_key"]["type"] == "local_secure"
-        assert config["wallets"]["my_key"]["secret_ref"] == "my_key"
+        assert config["wallets"]["my_key"]["params"]["secret_ref"] == "my_key"
         assert (Path(initialized_dir) / "secret_my_key.json").exists()
 
     def test_add_local_secure_import(self, initialized_dir):
@@ -180,7 +180,7 @@ class TestAdd:
         assert result.exit_code == 0
         config = _read_config(initialized_dir)
         assert config["wallets"]["hot_key"]["type"] == "raw_secret"
-        assert config["wallets"]["hot_key"]["material"]["source"] == "private_key"
+        assert config["wallets"]["hot_key"]["params"]["source"] == "private_key"
 
     def test_add_raw_secret_mnemonic_wallet(self, initialized_dir):
         result = runner.invoke(
@@ -191,8 +191,8 @@ class TestAdd:
         assert result.exit_code == 0
         config = _read_config(initialized_dir)
         assert config["wallets"]["seed_key"]["type"] == "raw_secret"
-        assert config["wallets"]["seed_key"]["material"]["source"] == "mnemonic"
-        assert config["wallets"]["seed_key"]["material"]["account_index"] == 1
+        assert config["wallets"]["seed_key"]["params"]["source"] == "mnemonic"
+        assert config["wallets"]["seed_key"]["params"]["account_index"] == 1
 
     def test_add_conflicting_generate_and_private_key(self, initialized_dir):
         result = runner.invoke(
@@ -591,7 +591,7 @@ class TestStart:
         assert "default" in result.output
         config = _read_config(secrets_dir)
         assert config["wallets"]["default"]["type"] == "local_secure"
-        assert config["wallets"]["default"]["secret_ref"] == "default"
+        assert config["wallets"]["default"]["params"]["secret_ref"] == "default"
 
     def test_start_local_secure_generate_shortcut(self, secrets_dir):
         result = runner.invoke(
@@ -611,7 +611,7 @@ class TestStart:
         assert result.exit_code == 0
         config = _read_config(secrets_dir)
         assert config["wallets"]["shortcut"]["type"] == "local_secure"
-        assert config["wallets"]["shortcut"]["secret_ref"] == "shortcut"
+        assert config["wallets"]["shortcut"]["params"]["secret_ref"] == "shortcut"
         assert config["active_wallet"] == "shortcut"
 
     def test_start_local_secure_mnemonic_shortcut_with_derive_as(self, secrets_dir):
@@ -646,7 +646,7 @@ class TestStart:
         assert result.exit_code == 0
         config = _read_config(secrets_dir)
         assert config["wallets"]["hot_wallet"]["type"] == "raw_secret"
-        assert config["wallets"]["hot_wallet"]["material"]["source"] == "private_key"
+        assert config["wallets"]["hot_wallet"]["params"]["source"] == "private_key"
         assert config["active_wallet"] == "hot_wallet"
 
     def test_start_created_wallet_becomes_active_even_when_active_exists(self, secrets_dir):

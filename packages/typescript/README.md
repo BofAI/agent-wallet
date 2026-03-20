@@ -31,7 +31,7 @@ const signature = await wallet.signMessage(new TextEncoder().encode("hello"));
 ```ts
 import {
   resolveWallet,          // → Wallet (one-shot)
-  resolveWalletProvider,  // → WalletProvider (manage multiple wallets)
+  resolveWalletProvider,  // → ConfigWalletProvider | EnvWalletProvider
   ConfigWalletProvider,   // file-backed provider (local_secure / raw_secret)
   EnvWalletProvider,      // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
 } from "@bankofai/agent-wallet";
@@ -48,7 +48,7 @@ const sig = await wallet.signTransaction({ to: "0x...", value: 0 });
 
 ### resolveWalletProvider
 
-Returns a `WalletProvider` based on what's available — useful when you need to manage or inspect wallets:
+Returns either `ConfigWalletProvider` or `EnvWalletProvider` based on what's available:
 
 ```ts
 const provider = resolveWalletProvider({ network: "eip155:1" });
@@ -81,7 +81,7 @@ interface Eip712Capable {
 }
 ```
 
-Both EVM and TRON adapters implement `Wallet` + `Eip712Capable`.
+Both EVM and TRON network-specific signers implement `Wallet` + `Eip712Capable`.
 
 ## Network Routing
 

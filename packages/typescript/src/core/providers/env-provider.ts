@@ -3,12 +3,8 @@
  */
 
 import type { Wallet, WalletProvider } from '../base.js'
-import {
-  createAdapter,
-  decodePrivateKey,
-  deriveKeyFromMnemonic,
-  parseNetworkFamily,
-} from './wallet-builder.js'
+import type { RawSecretPrivateKeyParams, RawSecretMnemonicParams } from '../config.js'
+import { RawSecretSigner } from '../adapters/raw-secret.js'
 
 export class EnvWalletProvider implements WalletProvider {
   private readonly _network: string | undefined
@@ -30,12 +26,9 @@ export class EnvWalletProvider implements WalletProvider {
   }
 
   async getWallet(network?: string): Promise<Wallet> {
-    return createWallet(
-      resolveNetwork(network, this._network),
-      this._privateKey,
-      this._mnemonic,
-      this._accountIndex,
-    )
+    const resolved = resolveNetwork(network, this._network)
+    const params = buildParams(this._privateKey, this._mnemonic, this._accountIndex)
+    return new RawSecretSigner(params, resolved)
   }
 
   async getActiveWallet(network?: string): Promise<Wallet> {
@@ -47,23 +40,18 @@ export class EnvWalletProvider implements WalletProvider {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function createWallet(
-  network: string,
+function buildParams(
   privateKey: string | undefined,
   mnemonic: string | undefined,
   accountIndex: number,
-): Wallet {
-  if (!privateKey && !mnemonic) {
-    throw new Error('resolve_wallet could not find a wallet source in config or env')
-  }
-
-  const family = parseNetworkFamily(network)
-
+): RawSecretPrivateKeyParams | RawSecretMnemonicParams {
   if (privateKey) {
-    return createAdapter(network, decodePrivateKey(privateKey))
+    return { source: 'private_key' as const, private_key: privateKey }
   }
-
-  return createAdapter(network, deriveKeyFromMnemonic(family, mnemonic!, accountIndex))
+  if (mnemonic) {
+    return { source: 'mnemonic' as const, mnemonic, account_index: accountIndex }
+  }
+  throw new Error('resolve_wallet could not find a wallet source in config or env')
 }
 
 function assertSingleWalletSource(

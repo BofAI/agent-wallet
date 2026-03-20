@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from agent_wallet.core.config import (
-    LocalSecureWalletConfig,
-    RawSecretMnemonicConfig,
-    RawSecretWalletConfig,
+    LocalSecureWalletParams,
+    RawSecretMnemonicParams,
+    WalletConfig,
     WalletsTopology,
     load_config,
     save_config,
@@ -32,7 +32,7 @@ class TestWalletConfig:
                 "wallets": {
                     "w1": {
                         "type": "local_secure",
-                        "secret_ref": "w1",
+                        "params": {"secret_ref": "w1"},
                     }
                 },
             }
@@ -46,7 +46,7 @@ class TestWalletConfig:
                 "wallets": {
                     "hot": {
                         "type": "raw_secret",
-                        "material": {
+                        "params": {
                             "source": "private_key",
                             "private_key": "0xabc",
                         },
@@ -55,7 +55,7 @@ class TestWalletConfig:
             }
         )
         assert conf.wallets["hot"].type == "raw_secret"
-        assert conf.wallets["hot"].material.source == "private_key"
+        assert conf.wallets["hot"].params.source == "private_key"
 
     def test_raw_secret_mnemonic(self):
         conf = WalletsTopology.model_validate(
@@ -63,7 +63,7 @@ class TestWalletConfig:
                 "wallets": {
                     "seed": {
                         "type": "raw_secret",
-                        "material": {
+                        "params": {
                             "source": "mnemonic",
                             "mnemonic": "word1 word2",
                             "account_index": 2,
@@ -72,8 +72,8 @@ class TestWalletConfig:
                 },
             }
         )
-        assert conf.wallets["seed"].material.source == "mnemonic"
-        assert conf.wallets["seed"].material.account_index == 2
+        assert conf.wallets["seed"].params.source == "mnemonic"
+        assert conf.wallets["seed"].params.account_index == 2
 
     def test_invalid_type(self):
         with pytest.raises(ValueError):
@@ -90,13 +90,13 @@ class TestLoadSaveConfig:
     def test_roundtrip(self, secrets_dir):
         config = WalletsTopology(
             wallets={
-                "deployer": LocalSecureWalletConfig(
+                "deployer": WalletConfig(
                     type="local_secure",
-                    secret_ref="key_deployer",
+                    params=LocalSecureWalletParams(secret_ref="key_deployer"),
                 ),
-                "manager": RawSecretWalletConfig(
+                "manager": WalletConfig(
                     type="raw_secret",
-                    material=RawSecretMnemonicConfig(
+                    params=RawSecretMnemonicParams(
                         source="mnemonic",
                         mnemonic="test test test",
                         account_index=1,
@@ -108,7 +108,7 @@ class TestLoadSaveConfig:
         loaded = load_config(secrets_dir)
         assert set(loaded.wallets.keys()) == {"deployer", "manager"}
         assert loaded.wallets["deployer"].secret_ref == "key_deployer"
-        assert loaded.wallets["manager"].material.account_index == 1
+        assert loaded.wallets["manager"].params.account_index == 1
 
     def test_missing_file(self, secrets_dir):
         with pytest.raises(FileNotFoundError):

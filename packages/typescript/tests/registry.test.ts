@@ -49,7 +49,7 @@ function setupLocalSecureDir(): string {
     wallets: {
       eth_test: {
         type: 'local_secure',
-        secret_ref: 'eth_test',
+        params: { secret_ref: 'eth_test' },
       },
     },
   }
@@ -67,7 +67,7 @@ function writeRawPrivateKeyConfig(dir: string, activeWallet = 'hot'): void {
     wallets: {
       [activeWallet]: {
         type: 'raw_secret',
-        material: {
+        params: {
           source: 'private_key',
           private_key: TEST_PRIVATE_KEY,
         },
@@ -133,10 +133,10 @@ describe('ConfigWalletProvider', () => {
     saveConfig(secretsDir, {
       active_wallet: 'secure',
       wallets: {
-        secure: { type: 'local_secure', secret_ref: 'secure' },
+        secure: { type: 'local_secure', params: { secret_ref: 'secure' } },
         hot: {
           type: 'raw_secret',
-          material: {
+          params: {
             source: 'private_key',
             private_key: TEST_PRIVATE_KEY,
           },
@@ -153,10 +153,10 @@ describe('ConfigWalletProvider', () => {
     saveConfig(secretsDir, {
       active_wallet: null,
       wallets: {
-        secure: { type: 'local_secure', secret_ref: 'secure' },
+        secure: { type: 'local_secure', params: { secret_ref: 'secure' } },
         hot: {
           type: 'raw_secret',
-          material: {
+          params: {
             source: 'private_key',
             private_key: TEST_PRIVATE_KEY,
           },
@@ -176,7 +176,7 @@ describe('ConfigWalletProvider', () => {
       wallets: {
         seed: {
           type: 'raw_secret',
-          material: {
+          params: {
             source: 'mnemonic',
             mnemonic: TEST_MNEMONIC,
             account_index: 1,
@@ -198,7 +198,7 @@ describe('ConfigWalletProvider', () => {
     })
     provider.addWallet('b', {
       type: 'raw_secret',
-      material: {
+      params: {
         source: 'private_key',
         private_key: TEST_PRIVATE_KEY,
       },
@@ -368,7 +368,14 @@ describe('resolver', () => {
 
 describe('wallet builder contracts', () => {
   it('passes the full network string to adapters after family routing', async () => {
-    const wallet = createAdapter('eip155:8453', Uint8Array.from(Buffer.from(TEST_PRIVATE_KEY.slice(2), 'hex')))
-    expect((wallet as any).network).toBe('eip155:8453')
+    const conf = {
+      type: 'raw_secret' as const,
+      params: {
+        source: 'private_key' as const,
+        private_key: TEST_PRIVATE_KEY,
+      },
+    }
+    const wallet = createAdapter(conf, secretsDir, undefined, 'eip155:8453', undefined)
+    expect((wallet as any)._network).toBe('eip155:8453')
   })
 })

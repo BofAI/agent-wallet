@@ -10,11 +10,9 @@ import { randomBytes } from 'node:crypto'
 
 import { WalletType, type Eip712Capable } from '../core/base.js'
 import {
-  ConfigNotFoundError,
-  type LocalSecureWalletConfig,
-  type RawSecretMnemonicConfig,
-  type RawSecretPrivateKeyConfig,
-  type RawSecretWalletConfig,
+  type LocalSecureWalletParams,
+  type RawSecretMnemonicParams,
+  type RawSecretPrivateKeyParams,
   type WalletConfig,
 } from '../core/config.js'
 import { RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME } from '../core/constants.js'
@@ -44,7 +42,7 @@ export interface CliIO {
     opts?: { password?: boolean; choices?: string[]; defaultValue?: string },
   ): Promise<string>
   confirm(question: string, defaultValue?: boolean): Promise<boolean>
-  select?(promptText: string, choices: string[]): Promise<string | null>
+  select?(promptText: string, choices: string[], descriptions?: Record<string, string>): Promise<string | null>
 }
 
 async function loadInquirer() {
@@ -279,9 +277,6 @@ function getProvider(dir: string, pw?: string): ConfigWalletProvider {
   try {
     return new ConfigWalletProvider(dir, pw ?? undefined, { secretLoader: loadLocalSecret })
   } catch (error) {
-    if (error instanceof ConfigNotFoundError) {
-      return new ConfigWalletProvider(dir, pw ?? undefined, { secretLoader: loadLocalSecret })
-    }
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(
       `Invalid wallet config in ${join(dir, WALLETS_CONFIG_FILENAME)}: ${message}`,
@@ -341,8 +336,7 @@ async function selectWalletType(explicit: string | undefined, io: CliIO): Promis
     raw_secret: 'Private key/mnemonic saved in plaintext config',
   }
   const selected =
-    (await interactiveSelect('Quick start type', choices, descriptions)) ??
-    (await io.select?.('Quick start type', choices)) ??
+    (await io.select?.('Quick start type', choices, descriptions)) ??
     (await io.prompt('Quick start type', { choices }))
 
   if (selected === WalletType.LOCAL_SECURE || selected === WalletType.RAW_SECRET) {
@@ -414,8 +408,7 @@ async function selectImportSourceInteractive(
     mnemonic: 'Derive from a BIP-39 mnemonic phrase',
   }
   return (
-    (await interactiveSelect('Import source', choices, descriptions)) ??
-    (await io.select?.('Import source', choices)) ??
+    (await io.select?.('Import source', choices, descriptions)) ??
     (await io.prompt('Import source', { choices, defaultValue: choices[0] }))
   )
 }
@@ -427,8 +420,7 @@ async function promptDerivationProfile(io: CliIO): Promise<string> {
     tron: 'TRON network',
   }
   return (
-    (await interactiveSelect('Derive mnemonic as', choices, descriptions)) ??
-    (await io.select?.('Derive mnemonic as', choices)) ??
+    (await io.select?.('Derive mnemonic as', choices, descriptions)) ??
     (await io.prompt('Derive mnemonic as', { choices, defaultValue: 'eip155' }))
   )
 }
@@ -491,7 +483,7 @@ async function buildRawSecretConfig(io: CliIO, opts: {
   privateKey?: string
   mnemonic?: string
   mnemonicIndex: number
-}): Promise<RawSecretWalletConfig> {
+}): Promise<WalletConfig> {
   const source = await selectImportSourceInteractive(io, {
     generate: false,
     privateKey: opts.privateKey,
@@ -505,7 +497,7 @@ async function buildRawSecretConfig(io: CliIO, opts: {
     const normalized = '0x' + Buffer.from(decodePrivateKey(keyHex)).toString('hex')
     return {
       type: 'raw_secret',
-      material: { source: 'private_key', private_key: normalized } as RawSecretPrivateKeyConfig,
+      params: { source: 'private_key', private_key: normalized } as RawSecretPrivateKeyParams,
     }
   }
 
@@ -519,11 +511,11 @@ async function buildRawSecretConfig(io: CliIO, opts: {
   )
   return {
     type: 'raw_secret',
-    material: {
+    params: {
       source: 'mnemonic',
       mnemonic,
       account_index: mnemonicIndex,
-    } as RawSecretMnemonicConfig,
+    } as RawSecretMnemonicParams,
   }
 }
 
@@ -588,8 +580,7 @@ export async function cmdStart(
         }
         const choices = ['add', 'exit']
         const selected =
-          (await interactiveSelect('What would you like to do?', choices, descriptions)) ??
-          (await io.select?.('What would you like to do?', choices)) ??
+          (await io.select?.('What would you like to do?', choices, descriptions)) ??
           (await io.prompt('Add a new wallet?', { choices, defaultValue: 'exit' }))
         if (selected === 'exit') {
           throw new CliExit(0)
@@ -663,23 +654,17 @@ export async function cmdStart(
       allowGenerate: true,
     })
 
-    const rows: [string, string][] = []
-    try {
-      const c = provider.getWalletConfig(targetName)
-      rows.push([targetName, c.type])
-    } catch {
-      if (secret === null) {
-        kvStore.generateSecret(targetName)
-      } else {
-        kvStore.saveSecret(targetName, secret)
-      }
-      provider.addWallet(targetName, {
-        type: 'local_secure',
-        secret_ref: targetName,
-      } as LocalSecureWalletConfig)
-      provider.setActive(targetName)
-      rows.push([targetName, 'local_secure'])
+    if (secret === null) {
+      kvStore.generateSecret(targetName)
+    } else {
+      kvStore.saveSecret(targetName, secret)
     }
+    provider.addWallet(targetName, {
+      type: 'local_secure',
+      params: { secret_ref: targetName },
+    })
+    provider.setActive(targetName)
+    const rows: [string, string][] = [[targetName, 'local_secure']]
 
     io.print('\nWallets:')
     printWalletTable(io, rows)
@@ -751,7 +736,11 @@ export async function cmdAdd(
     saveRuntimeSecrets?: boolean
   },
 ): Promise<void> {
-  const wtype = await selectWalletType(opts?.walletType, io)
+  if (!opts?.walletType) {
+    io.print(`Wallet type required. Usage: agent-wallet add <${Object.values(WalletType).join('|')}>`)
+    throw new CliExit(1)
+  }
+  const wtype = await selectWalletType(opts.walletType, io)
   const provider = getProvider(dir)
 
   if (!provider.isInitialized()) {
@@ -795,8 +784,8 @@ export async function cmdAdd(
 
     provider.addWallet(targetName, {
       type: 'local_secure',
-      secret_ref: targetName,
-    } as LocalSecureWalletConfig)
+      params: { secret_ref: targetName },
+    })
     io.print(`  Saved:   secret_${targetName}.json`)
   } else if (wtype === WalletType.RAW_SECRET) {
     if (opts?.password) {
@@ -829,20 +818,21 @@ export async function cmdList(dir: string, io: CliIO): Promise<void> {
     return
   }
 
-  const c1 = 20
-  const c2 = 15
-  const hr = (l: string, m: string, r: string) =>
-    `${l}${'─'.repeat(c1 + 2)}${m}${'─'.repeat(c2 + 2)}${r}`
+  const cm = 1 // marker column
+  const c1 = Math.max('Wallet ID'.length, ...rows.map(([wid]) => wid.length))
+  const c2 = Math.max('Type'.length, ...rows.map(([, conf]) => conf.type.length))
+  const hr = (l: string, m1: string, m2: string, r: string) =>
+    `${l}${'─'.repeat(cm + 2)}${m1}${'─'.repeat(c1 + 2)}${m2}${'─'.repeat(c2 + 2)}${r}`
   io.print('Wallets:')
-  io.print(hr('┌', '┬', '┐'))
-  io.print(`│ ${'Wallet ID'.padEnd(c1)} │ ${'Type'.padEnd(c2)} │`)
-  io.print(hr('├', '┼', '┤'))
+  io.print(hr('┌', '┬', '┬', '┐'))
+  io.print(`│ ${' '.padEnd(cm)} │ ${'Wallet ID'.padEnd(c1)} │ ${'Type'.padEnd(c2)} │`)
+  io.print(hr('├', '┼', '┼', '┤'))
 
   for (const [wid, conf, isActive] of rows) {
-    const marker = isActive ? '* ' : '  '
-    io.print(`│${marker}${wid.padEnd(c1)} │ ${conf.type.padEnd(c2)} │`)
+    const marker = isActive ? '*' : ' '
+    io.print(`│ ${marker.padEnd(cm)} │ ${wid.padEnd(c1)} │ ${conf.type.padEnd(c2)} │`)
   }
-  io.print(hr('└', '┴', '┘'))
+  io.print(hr('└', '┴', '┴', '┘'))
 }
 
 export async function cmdInspect(walletId: string, dir: string, io: CliIO): Promise<void> {
@@ -859,15 +849,17 @@ export async function cmdInspect(walletId: string, dir: string, io: CliIO): Prom
   io.print(`Type        ${conf.type}`)
 
   if (conf.type === 'local_secure') {
+    const params = conf.params as LocalSecureWalletParams
     const secretStatus = provider.hasSecretFile(walletId) ? '\u2713' : '\u2014'
-    io.print(`Secret      secret_${conf.secret_ref}.json ${secretStatus}`)
+    io.print(`Secret      secret_${params.secret_ref}.json ${secretStatus}`)
   } else if (conf.type === 'raw_secret') {
-    io.print(`Source Type ${conf.material.source}`)
-    if (conf.material.source === 'private_key') {
+    const params = conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams
+    io.print(`Source Type ${params.source}`)
+    if (params.source === 'private_key') {
       io.print('Private Key [redacted]')
-    } else if (conf.material.source === 'mnemonic') {
+    } else if (params.source === 'mnemonic') {
       io.print('Mnemonic    [redacted]')
-      io.print(`Account Index ${conf.material.account_index}`)
+      io.print(`Account Index ${params.account_index}`)
     }
   }
 }
@@ -896,7 +888,7 @@ export async function cmdRemove(
   }
 
   if (conf.type === 'local_secure' && provider.hasSecretFile(walletId)) {
-    io.print(`  Deleted: secret_${conf.secret_ref}.json`)
+    io.print(`  Deleted: secret_${(conf.params as LocalSecureWalletParams).secret_ref}.json`)
   }
   provider.removeWallet(walletId)
   io.print(`Wallet '${walletId}' removed.`)
@@ -1119,8 +1111,8 @@ export async function cmdChangePassword(
 // --- Helpers (output) ---
 
 function printWalletTable(io: CliIO, rows: [string, string][]): void {
-  const c1 = 20
-  const c2 = 15
+  const c1 = Math.max(9, ...rows.map(([id]) => id.length))
+  const c2 = Math.max(4, ...rows.map(([, type]) => type.length))
   const hr = (l: string, m: string, r: string) =>
     `${l}${'─'.repeat(c1 + 2)}${m}${'─'.repeat(c2 + 2)}${r}`
   io.print(hr('┌', '┬', '┐'))

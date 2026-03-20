@@ -1,4 +1,4 @@
-"""TronAdapter — Local TRON signing adapter (signing-only, no network calls)."""
+"""TronSigner — Local TRON signing helper (signing-only, no network calls)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from agent_wallet.core.base import Eip712Capable, Wallet
 from agent_wallet.core.errors import SigningError
 
 
-class TronAdapter(Wallet, Eip712Capable):
+class TronSigner(Wallet, Eip712Capable):
     """TRON wallet using local ECDSA signing.
 
     All operations are pure local — no network calls.

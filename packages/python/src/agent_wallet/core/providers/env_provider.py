@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
+from agent_wallet.core.adapters.raw_secret import RawSecretSigner
 from agent_wallet.core.base import Wallet, WalletProvider
-from agent_wallet.core.providers.wallet_builder import (
-    create_adapter,
-    decode_private_key,
-    derive_key_from_mnemonic,
-    parse_network_family,
-)
+from agent_wallet.core.config import RawSecretMnemonicParams, RawSecretPrivateKeyParams
 
 
 class EnvWalletProvider(WalletProvider):
@@ -32,38 +28,32 @@ class EnvWalletProvider(WalletProvider):
         self._account_index = account_index
 
     async def get_wallet(self, network: str | None = None) -> Wallet:
-        return _create_wallet(
-            network=_resolve_network(network, self._network),
+        resolved = _resolve_network(network, self._network)
+        params = _build_params(
             private_key=self._private_key,
             mnemonic=self._mnemonic,
             account_index=self._account_index,
         )
+        return RawSecretSigner(params=params, network=resolved)
 
     async def get_active_wallet(self, network: str | None = None) -> Wallet:
         return await self.get_wallet(network)
 
 
-def _create_wallet(
+def _build_params(
     *,
-    network: str,
     private_key: str | None,
     mnemonic: str | None,
     account_index: int,
-) -> Wallet:
-    if not private_key and not mnemonic:
-        raise ValueError(
-            "resolve_wallet could not find a wallet source in config or env"
-        )
-
-    family = parse_network_family(network)
-
+) -> RawSecretPrivateKeyParams | RawSecretMnemonicParams:
     if private_key:
-        return create_adapter(family, decode_private_key(private_key))
-
-    assert mnemonic is not None
-    return create_adapter(
-        family,
-        derive_key_from_mnemonic(family, mnemonic, account_index),
+        return RawSecretPrivateKeyParams(source="private_key", private_key=private_key)
+    if mnemonic:
+        return RawSecretMnemonicParams(
+            source="mnemonic", mnemonic=mnemonic, account_index=account_index,
+        )
+    raise ValueError(
+        "resolve_wallet could not find a wallet source in config or env"
     )
 
 

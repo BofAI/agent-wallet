@@ -20,11 +20,14 @@ __all__ = [
     "DecryptionError",
     "Eip712Capable",
     "EnvWalletProvider",
-    "EvmAdapter",
+    "EvmSigner",
+    "LocalSigner",
+    "LocalSecureSigner",
     "Network",
     "NetworkError",
+    "RawSecretSigner",
     "SigningError",
-    "TronAdapter",
+    "TronSigner",
     "UnsupportedOperationError",
     "Wallet",
     "WalletError",
@@ -36,12 +39,24 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name == "EvmAdapter":
-        from agent_wallet.core.adapters.evm import EvmAdapter
+    if name == "LocalSigner":
+        from agent_wallet.core.adapters.local import LocalSigner
 
-        return EvmAdapter
-    if name == "TronAdapter":
-        from agent_wallet.core.adapters.tron import TronAdapter
+        return LocalSigner
+    if name == "LocalSecureSigner":
+        from agent_wallet.core.adapters.local_secure import LocalSecureSigner
 
-        return TronAdapter
+        return LocalSecureSigner
+    if name == "RawSecretSigner":
+        from agent_wallet.core.adapters.raw_secret import RawSecretSigner
+
+        return RawSecretSigner
+    if name == "EvmSigner":
+        from agent_wallet.core.adapters.evm import EvmSigner
+
+        return EvmSigner
+    if name == "TronSigner":
+        from agent_wallet.core.adapters.tron import TronSigner
+
+        return TronSigner
     raise AttributeError(f"module 'agent_wallet' has no attribute {name!r}")

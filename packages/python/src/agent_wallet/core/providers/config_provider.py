@@ -8,12 +8,8 @@ import stat
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_wallet.core.base import Wallet, WalletProvider
+from agent_wallet.core.base import Wallet, WalletProvider, WalletType
 from agent_wallet.core.config import (
-    LocalSecureWalletConfig,
-    RawSecretMnemonicConfig,
-    RawSecretPrivateKeyConfig,
-    RawSecretWalletConfig,
     WalletConfig,
     WalletsTopology,
     load_config,
@@ -24,9 +20,6 @@ from agent_wallet.core.constants import RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG
 from agent_wallet.core.errors import WalletNotFoundError
 from agent_wallet.core.providers.wallet_builder import (
     create_adapter,
-    decode_private_key,
-    derive_key_from_mnemonic,
-    parse_network_family,
 )
 
 
@@ -96,7 +89,7 @@ class ConfigWalletProvider(WalletProvider):
 
     def remove_wallet(self, wallet_id: str) -> WalletConfig:
         conf = self.get_wallet_config(wallet_id)
-        if isinstance(conf, LocalSecureWalletConfig):
+        if conf.type == WalletType.LOCAL_SECURE:
             secret_path = self._secret_path(conf.secret_ref)
             if secret_path.exists():
                 secret_path.unlink()
@@ -113,7 +106,7 @@ class ConfigWalletProvider(WalletProvider):
 
     def has_secret_file(self, wallet_id: str) -> bool:
         conf = self.get_wallet_config(wallet_id)
-        if not isinstance(conf, LocalSecureWalletConfig):
+        if conf.type != WalletType.LOCAL_SECURE:
             return False
         return self._secret_path(conf.secret_ref).exists()
 
@@ -139,7 +132,7 @@ class ConfigWalletProvider(WalletProvider):
         cache_key = f"{wallet_id}:{resolved_network}"
         if cache_key not in self._wallets:
             conf = self._config.wallets[wallet_id]
-            self._wallets[cache_key] = _create_wallet_from_config(
+            self._wallets[cache_key] = create_adapter(
                 conf,
                 self._config_dir,
                 self._password,
@@ -178,43 +171,11 @@ class ConfigWalletProvider(WalletProvider):
         return Path(self._config_dir) / RUNTIME_SECRETS_FILENAME
 
 
-def _create_wallet_from_config(
-    conf: LocalSecureWalletConfig | RawSecretWalletConfig,
-    config_dir: str | Path,
-    password: str | None,
-    network: str,
-    secret_loader: Callable[[str | Path, str, str], bytes] | None,
-) -> Wallet:
-    """Create the right adapter based on config entry type + runtime network."""
-    network = parse_network_family(network)
-
-    if isinstance(conf, LocalSecureWalletConfig):
-        if not password:
-            raise ValueError("Password required for local_secure wallets")
-        if secret_loader is None:
-            raise ValueError("local_secure wallets require a configured secret loader")
-        private_key = secret_loader(config_dir, password, conf.secret_ref)
-        return create_adapter(network, private_key)
-
-    if isinstance(conf, RawSecretWalletConfig):
-        material = conf.material
-        if isinstance(material, RawSecretPrivateKeyConfig):
-            private_key = decode_private_key(material.private_key)
-            return create_adapter(network, private_key)
-        if isinstance(material, RawSecretMnemonicConfig):
-            private_key = derive_key_from_mnemonic(
-                network, material.mnemonic, material.account_index
-            )
-            return create_adapter(network, private_key)
-
-    raise ValueError(f"Unknown wallet config type: {type(conf)}")
-
-
 def _wallet_is_available_without_password(
-    conf: LocalSecureWalletConfig | RawSecretWalletConfig,
+    conf: WalletConfig,
     password: str | None,
 ) -> bool:
-    return not isinstance(conf, LocalSecureWalletConfig) or bool(password)
+    return conf.type != WalletType.LOCAL_SECURE or bool(password)
 
 
 def _resolve_network(explicit: str | None, provider_default: str | None) -> str:
