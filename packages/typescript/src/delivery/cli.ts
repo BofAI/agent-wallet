@@ -1127,12 +1127,12 @@ function printWalletTable(io: CliIO, rows: [string, string][]): void {
 // --- Reset Command ---
 
 export async function cmdReset(dir: string, yes: boolean, io: CliIO): Promise<void> {
-  if (!existsSync(join(dir, 'master.json'))) {
+  const files = managedJsonFiles(dir)
+  if (files.length === 0) {
     io.print('No wallet data found in: ' + dir)
     throw new CliExit(1)
   }
 
-  const files = managedJsonFiles(dir)
   io.print(`This will delete ALL wallet data in: ${dir}`)
   io.print(`   ${files.length} file(s): ${files.join(', ')}`)
   io.print('')

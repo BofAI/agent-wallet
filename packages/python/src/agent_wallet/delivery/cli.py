@@ -1116,11 +1116,11 @@ def reset(
 ) -> None:
     """Delete all agent-wallet managed files in the secrets directory."""
     secrets_path = Path(dir)
-    if not (secrets_path / "master.json").exists():
+    files = _managed_json_files(secrets_path)
+    if not files:
         console.print("[yellow]No wallet data found in:[/yellow] " + dir)
         raise typer.Exit(1)
 
-    files = _managed_json_files(secrets_path)
     console.print(f"[yellow]This will delete ALL wallet data in:[/yellow] {dir}")
     console.print(f"   {len(files)} file(s): {', '.join(f.name for f in files)}")
     console.print()

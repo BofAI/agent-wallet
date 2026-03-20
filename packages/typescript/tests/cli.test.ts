@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -19,6 +19,7 @@ import {
   cmdUse,
   main,
 } from '../src/delivery/cli.js'
+import { saveConfig } from '../src/core/config.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { loadLocalSecret } from '../src/local/secret-loader.js'
 
@@ -665,6 +666,34 @@ describe('change-password / reset', () => {
     const io = mockIO(['y', 'y'])
     await cmdReset(secretsDir, false, io)
     expect(existsSync(join(secretsDir, 'master.json'))).toBe(false)
+    expect(existsSync(join(secretsDir, 'wallets_config.json'))).toBe(false)
+  })
+
+  it('reset works for a raw_secret-only directory without master.json', async () => {
+    for (const filename of ['master.json', 'secret_signer.json']) {
+      const path = join(secretsDir, filename)
+      if (existsSync(path)) unlinkSync(path)
+    }
+
+    saveConfig(secretsDir, {
+      active_wallet: 'raw_wallet',
+      wallets: {
+        raw_wallet: {
+          type: 'raw_secret',
+          params: {
+            source: 'private_key',
+            private_key: TEST_PRIVATE_KEY,
+          },
+        },
+      },
+    })
+
+    expect(existsSync(join(secretsDir, 'master.json'))).toBe(false)
+    expect(existsSync(join(secretsDir, 'wallets_config.json'))).toBe(true)
+
+    const ioReset = mockIO()
+    await cmdReset(secretsDir, true, ioReset)
+
     expect(existsSync(join(secretsDir, 'wallets_config.json'))).toBe(false)
   })
 })

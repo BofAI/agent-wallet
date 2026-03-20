@@ -914,3 +914,18 @@ class TestReset:
         assert not (p / "runtime_secrets.json").exists()
         assert not (p / "secret_w1.json").exists()
         assert (p / "custom.json").exists()
+
+    def test_reset_works_for_raw_secret_only_directory(self, secrets_dir):
+        p = Path(secrets_dir)
+        start = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "raw_wallet", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert start.exit_code == 0
+        assert not (p / "master.json").exists()
+        assert (p / "wallets_config.json").exists()
+
+        result = runner.invoke(app, ["reset", "--dir", secrets_dir, "--yes"])
+        assert result.exit_code == 0
+        assert not (p / "wallets_config.json").exists()
