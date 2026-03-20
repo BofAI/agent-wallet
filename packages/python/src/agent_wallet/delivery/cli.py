@@ -202,6 +202,55 @@ def _get_password(
     return pw
 
 
+def _get_verified_password(
+    dir: str,
+    *,
+    provider: ConfigWalletProvider | None = None,
+    explicit: str | None = None,
+    prompt_if_missing: bool = True,
+) -> tuple[str, SecureKVStore]:
+    """Get password, verify it against master.json, and return (pw, kv_store).
+
+    If the password came from -p flag, env, or runtime secrets, fail on wrong password.
+    If the password was entered interactively, re-prompt up to 3 times.
+    """
+    pw = _get_password(
+        provider=provider, explicit=explicit, prompt_if_missing=prompt_if_missing,
+    )
+    if pw is None:
+        console.print("[red]Password required for local_secure wallets.[/red]")
+        raise typer.Exit(1)
+
+    was_interactive = (
+        explicit is None
+        and not (provider and provider.load_runtime_secrets_password())
+        and not os.environ.get("AGENT_WALLET_PASSWORD")
+    )
+
+    kv_store = SecureKVStore(dir, pw)
+    try:
+        kv_store.verify_password()
+        return pw, kv_store
+    except DecryptionError:
+        if not was_interactive:
+            console.print("[red]Wrong password. Please try again.[/red]")
+            raise typer.Exit(1)
+
+    # Interactive retry loop
+    for _attempt in range(2):  # 2 more attempts (3 total)
+        console.print("[red]✖ Wrong password, please try again.[/red]")
+        pw = _prompt_password_value("Master password")
+        kv_store = SecureKVStore(dir, pw)
+        try:
+            kv_store.verify_password()
+            return pw, kv_store
+        except DecryptionError:
+            pass
+
+    console.print("[red]Wrong password. 3 attempts failed.[/red]")
+    raise typer.Exit(1)
+
+
 def _maybe_save_runtime_secrets(
     provider: ConfigWalletProvider,
     password: str | None,
@@ -491,9 +540,18 @@ def _build_raw_secret_config(
     )
 
 
-def _prompt_wallet_id(default: str) -> str:
-    """Prompt for a wallet id with an interactive default."""
-    return Prompt.ask("[bold]Wallet ID[/bold] (e.g. my_wallet_1)", default=default)
+def _prompt_wallet_id(default: str, provider: ConfigWalletProvider | None = None) -> str:
+    """Prompt for a wallet id with an interactive default. Re-prompts on duplicates."""
+    while True:
+        name = Prompt.ask("[bold]Wallet ID[/bold] (e.g. my_wallet_1)", default=default)
+        if provider is not None:
+            try:
+                provider.get_wallet_config(name)
+                console.print(f"[yellow]Wallet '{name}' already exists. Please choose a different ID.[/yellow]")
+                continue
+            except WalletNotFoundError:
+                pass
+        return name
 
 
 # --- Commands ---
@@ -511,8 +569,31 @@ def start(
     dir: str = _dir_option(),
     password: str | None = _password_option(),
     save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
 ) -> None:
     """Quick setup: initialize and create default wallets."""
+    # Check if wallets already exist — prompt to confirm unless --override
+    if not override:
+        try:
+            existing = _get_provider(dir)
+            rows = existing.list_wallets()
+            if rows:
+                active_id = existing.get_active_id()
+                console.print(f"Already initialized with {len(rows)} wallet(s), active: [cyan]{active_id}[/cyan]")
+                descriptions = {
+                    "add": "Configure a new wallet",
+                    "exit": "Exit without changes",
+                }
+                selected = _interactive_select("What would you like to do?", ["add", "exit"], descriptions)
+                if selected is None:
+                    selected = Prompt.ask("[bold]Add a new wallet?[/bold]", choices=["add", "exit"], default="exit")
+                if selected == "exit":
+                    raise typer.Exit(0)
+        except (SystemExit, typer.Exit):
+            raise
+        except Exception:
+            pass  # No existing config — continue with normal start
+
     wtype = _select_start_type(wallet_type)
     provider: ConfigWalletProvider | None = None
 
@@ -520,17 +601,18 @@ def start(
     auto_generated = False
 
     if wtype == WalletType.LOCAL_SECURE:
-        target_name = wallet_id or _prompt_wallet_id("default")
         provider = _get_provider(dir)
+        if wallet_id:
+            try:
+                provider.get_wallet_config(wallet_id)
+                console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+                raise typer.Exit(1)
+            except WalletNotFoundError:
+                pass
+        target_name = wallet_id or _prompt_wallet_id("default", provider)
         # Local secure mode: needs password and master key
         if (secrets_path / "master.json").exists():
-            pw = _get_password(provider=provider, explicit=password)
-            kv_store = SecureKVStore(dir, pw)
-            try:
-                kv_store.verify_password()
-            except DecryptionError:
-                console.print("[red]Wrong password. Please try again.[/red]")
-                raise typer.Exit(1)
+            pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
             console.print("\nWallet already initialized.")
         else:
             explicit_pw = password or os.environ.get("AGENT_WALLET_PASSWORD")
@@ -561,25 +643,19 @@ def start(
             allow_generate=True,
         )
 
-        rows: list[tuple[str, str]] = []
-
-        try:
-            c = provider.get_wallet_config(target_name)
-            rows.append((target_name, c.type))
-        except WalletNotFoundError:
-            if secret is None:
-                kv_store.generate_secret(target_name)
-            else:
-                kv_store.save_secret(target_name, secret)
-            provider.add_wallet(
-                target_name,
-                LocalSecureWalletConfig(
-                    type="local_secure",
-                    secret_ref=target_name,
-                ),
-            )
-            provider.set_active(target_name)
-            rows.append((target_name, "local_secure"))
+        if secret is None:
+            kv_store.generate_secret(target_name)
+        else:
+            kv_store.save_secret(target_name, secret)
+        provider.add_wallet(
+            target_name,
+            LocalSecureWalletConfig(
+                type="local_secure",
+                secret_ref=target_name,
+            ),
+        )
+        provider.set_active(target_name)
+        rows: list[tuple[str, str]] = [(target_name, "local_secure")]
 
         console.print("\nWallets:")
         _print_wallet_table(rows)
@@ -593,14 +669,21 @@ def start(
             console.print("[red]--password is only valid for local_secure quick start.[/red]")
             raise typer.Exit(1)
         console.print("[yellow]Warning: Raw secret material will be stored in plaintext in wallets_config.json.[/yellow]")
-        target_name = wallet_id or _prompt_wallet_id("raw_wallet")
+        provider = _get_provider(dir)
+        if wallet_id:
+            try:
+                provider.get_wallet_config(wallet_id)
+                console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+                raise typer.Exit(1)
+            except WalletNotFoundError:
+                pass
+        target_name = wallet_id or _prompt_wallet_id("raw_wallet", provider)
         raw_secret_config = _build_raw_secret_config(
             explicit_private_key=private_key,
             explicit_mnemonic=mnemonic,
             mnemonic_index=mnemonic_index,
         )
 
-        provider = _get_provider(dir)
         try:
             provider.add_wallet(target_name, raw_secret_config)
             provider.set_active(target_name)
@@ -677,27 +760,23 @@ def add(
         console.print("[red]Wallet not initialized. Run 'agent-wallet start' or 'agent-wallet init' first.[/red]")
         raise typer.Exit(1)
 
-    target_name = wallet_id or _prompt_wallet_id("wallet")
-    try:
-        provider.get_wallet_config(target_name)
-        console.print(f"[red]Wallet '{target_name}' already exists.[/red]")
-        raise typer.Exit(1)
-    except WalletNotFoundError:
-        pass
+    if wallet_id:
+        try:
+            provider.get_wallet_config(wallet_id)
+            console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+            raise typer.Exit(1)
+        except WalletNotFoundError:
+            pass
+    target_name = wallet_id or _prompt_wallet_id("wallet", provider)
 
     if wtype == WalletType.LOCAL_SECURE:
-        pw = _get_password(provider=provider, explicit=password)
-        secure_provider = _get_provider(dir, pw)
-        _maybe_save_runtime_secrets(secure_provider, pw, save_runtime_secrets)
-        kv_store = SecureKVStore(dir, pw)
         try:
-            kv_store.verify_password()
-        except DecryptionError:
-            console.print("[red]Wrong password. Please try again.[/red]")
-            raise typer.Exit(1)
+            pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
         except FileNotFoundError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(1)
+        secure_provider = _get_provider(dir, pw)
+        _maybe_save_runtime_secrets(secure_provider, pw, save_runtime_secrets)
 
         secret = _resolve_private_key_input(
             explicit_generate=generate,
@@ -988,15 +1067,8 @@ def change_password(
 ) -> None:
     """Change master password and re-encrypt all files."""
     provider = _get_provider(dir)
-    old_pw = _get_password(provider=provider, explicit=password)
-
-    # Verify old password
-    kv_store_old = SecureKVStore(dir, old_pw)
     try:
-        kv_store_old.verify_password()
-    except DecryptionError:
-        console.print("[red]Wrong password. Please try again.[/red]")
-        raise typer.Exit(1)
+        _old_pw, kv_store_old = _get_verified_password(dir, provider=provider, explicit=password)
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

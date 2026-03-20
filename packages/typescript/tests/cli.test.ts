@@ -251,6 +251,143 @@ describe('cmdStart', () => {
   })
 })
 
+describe('cmdStart override behavior', () => {
+  it('exits when wallets exist and user selects exit', async () => {
+    // First start — create a wallet
+    const io1 = mockIO([TEST_PRIVATE_KEY])
+    await cmdStart(secretsDir, io1, {
+      walletType: 'raw_secret',
+      walletId: 'w1',
+      privateKey: TEST_PRIVATE_KEY,
+    })
+
+    // Second start — should prompt and exit
+    const io2 = mockIO(['exit'])
+    await expect(cmdStart(secretsDir, io2, {})).rejects.toThrow(CliExit)
+    expect(io2.output.some((l) => l.includes('Already initialized'))).toBe(true)
+  })
+
+  it('continues when wallets exist and --override is set', async () => {
+    const io1 = mockIO([TEST_PRIVATE_KEY])
+    await cmdStart(secretsDir, io1, {
+      walletType: 'raw_secret',
+      walletId: 'w1',
+      privateKey: TEST_PRIVATE_KEY,
+    })
+
+    // Second start with override — no prompt, creates w2
+    const io2 = mockIO([TEST_PRIVATE_KEY])
+    await cmdStart(secretsDir, io2, {
+      walletType: 'raw_secret',
+      walletId: 'w2',
+      privateKey: TEST_PRIVATE_KEY,
+      override: true,
+    })
+    expect(io2.output.some((l) => l.includes('Already initialized'))).toBe(false)
+    const config = JSON.parse(readFileSync(join(secretsDir, 'wallets_config.json'), 'utf-8'))
+    expect(config.wallets.w2).toBeDefined()
+  })
+
+  it('does not prompt on fresh directory', async () => {
+    const io = mockIO([TEST_PRIVATE_KEY])
+    await cmdStart(secretsDir, io, {
+      walletType: 'raw_secret',
+      walletId: 'w1',
+      privateKey: TEST_PRIVATE_KEY,
+    })
+    expect(io.output.some((l) => l.includes('Already initialized'))).toBe(false)
+  })
+})
+
+describe('duplicate wallet ID handling', () => {
+  it('start --walletId with duplicate errors immediately', async () => {
+    const io1 = mockIO()
+    await cmdStart(secretsDir, io1, {
+      walletType: 'raw_secret',
+      walletId: 'w1',
+      privateKey: TEST_PRIVATE_KEY,
+    })
+
+    const io2 = mockIO()
+    await expect(
+      cmdStart(secretsDir, io2, {
+        walletType: 'raw_secret',
+        walletId: 'w1',
+        override: true,
+        privateKey: TEST_PRIVATE_KEY,
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(io2.output.some((l) => l.includes('already exists'))).toBe(true)
+  })
+
+  it('add --walletId with duplicate errors immediately', async () => {
+    await initDir(secretsDir)
+    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
+    const io1 = mockIO()
+    await cmdAdd(secretsDir, io1, {
+      walletType: 'local_secure',
+      walletId: 'w1',
+      generate: true,
+    })
+
+    const io2 = mockIO()
+    await expect(
+      cmdAdd(secretsDir, io2, {
+        walletType: 'local_secure',
+        walletId: 'w1',
+        generate: true,
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(io2.output.some((l) => l.includes('already exists'))).toBe(true)
+    delete process.env.AGENT_WALLET_PASSWORD
+  })
+})
+
+describe('password retry behavior', () => {
+  it('retries interactively on wrong password', async () => {
+    // Create wallet with known password
+    const io1 = mockIO()
+    await cmdStart(secretsDir, io1, {
+      walletType: 'local_secure',
+      walletId: 'default',
+      password: TEST_PASSWORD,
+      generate: true,
+    })
+
+    // Second start: wrong password first, then correct
+    const io2 = mockIO(['wrong_password', TEST_PASSWORD])
+    await cmdStart(secretsDir, io2, {
+      walletType: 'local_secure',
+      walletId: 'w2',
+      generate: true,
+      override: true,
+    })
+    expect(io2.output.some((l) => l.includes('Wrong password'))).toBe(true)
+  })
+
+  it('exits immediately on wrong explicit -p password', async () => {
+    const io1 = mockIO()
+    await cmdStart(secretsDir, io1, {
+      walletType: 'local_secure',
+      walletId: 'default',
+      password: TEST_PASSWORD,
+      generate: true,
+    })
+
+    const io2 = mockIO()
+    await expect(
+      cmdStart(secretsDir, io2, {
+        walletType: 'local_secure',
+        walletId: 'w2',
+        password: 'wrong_password',
+        generate: true,
+        override: true,
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(io2.output.some((l) => l.includes('Wrong password'))).toBe(true)
+  })
+})
+
 describe('cmdAdd / active wallet', () => {
   beforeEach(async () => {
     await initDir(secretsDir)

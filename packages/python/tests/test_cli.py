@@ -671,6 +671,7 @@ class TestStart:
                 "raw_secret",
                 "--wallet-id",
                 "w2",
+                "--override",
                 "--dir",
                 secrets_dir,
             ],
@@ -720,6 +721,125 @@ class TestStart:
         assert result.exit_code == 1
         assert "Invalid wallet config" in result.output
         assert "unsupported or stale schema" in result.output
+
+
+    def test_start_exits_when_wallets_exist_and_user_selects_exit(self, secrets_dir):
+        """start should prompt and exit when wallets already exist and user picks exit."""
+        runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["start", "--dir", secrets_dir],
+            input="exit\n",
+        )
+        assert result.exit_code == 0
+        assert "Already initialized" in result.output
+
+    def test_start_continues_when_wallets_exist_and_user_selects_add(self, secrets_dir):
+        """start should continue normally when wallets exist and user picks add."""
+        runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w2", "--override", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 0
+        config = _read_config(secrets_dir)
+        assert "w2" in config["wallets"]
+
+    def test_start_override_skips_prompt(self, secrets_dir):
+        """--override should skip the 'already initialized' prompt entirely."""
+        runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w2", "--override", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 0
+        assert "Already initialized" not in result.output
+
+    def test_start_no_prompt_on_fresh_dir(self, secrets_dir):
+        """start should not prompt on a fresh directory with no wallets."""
+        result = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 0
+        assert "Already initialized" not in result.output
+
+
+    def test_start_explicit_wallet_id_duplicate_errors(self, secrets_dir):
+        """--wallet-id with a duplicate should error immediately, not re-prompt."""
+        runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["start", "raw_secret", "--wallet-id", "w1", "--override", "--dir", secrets_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        assert result.exit_code == 1
+        assert "already exists" in result.output
+
+    def test_start_wrong_password_retries_interactively(self, secrets_dir):
+        """Interactive wrong password should allow retry, not exit immediately."""
+        # Init with known password
+        first = runner.invoke(
+            app,
+            ["start", "local_secure", "-w", "default", "-g", "--dir", secrets_dir, "-p", TEST_PASSWORD],
+        )
+        assert first.exit_code == 0
+        # Second start: wrong password, then correct password
+        result = runner.invoke(
+            app,
+            ["start", "local_secure", "-w", "w2", "--override", "-g", "--dir", secrets_dir],
+            input=f"bad_password\n{TEST_PASSWORD}\n",
+        )
+        assert result.exit_code == 0
+        assert "Wrong password" in result.output
+
+    def test_start_wrong_password_explicit_flag_exits(self, secrets_dir):
+        """-p with wrong password should error immediately, no retry."""
+        first = runner.invoke(
+            app,
+            ["start", "local_secure", "-w", "default", "-g", "--dir", secrets_dir, "-p", TEST_PASSWORD],
+        )
+        assert first.exit_code == 0
+        result = runner.invoke(
+            app,
+            ["start", "local_secure", "-w", "w2", "--override", "-g", "--dir", secrets_dir, "-p", "wrong"],
+        )
+        assert result.exit_code == 1
+        assert "Wrong password" in result.output
+
+    def test_add_explicit_wallet_id_duplicate_errors(self, initialized_dir):
+        """add --wallet-id with duplicate should error, not re-prompt."""
+        runner.invoke(
+            app,
+            ["add", "local_secure", "-w", "w1", "-g", "--dir", initialized_dir],
+            env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+        )
+        result = runner.invoke(
+            app,
+            ["add", "local_secure", "-w", "w1", "-g", "--dir", initialized_dir],
+            env={"AGENT_WALLET_PASSWORD": TEST_PASSWORD},
+        )
+        assert result.exit_code == 1
+        assert "already exists" in result.output
 
 
 class TestActiveWallet:
