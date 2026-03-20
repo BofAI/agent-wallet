@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { keccak256 } from "viem";
 import { DecryptionError } from "../core/errors.js";
@@ -29,7 +29,7 @@ interface KeystoreV3 {
   };
 }
 
-function deriveKey(password: string, salt: Buffer): Buffer {
+function deriveKey(password: string, salt: Uint8Array): Buffer {
   return scryptSync(Buffer.from(password, "utf-8"), salt, SCRYPT_DKLEN, {
     N: SCRYPT_N,
     r: SCRYPT_R,
@@ -38,7 +38,7 @@ function deriveKey(password: string, salt: Buffer): Buffer {
   }) as Buffer;
 }
 
-export function encryptBytes(plaintext: Buffer, password: string): KeystoreV3 {
+export function encryptBytes(plaintext: Uint8Array, password: string): KeystoreV3 {
   const salt = randomBytes(32);
   const iv = randomBytes(16);
   const derivedKey = deriveKey(password, salt);
@@ -70,7 +70,7 @@ export function encryptBytes(plaintext: Buffer, password: string): KeystoreV3 {
   };
 }
 
-export function decryptBytes(keystore: KeystoreV3, password: string): Buffer {
+export function decryptBytes(keystore: KeystoreV3, password: string): Uint8Array {
   const { crypto } = keystore;
   const { kdfparams } = crypto;
 
@@ -91,7 +91,7 @@ export function decryptBytes(keystore: KeystoreV3, password: string): Buffer {
 
   const encryptionKey = derivedKey.subarray(0, 16);
   const decipher = createDecipheriv("aes-128-ctr", encryptionKey, iv);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return Uint8Array.from(Buffer.concat([decipher.update(ciphertext), decipher.final()]));
 }
 
 export class SecureKVStore {
@@ -119,35 +119,32 @@ export class SecureKVStore {
     }
     const keystore = this.readJson("master.json") as KeystoreV3;
     const plaintext = decryptBytes(keystore, this.password);
-    if (!plaintext.equals(MASTER_SENTINEL)) {
+    if (Buffer.compare(Buffer.from(plaintext), MASTER_SENTINEL) !== 0) {
       throw new DecryptionError("master.json decrypted but sentinel mismatch");
     }
     return true;
   }
 
-  loadPrivateKey(name: string): Buffer {
-    const keystore = this.readJson(`id_${name}.json`) as KeystoreV3;
+  loadSecret(name: string): Uint8Array {
+    const keystore = this.readJson(`secret_${name}.json`) as KeystoreV3;
     return decryptBytes(keystore, this.password);
   }
 
-  savePrivateKey(name: string, privateKey: Buffer): void {
-    if (privateKey.length !== 32) {
-      throw new Error(`Private key must be 32 bytes, got ${privateKey.length}`);
-    }
-    const keystore = encryptBytes(privateKey, this.password);
-    this.writeJson(`id_${name}.json`, keystore);
+  saveSecret(name: string, secret: Uint8Array): void {
+    const keystore = encryptBytes(secret, this.password);
+    this.writeJson(`secret_${name}.json`, keystore);
   }
 
-  generateKey(name: string): Buffer {
-    const privateKey = randomBytes(32);
-    this.savePrivateKey(name, privateKey);
-    return privateKey;
+  generateSecret(name: string, opts?: { length?: number }): Uint8Array {
+    const secret = randomBytes(opts?.length ?? 32);
+    this.saveSecret(name, secret);
+    return Uint8Array.from(secret);
   }
 
   loadCredential(name: string): string | Record<string, unknown> {
     const keystore = this.readJson(`cred_${name}.json`) as KeystoreV3;
     const plaintext = decryptBytes(keystore, this.password);
-    const text = plaintext.toString("utf-8");
+    const text = Buffer.from(plaintext).toString("utf-8");
     try {
       const parsed = JSON.parse(text);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
@@ -179,5 +176,10 @@ export class SecureKVStore {
   private writeJson(filename: string, data: unknown): void {
     const path = join(this.secretsDir, filename);
     writeFileSync(path, JSON.stringify(data, null, 2) + "\n", "utf-8");
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      // ignore on platforms without chmod support
+    }
   }
 }

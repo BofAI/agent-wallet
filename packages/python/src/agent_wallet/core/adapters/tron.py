@@ -1,25 +1,26 @@
-"""TronWallet — Local TRON signing adapter (signing-only, no network calls)."""
+"""TronAdapter — Local TRON signing adapter (signing-only, no network calls)."""
 
 from __future__ import annotations
 
 import json
 
-from agent_wallet.core.base import BaseWallet, Eip712Capable
+from agent_wallet.core.base import Wallet, Eip712Capable
 from agent_wallet.core.errors import SigningError
 
 
-class TronWallet(BaseWallet, Eip712Capable):
+class TronAdapter(Wallet, Eip712Capable):
     """TRON wallet using local ECDSA signing.
 
     All operations are pure local — no network calls.
     """
 
-    def __init__(self, private_key: bytes) -> None:
+    def __init__(self, private_key: bytes, network: str = "tron") -> None:
         from tronpy.keys import PrivateKey
 
         self._private_key_bytes = private_key
         self._tron_key = PrivateKey(private_key)
         self._address = self._tron_key.public_key.to_base58check_address()
+        self._network = network
 
     async def get_address(self) -> str:
         return self._address

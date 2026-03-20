@@ -1,6 +1,6 @@
-// Core types and interfaces
-export { WalletType } from "./core/base.js";
-export type { BaseWallet, Eip712Capable } from "./core/base.js";
+// Core types
+export { Network, WalletType } from './core/base.js'
+export type { Wallet, Eip712Capable, WalletProvider } from './core/base.js'
 
 // Error classes
 export {
@@ -11,30 +11,35 @@ export {
   SigningError,
   NetworkError,
   UnsupportedOperationError,
-} from "./core/errors.js";
+} from './core/errors.js'
 
 // Wallet adapters
-export { EvmWallet } from "./core/adapters/evm.js";
-export { TronWallet } from "./core/adapters/tron.js";
+export { EvmAdapter } from './core/adapters/evm.js'
+export { TronAdapter } from './core/adapters/tron.js'
 
 // Provider layer
-export {
-  WalletProvider,
-  LocalWalletProvider,
-  StaticWalletProvider,
-  createWalletProvider,
-  resolveWalletProvider,
-} from "./core/providers/index.js";
-export type {
-  CreateWalletProviderOptions,
-  LocalProviderOptions,
-  PrivateKeyProviderOptions,
-  MnemonicProviderOptions,
-  EnvProviderOptions,
-  ResolveWalletProviderOptions,
-} from "./core/providers/index.js";
+export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'
+export type { SecretLoaderFn } from './core/providers/index.js'
 
-// Local infrastructure (config + key storage)
-export { CURRENT_CONFIG_VERSION, loadConfig, saveConfig, migrateConfig } from "./local/config.js";
-export type { WalletConfig, WalletsTopology, WalletInfo } from "./local/config.js";
-export { SecureKVStore, encryptBytes, decryptBytes } from "./local/kv-store.js";
+// Resolver
+export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
+export type { ResolvedWalletProvider } from './core/resolver.js'
+
+// Config types and functions
+export {
+  loadConfig,
+  saveConfig,
+  loadRuntimeSecretsPassword,
+} from './core/config.js'
+export type {
+  WalletConfig,
+  WalletsTopology,
+  LocalSecureWalletConfig,
+  RawSecretWalletConfig,
+  RawSecretPrivateKeyConfig,
+  RawSecretMnemonicConfig,
+  RawSecretMaterial,
+} from './core/config.js'
+
+// KV Store
+export { SecureKVStore, encryptBytes, decryptBytes } from './local/kv-store.js'

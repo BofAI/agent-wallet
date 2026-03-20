@@ -2,14 +2,14 @@
  * Demo: Sign EIP-712 typed data for x402 payment permit with an EVM/BSC wallet.
  *
  * This example is the EVM/BSC counterpart to tron-x402-sign-typed-data.ts.
- * It resolves the active wallet from environment variables via resolveWalletProvider()
- * and verifies the recovered signer directly against the EVM address.
+ * It resolves the active wallet from config or env and verifies the recovered
+ * signer directly against the EVM address.
  *
  * Recommended env:
  *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/bsc-x402-sign-typed-data.ts
  *   AGENT_WALLET_MNEMONIC="word1 word2 ..." npx tsx examples/bsc-x402-sign-typed-data.ts
  *
- * Optional local mode also works:
+ * Optional local_secure mode also works:
  *   AGENT_WALLET_PASSWORD=<password> npx tsx examples/bsc-x402-sign-typed-data.ts
  */
 

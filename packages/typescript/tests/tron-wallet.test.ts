@@ -4,8 +4,8 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { keccak256 } from 'viem'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58check from 'bs58check'
-import { TronWallet } from '../src/core/adapters/tron.js'
-import { EvmWallet } from '../src/core/adapters/evm.js'
+import { TronAdapter } from '../src/core/adapters/tron.js'
+import { EvmAdapter } from '../src/core/adapters/evm.js'
 
 const TEST_KEY = Buffer.from('4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b', 'hex')
 
@@ -14,8 +14,8 @@ const TEST_ETH_ACCOUNT = privateKeyToAccount(`0x${TEST_KEY.toString('hex')}`)
 const TEST_ETH_ADDR_BYTES = Buffer.from(TEST_ETH_ACCOUNT.address.slice(2), 'hex')
 const TEST_ADDRESS = bs58check.encode(Buffer.concat([Buffer.from([0x41]), TEST_ETH_ADDR_BYTES]))
 
-function makeWallet(key?: Buffer, chainId?: string): TronWallet {
-  return new TronWallet(key ?? TEST_KEY)
+function makeWallet(key?: Uint8Array, network?: string): TronAdapter {
+  return new TronAdapter(key ?? TEST_KEY, network)
 }
 
 /** Manual ECDSA sign matching tronpy PrivateKey.sign_msg */
@@ -94,7 +94,7 @@ describe('Address', () => {
 
   it('should be base58 starting with T', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const addr = await wallet.getAddress()
     expect(addr.startsWith('T')).toBe(true)
     expect(addr.length).toBe(34)
@@ -102,7 +102,7 @@ describe('Address', () => {
 
   it('should match manual derivation', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const account = privateKeyToAccount(`0x${key.toString('hex')}`)
     const ethAddrBytes = Buffer.from(account.address.slice(2), 'hex')
     const expected = bs58check.encode(Buffer.concat([Buffer.from([0x41]), ethAddrBytes]))
@@ -129,7 +129,7 @@ describe('signMessage', () => {
 
   it('should match tronpy sign_msg', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const msg = Buffer.from('verify this tron message')
     const ourSig = await wallet.signMessage(msg)
     const expected = tronpySign(msg, key)
@@ -156,11 +156,27 @@ describe('signRaw', () => {
 
   it('should match tronpy sign_msg', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const rawData = randomBytes(32)
     const ourSig = await wallet.signRaw(rawData)
     const expected = tronpySign(rawData, key)
     expect(ourSig).toBe(expected)
+  })
+})
+
+describe('signTransaction validation', () => {
+  it('rejects non-hex txID', async () => {
+    const wallet = makeWallet()
+    await expect(
+      wallet.signTransaction({ txID: 'not-hex', raw_data_hex: 'abcd' }),
+    ).rejects.toThrow(/txID must be a 32-byte hex string/)
+  })
+
+  it('rejects short txID', async () => {
+    const wallet = makeWallet()
+    await expect(
+      wallet.signTransaction({ txID: 'abcd', raw_data_hex: 'abcd' }),
+    ).rejects.toThrow(/txID must be a 32-byte hex string/)
   })
 })
 
@@ -169,7 +185,7 @@ describe('signRaw', () => {
 describe('signTypedData', () => {
   it('should produce recoverable signature', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const sigHex = await wallet.signTypedData(EIP712_DATA)
     // Verify it's a valid 65-byte signature
     expect(sigHex.length).toBe(130)
@@ -177,7 +193,7 @@ describe('signTypedData', () => {
 
   it('should match viem direct signing', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const account = privateKeyToAccount(`0x${key.toString('hex')}`)
 
     const ourSig = await wallet.signTypedData(EIP712_DATA)
@@ -204,7 +220,7 @@ describe('signTypedData', () => {
 describe('x402 compatibility', () => {
   it('should match x402 signing without version', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const account = privateKeyToAccount(`0x${key.toString('hex')}`)
 
     const ourSig = await wallet.signTypedData(EIP712_NO_VERSION)
@@ -221,7 +237,7 @@ describe('x402 compatibility', () => {
 
   it('should match x402 signing with version', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const account = privateKeyToAccount(`0x${key.toString('hex')}`)
 
     const ourSig = await wallet.signTypedData(EIP712_DATA)
@@ -236,15 +252,15 @@ describe('x402 compatibility', () => {
 
   it('should produce recoverable signature without version', async () => {
     const key = randomBytes(32)
-    const wallet = new TronWallet(key)
+    const wallet = new TronAdapter(key)
     const sigHex = await wallet.signTypedData(EIP712_NO_VERSION)
     expect(sigHex.length).toBe(130)
   })
 
   it('should match EVM wallet for no-version domain', async () => {
     const key = randomBytes(32)
-    const evmWallet = new EvmWallet(key)
-    const tronWallet = new TronWallet(key)
+    const evmWallet = new EvmAdapter(key)
+    const tronWallet = new TronAdapter(key)
 
     const evmSig = await evmWallet.signTypedData(EIP712_NO_VERSION)
     const tronSig = await tronWallet.signTypedData(EIP712_NO_VERSION)
@@ -256,8 +272,8 @@ describe('x402 compatibility', () => {
 
 describe('Cross-key isolation', () => {
   it('should produce different signatures for different keys', async () => {
-    const walletA = new TronWallet(randomBytes(32))
-    const walletB = new TronWallet(randomBytes(32))
+    const walletA = new TronAdapter(randomBytes(32))
+    const walletB = new TronAdapter(randomBytes(32))
 
     const msg = Buffer.from('same message')
     const sigA = await walletA.signMessage(msg)
@@ -271,8 +287,8 @@ describe('Cross-key isolation', () => {
 describe('EVM/Tron typed data consistency', () => {
   it('should produce identical signatures for same key', async () => {
     const key = randomBytes(32)
-    const evmWallet = new EvmWallet(key)
-    const tronWallet = new TronWallet(key)
+    const evmWallet = new EvmAdapter(key)
+    const tronWallet = new TronAdapter(key)
 
     const evmSig = await evmWallet.signTypedData(EIP712_DATA)
     const tronSig = await tronWallet.signTypedData(EIP712_DATA)

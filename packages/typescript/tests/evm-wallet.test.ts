@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
-import { recoverMessageAddress, recoverTransactionAddress } from "viem";
+import { recoverMessageAddress, recoverTransactionAddress, serializeTransaction } from "viem";
 import { hashTypedData, hashMessage } from "viem";
-import { EvmWallet } from "../src/core/adapters/evm.js";
+import { EvmAdapter } from "../src/core/adapters/evm.js";
 
 const TEST_KEY = Buffer.from(
   "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b",
@@ -13,8 +13,8 @@ const TEST_ADDRESS = privateKeyToAccount(
   `0x${TEST_KEY.toString("hex")}`,
 ).address;
 
-function makeWallet(key?: Buffer, chainId?: string): EvmWallet {
-  return new EvmWallet(key ?? TEST_KEY, chainId);
+function makeWallet(key?: Uint8Array, network?: string): EvmAdapter {
+  return new EvmAdapter(key ?? TEST_KEY, network);
 }
 
 const EIP712_DATA = {
@@ -82,7 +82,7 @@ describe("Address", () => {
 
   it("should return checksummed address", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const addr = await wallet.getAddress();
     expect(addr.startsWith("0x")).toBe(true);
     expect(addr.length).toBe(42);
@@ -109,7 +109,7 @@ describe("signMessage", () => {
 
   it("should produce recoverable signature", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const expectedAddr = privateKeyToAccount(
       `0x${key.toString("hex")}`,
     ).address;
@@ -126,7 +126,7 @@ describe("signMessage", () => {
 
   it("should match viem direct signing", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const account = privateKeyToAccount(`0x${key.toString("hex")}`);
 
     const msg = Buffer.from("compare signatures");
@@ -142,7 +142,7 @@ describe("signMessage", () => {
 describe("signTypedData", () => {
   it("should produce recoverable signature", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const expectedAddr = privateKeyToAccount(
       `0x${key.toString("hex")}`,
     ).address;
@@ -171,7 +171,7 @@ describe("signTypedData", () => {
 
   it("should match viem direct signing", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const account = privateKeyToAccount(`0x${key.toString("hex")}`);
 
     const ourSig = await wallet.signTypedData(EIP712_DATA);
@@ -200,7 +200,7 @@ describe("signTypedData", () => {
 describe("signTransaction", () => {
   it("should sign EIP-1559 transaction", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
 
     const tx = {
       to: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`,
@@ -219,7 +219,7 @@ describe("signTransaction", () => {
 
   it("should match viem direct signing", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const account = privateKeyToAccount(`0x${key.toString("hex")}`);
 
     const tx = {
@@ -240,12 +240,43 @@ describe("signTransaction", () => {
   });
 });
 
+// --- signRaw ---
+
+describe("signRaw", () => {
+  it("matches signTransaction for an unsigned serialized transaction", async () => {
+    const key = randomBytes(32);
+    const wallet = new EvmAdapter(key);
+
+    const tx = {
+      to: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`,
+      value: BigInt(0),
+      gas: BigInt(21000),
+      maxFeePerGas: BigInt(20000000000),
+      maxPriorityFeePerGas: BigInt(1000000000),
+      nonce: 1,
+      chainId: 1,
+      type: "eip1559" as const,
+    };
+
+    const unsigned = serializeTransaction(tx);
+    const signedRaw = await wallet.signRaw(Buffer.from(unsigned.slice(2), "hex"));
+    const signedTx = await wallet.signTransaction(tx);
+
+    expect(signedRaw).toBe(signedTx);
+  });
+
+  it("fails clearly on invalid raw transaction bytes", async () => {
+    const wallet = makeWallet();
+    await expect(wallet.signRaw(Buffer.from("deadbeef", "hex"))).rejects.toThrow(/EVM sign_raw failed/);
+  });
+});
+
 // --- x402 behavioral compatibility ---
 
 describe("x402 compatibility", () => {
   it("should match x402 signing with version", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const account = privateKeyToAccount(`0x${key.toString("hex")}`);
 
     const ourSig = await wallet.signTypedData(EIP712_DATA);
@@ -263,7 +294,7 @@ describe("x402 compatibility", () => {
 
   it("should match x402 signing without version", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const account = privateKeyToAccount(`0x${key.toString("hex")}`);
 
     const ourSig = await wallet.signTypedData(EIP712_NO_VERSION);
@@ -282,7 +313,7 @@ describe("x402 compatibility", () => {
 
   it("should produce recoverable signature without version", async () => {
     const key = randomBytes(32);
-    const wallet = new EvmWallet(key);
+    const wallet = new EvmAdapter(key);
     const expectedAddr = privateKeyToAccount(
       `0x${key.toString("hex")}`,
     ).address;
@@ -297,8 +328,8 @@ describe("x402 compatibility", () => {
 
 describe("Cross-key isolation", () => {
   it("should produce different signatures for different keys", async () => {
-    const walletA = new EvmWallet(randomBytes(32));
-    const walletB = new EvmWallet(randomBytes(32));
+    const walletA = new EvmAdapter(randomBytes(32));
+    const walletB = new EvmAdapter(randomBytes(32));
 
     const msg = Buffer.from("same message");
     const sigA = await walletA.signMessage(msg);

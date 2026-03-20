@@ -1,5 +1,5 @@
 /**
- * Demo: Resolve both TRON and EVM signers from one external env input.
+ * Demo: Resolve both TRON and EVM signers from one external input.
  *
  * This example maps one of these external environment variables into the SDK's
  * expected env vars:

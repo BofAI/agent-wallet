@@ -1,4 +1,4 @@
-"""Secret layer: Keystore V3 encryption engine for private keys and credentials."""
+"""Secret layer: Keystore V3 encryption engine for secrets."""
 
 from __future__ import annotations
 
@@ -96,10 +96,10 @@ def _decrypt_bytes(keystore: dict, password: str) -> bytes:
 
 
 class SecureKVStore:
-    """Keystore V3 based encryption engine for keys and credentials.
+    """Keystore V3 based encryption engine for secret material.
 
     Holds the password for the duration of its lifetime (typically only during
-    LocalWalletProvider.__init__). After init completes, both the password
+    wallet resolution). After init completes, both the password
     and this KVStore instance go out of scope.
     """
 
@@ -134,52 +134,24 @@ class SecureKVStore:
             raise DecryptionError("master.json decrypted but sentinel mismatch")
         return True
 
-    # --- Identity (private keys, fixed 32 bytes) ---
+    # --- Secrets ---
 
-    def load_private_key(self, name: str) -> bytes:
-        """Decrypt id_<name>.json and return raw 32-byte private key."""
-        filename = f"id_{name}.json"
+    def load_secret(self, name: str) -> bytes:
+        """Decrypt secret_<name>.json and return raw bytes."""
+        filename = f"secret_{name}.json"
         keystore = self._read_json(filename)
         return _decrypt_bytes(keystore, self._password)
 
-    def save_private_key(self, name: str, private_key: bytes) -> None:
-        """Encrypt and save a 32-byte private key as id_<name>.json."""
-        if len(private_key) != 32:
-            raise ValueError(f"Private key must be 32 bytes, got {len(private_key)}")
-        keystore = _encrypt_bytes(private_key, self._password)
-        self._write_json(f"id_{name}.json", keystore)
+    def save_secret(self, name: str, secret: bytes) -> None:
+        """Encrypt and save arbitrary bytes as secret_<name>.json."""
+        keystore = _encrypt_bytes(secret, self._password)
+        self._write_json(f"secret_{name}.json", keystore)
 
-    def generate_key(self, name: str) -> bytes:
+    def generate_secret(self, name: str, *, length: int = 32) -> bytes:
         """Generate a random 32-byte private key, save it, return the key."""
-        private_key = os.urandom(32)
-        self.save_private_key(name, private_key)
-        return private_key
-
-    # --- Credentials (arbitrary length) ---
-
-    def load_credential(self, name: str) -> str | dict:
-        """Decrypt cred_<name>.json and return the credential value."""
-        filename = f"cred_{name}.json"
-        keystore = self._read_json(filename)
-        plaintext = _decrypt_bytes(keystore, self._password)
-        text = plaintext.decode("utf-8")
-        # Try to parse as JSON dict (for structured credentials)
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-        return text
-
-    def save_credential(self, name: str, value: str | dict) -> None:
-        """Encrypt and save a credential as cred_<name>.json."""
-        if isinstance(value, dict):
-            plaintext = json.dumps(value, ensure_ascii=False).encode("utf-8")
-        else:
-            plaintext = value.encode("utf-8")
-        keystore = _encrypt_bytes(plaintext, self._password)
-        self._write_json(f"cred_{name}.json", keystore)
+        secret = os.urandom(length)
+        self.save_secret(name, secret)
+        return secret
 
     # --- Internal helpers ---
 

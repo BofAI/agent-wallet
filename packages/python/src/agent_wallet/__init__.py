@@ -1,6 +1,6 @@
 """AgentWallet — Universal multi-chain secure signing SDK."""
 
-from agent_wallet.core.base import BaseWallet, Eip712Capable, WalletType
+from agent_wallet.core.base import Network, Eip712Capable, Wallet, WalletType
 from agent_wallet.core.errors import (
     DecryptionError,
     NetworkError,
@@ -9,37 +9,39 @@ from agent_wallet.core.errors import (
     WalletError,
     WalletNotFoundError,
 )
+from agent_wallet.core.resolver import resolve_wallet, resolve_wallet_provider
 from agent_wallet.core.providers import (
-    CreateWalletProviderOptions,
-    EnvProviderOptions,
-    LocalProviderOptions,
-    LocalWalletProvider,
-    MnemonicProviderOptions,
-    PrivateKeyProviderOptions,
-    StaticWalletProvider,
-    WalletProvider,
-    create_wallet_provider,
-    resolve_wallet_provider,
+    ConfigWalletProvider,
+    EnvWalletProvider,
 )
 
 __all__ = [
-    "BaseWallet",
-    "CreateWalletProviderOptions",
+    "ConfigWalletProvider",
     "DecryptionError",
     "Eip712Capable",
-    "EnvProviderOptions",
-    "LocalProviderOptions",
-    "LocalWalletProvider",
-    "MnemonicProviderOptions",
+    "EvmAdapter",
+    "EnvWalletProvider",
+    "Network",
     "NetworkError",
-    "PrivateKeyProviderOptions",
     "SigningError",
-    "StaticWalletProvider",
+    "TronAdapter",
     "UnsupportedOperationError",
+    "Wallet",
     "WalletError",
     "WalletNotFoundError",
-    "WalletProvider",
     "WalletType",
-    "create_wallet_provider",
+    "resolve_wallet",
     "resolve_wallet_provider",
 ]
+
+
+def __getattr__(name: str):
+    if name == "EvmAdapter":
+        from agent_wallet.core.adapters.evm import EvmAdapter
+
+        return EvmAdapter
+    if name == "TronAdapter":
+        from agent_wallet.core.adapters.tron import TronAdapter
+
+        return TronAdapter
+    raise AttributeError(f"module 'agent_wallet' has no attribute {name!r}")

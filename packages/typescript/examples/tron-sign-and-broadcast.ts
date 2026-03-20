@@ -3,8 +3,8 @@
  *
  * This example shows how mcp-server-tron (or any other integration) can use
  * the agent-wallet SDK to:
- *   1. Initialize a LocalWalletProvider (decrypt keys once)
- *   2. Get a wallet by ID
+ *   1. Resolve a config-backed or env-backed wallet provider
+ *   2. Get the active wallet
  *   3. Sign a message (pure local, no network)
  *   4. Build an unsigned tx via TronGrid, sign it with the SDK, and broadcast
  *
@@ -12,8 +12,11 @@
  * (via TronGrid / TronWeb) and broadcasting them.
  *
  * Prerequisites:
- *   - agent-wallet init (create secrets dir + master password)
- *   - agent-wallet add  (add a tron_local wallet, e.g. "wallet-b")
+ *   - Either configure a wallet via the CLI:
+ *       agent-wallet start local_secure --wallet-id wallet-b
+ *       agent-wallet start raw_secret --wallet-id wallet-b --mnemonic "..."
+ *   - Or provide env fallback:
+ *       AGENT_WALLET_PRIVATE_KEY=<hex>
  *   - The wallet address must be activated (have received TRX at least once)
  *
  * Usage:
@@ -35,7 +38,7 @@ const TRONGRID_URLS: Record<string, string> = {
 
 async function main() {
   // ----------------------------------------------------------------
-  // Step 1: Create provider from env and resolve the active wallet
+  // Step 1: Resolve provider and active wallet
   // ----------------------------------------------------------------
   const provider = resolveWalletProvider({ network: 'tron' })
 
