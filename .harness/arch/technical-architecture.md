@@ -28,8 +28,8 @@ Agent Wallet is an adapter layer for agent wallets, providing a unified signing 
 │                      Adapter Layer                             │
 │              Network-specific signing logic                    │
 ├─────────────────────────┬────────────────────────────┬────────┤
-│       EvmAdapter        │       TronAdapter          │ Future │
-│  (viem / eth-account)   │  (tronweb / tronpy)        │ Chains │
+│       EvmSigner         │       TronSigner           │ Future │
+│  (viem / eth-account)   │ (@noble/curves+viem/tronpy)│ Chains │
 ├─────────────────────────┴────────────────────────────┴────────┤
 │                    Local Storage Layer                          │
 │              SecureKVStore (Keystore V3 encryption)            │
@@ -47,14 +47,14 @@ Agent Wallet is an adapter layer for agent wallets, providing a unified signing 
 | **Delivery** | User interaction (CLI, SDK entry points) | `cli.ts/py`, `bin.ts`, `index.ts`, `__init__.py` |
 | **Resolver** | Provider selection strategy | `resolver.ts/py` |
 | **Provider** | Wallet lifecycle management | `ConfigWalletProvider`, `EnvWalletProvider` |
-| **Adapter** | Network-specific signing | `EvmAdapter`, `TronAdapter` |
+| **Signer** | Network-specific signing | `EvmSigner`, `TronSigner`, `LocalSigner`, `LocalSecureSigner`, `RawSecretSigner` |
 | **Config** | Schema validation & persistence | Zod schemas (TS), Pydantic models (Python) |
 | **Storage** | Encrypted key storage | `SecureKVStore`, `secret-loader` |
 
 ### 2.2 Dependency Direction
 
 ```
-Delivery → Resolver → Provider → Adapter
+Delivery → Resolver → Provider → Signer
                          ↓
                       Config ← Storage
 ```
@@ -82,9 +82,19 @@ All dependencies flow top-down. Lower layers have no knowledge of upper layers.
           ├──────────┤                 │
           │          │                 │
   ┌───────┴───┐  ┌──┴────────┐       │
-  │EvmAdapter │  │TronAdapter│───────┘
+  │EvmSigner  │  │TronSigner │───────┘
   │           │──┘           │
   └───────────┘  └───────────┘
+          ▲           ▲
+          └─────┬─────┘
+          ┌─────┴─────┐
+          │LocalSigner │
+          └─────┬─────┘
+          ┌─────┴──────────┐
+  ┌───────┴────────┐ ┌────┴───────────┐
+  │LocalSecure     │ │RawSecret       │
+  │Signer         │ │Signer          │
+  └────────────────┘ └────────────────┘
 
 ┌─────────────────────┐
 │     <<interface>>    │
@@ -189,14 +199,10 @@ getWallet(walletId, network?)
 ├─ load WalletConfig for walletId
 │
 ├─ type == local_secure?
-│  └─ secretLoader(dir, password, secretRef) → privateKey bytes
-│     └─ createAdapter(network, privateKey) → cache & return
+│  └─ createAdapter(conf, dir, password, network, secretLoader) → cache & return
 │
 └─ type == raw_secret?
-   ├─ source == private_key?
-   │  └─ decodePrivateKey(hex) → createAdapter(network, key)
-   └─ source == mnemonic?
-      └─ deriveKeyFromMnemonic(phrase, index, network) → createAdapter
+   └─ createAdapter(conf, dir, undefined, network, undefined) → cache & return
 ```
 
 ### 5.4 Caching Strategy
@@ -233,7 +239,7 @@ parseNetworkFamily(networkString)
 └─ other                 → throw NetworkError
 ```
 
-### 7.2 EvmAdapter
+### 7.2 EvmSigner
 
 | Operation | Implementation |
 |-----------|---------------|
@@ -247,7 +253,7 @@ parseNetworkFamily(networkString)
 
 **Libraries:** viem (TypeScript), eth-account (Python)
 
-### 7.3 TronAdapter
+### 7.3 TronSigner
 
 | Operation | Implementation |
 |-----------|---------------|
@@ -260,7 +266,7 @@ parseNetworkFamily(networkString)
 **Transaction input:** Unsigned tx from TronGrid API (`txID`, `raw_data_hex`, `raw_data`)
 **Transaction output:** JSON string with `"signature": ["hex"]` appended
 
-**Libraries:** tronweb + @noble/curves (TypeScript), tronpy (Python)
+**Libraries:** @noble/curves + viem (TypeScript), tronpy (Python)
 
 ### 7.4 Key Derivation Paths (BIP-44)
 
@@ -337,16 +343,14 @@ All files created with `chmod 0o600` (owner read/write only).
 ### 9.2 WalletConfig (Discriminated Union on `type`)
 
 ```
-WalletConfig
-├─ LocalSecureWalletConfig
-│  { type: "local_secure", secret_ref: string }
+WalletConfig  { type, params }
+├─ type: "local_secure"
+│  params: { secret_ref: string }
 │
-└─ RawSecretWalletConfig
-   { type: "raw_secret", material: RawSecretMaterial }
-
-RawSecretMaterial (Discriminated Union on `source`)
-├─ { source: "private_key", private_key: string }
-└─ { source: "mnemonic", mnemonic: string, account_index: number }
+└─ type: "raw_secret"
+   params: RawSecretParams (Discriminated Union on `source`)
+   ├─ { source: "private_key", private_key: string }
+   └─ { source: "mnemonic", mnemonic: string, account_index: number }
 ```
 
 ### 9.3 Validation
@@ -374,7 +378,7 @@ Provider
   │  decrypts private key (if local_secure)
   │  creates adapter instance
   ▼
-Adapter (EvmAdapter)
+Signer (EvmSigner)
   │
   │  await wallet.signTransaction({ to, value, gas, ... })
   │
@@ -401,7 +405,7 @@ Consumer App
   │  1. Build unsigned tx via TronGrid API
   │  2. await wallet.signTransaction({ txID, raw_data_hex, raw_data })
   ▼
-TronAdapter
+TronSigner
   │  1. Extract txID (32-byte SHA256 digest)
   │  2. secp256k1 ECDSA sign(txID)
   │  3. Produce r || s || v (65 bytes hex)
@@ -462,7 +466,7 @@ agent-wallet
 
 ### 12.1 Adding a New Blockchain
 
-1. Create `NewChainAdapter` implementing `Wallet` + `Eip712Capable`
+1. Create `NewChainSigner` implementing `Wallet` + `Eip712Capable`
 2. Add network identifier parsing to `parseNetworkFamily()` (e.g., `"solana" | "solana:*"`)
 3. Add adapter instantiation to `createAdapter()` factory
 4. Add BIP-44 derivation path for mnemonic support
@@ -497,7 +501,7 @@ agent-wallet
 | Component | TypeScript | Python |
 |-----------|-----------|--------|
 | EVM signing | viem | eth-account |
-| TRON signing | tronweb + @noble/curves | tronpy |
+| TRON signing | @noble/curves + viem | tronpy |
 | Schema validation | Zod | Pydantic |
 | CLI framework | Custom readline | Typer |
 | Interactive prompts | @inquirer/prompts | questionary |

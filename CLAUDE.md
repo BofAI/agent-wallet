@@ -33,7 +33,7 @@ pre-commit run --all-files    # Run all hooks (ruff, prettier, trailing whitespa
 ## Architecture
 
 ```
-Provider Resolution → Adapter → Signing
+Provider Resolution → Signer → Signing
 ```
 
 ### Provider Resolution (`core/resolver.ts|py`)
@@ -41,11 +41,16 @@ Two providers, tried in order:
 1. **ConfigWalletProvider** — file-backed encrypted wallets in `~/.agent-wallet/` (or `AGENT_WALLET_DIR`). Uses Keystore V3 encryption (scrypt + AES-128-CTR). Activated when password is available or `wallets_config.json` exists.
 2. **EnvWalletProvider** — fallback to `AGENT_WALLET_PRIVATE_KEY` or `AGENT_WALLET_MNEMONIC` env vars.
 
-### Network Adapters (`core/adapters/`)
-- **EvmAdapter** — uses `viem` (TS) / `eth-account` (Python). Derivation: `m/44'/60'/0'/0/{index}`
-- **TronAdapter** — uses `tronweb` (TS) / `tronpy` (Python). Derivation: `m/44'/195'/0'/0/{index}`
+### Network Signers (`core/adapters/`)
+- **EvmSigner** — uses `viem` (TS) / `eth-account` (Python). Derivation: `m/44'/60'/0'/0/{index}`
+- **TronSigner** — uses `@noble/curves` + `viem` (TS) / `tronpy` (Python). Derivation: `m/44'/195'/0'/0/{index}`
 
 Both implement `Wallet` interface: `getAddress()`, `signRaw()`, `signTransaction()`, `signMessage()`, plus `Eip712Capable` mixin for typed data.
+
+### Signer Hierarchy (`core/adapters/`)
+- **LocalSigner** — base class: holds private key + network, delegates signing to `EvmSigner`/`TronSigner`
+- **LocalSecureSigner** — decrypts from Keystore V3 via `secretLoader`, extends `LocalSigner`
+- **RawSecretSigner** — resolves from plaintext private key or mnemonic, extends `LocalSigner`
 
 ### Key Interfaces (`core/base.ts|py`)
 - `Network`: `"evm" | "tron"`

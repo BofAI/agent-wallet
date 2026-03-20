@@ -141,7 +141,7 @@ All adapters also implement `Eip712Capable`:
 - **Message signing:** Keccak256 hash + secp256k1 ECDSA
 - **Transaction input:** Unsigned tx from TronGrid API (`txID`, `raw_data_hex`, `raw_data`)
 - **Transaction output:** JSON string with `signature` array appended
-- **Libraries:** tronweb (TypeScript), tronpy (Python)
+- **Libraries:** @noble/curves + viem (TypeScript), tronpy (Python)
 
 ### 4.5 Cross-Chain Signature Consistency
 
@@ -292,11 +292,13 @@ Entry point: `agent-wallet` (both pip and npm installations)
   "wallets": {
     "wallet-id": {
       "type": "local_secure",
-      "secret_ref": "wallet-id"
+      "params": {
+        "secret_ref": "wallet-id"
+      }
     },
     "raw-wallet": {
       "type": "raw_secret",
-      "material": {
+      "params": {
         "source": "private_key",
         "private_key": "0x..."
       }
