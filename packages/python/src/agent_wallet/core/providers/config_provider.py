@@ -8,11 +8,7 @@ import stat
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_wallet.core.base import (
-    Wallet,
-    WalletProvider
-)
-from agent_wallet.core.errors import WalletNotFoundError
+from agent_wallet.core.base import Wallet, WalletProvider
 from agent_wallet.core.config import (
     LocalSecureWalletConfig,
     RawSecretMnemonicConfig,
@@ -25,6 +21,7 @@ from agent_wallet.core.config import (
     save_config,
 )
 from agent_wallet.core.constants import RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME
+from agent_wallet.core.errors import WalletNotFoundError
 from agent_wallet.core.providers.wallet_builder import (
     create_adapter,
     decode_private_key,

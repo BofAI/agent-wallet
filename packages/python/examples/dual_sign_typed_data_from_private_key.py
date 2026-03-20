@@ -24,7 +24,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import os
 
 from agent_wallet import resolve_wallet
 

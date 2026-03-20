@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from agent_wallet.core import resolver
 from agent_wallet.core.adapters.evm import EvmAdapter
 from agent_wallet.core.adapters.tron import TronAdapter
 from agent_wallet.core.base import Network
@@ -13,9 +14,7 @@ from agent_wallet.core.config import (
     load_runtime_secrets_password,
 )
 from agent_wallet.core.errors import SigningError
-from agent_wallet.core.providers import config_provider, env_provider
 from agent_wallet.core.providers import wallet_builder
-from agent_wallet.core import resolver
 
 TEST_KEY = bytes.fromhex(
     "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_wallet.core.base import Wallet, Eip712Capable
+from agent_wallet.core.base import Eip712Capable, Wallet
 from agent_wallet.core.errors import SigningError
 
 

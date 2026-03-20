@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from agent_wallet.core.base import (
-    Wallet,
-    WalletProvider
-)   
+from agent_wallet.core.base import Wallet, WalletProvider
 from agent_wallet.core.providers.wallet_builder import (
     create_adapter,
     decode_private_key,

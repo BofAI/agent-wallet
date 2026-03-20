@@ -5,10 +5,16 @@ import bs58checkModule from 'bs58check'
 
 // Normalize CJS/ESM interop: bs58check v4 exports differ between CJS and ESM,
 // and tsup's __toESM() wrapper can add an extra .default layer in CJS bundles.
+type Bs58checkLike = {
+  encode?: (input: Uint8Array) => string
+  default?: typeof bs58checkModule
+}
+
+const bs58checkInterop = bs58checkModule as Bs58checkLike
 const bs58check: typeof bs58checkModule =
-  typeof (bs58checkModule as any).encode === 'function'
+  typeof bs58checkInterop.encode === 'function'
     ? bs58checkModule
-    : (bs58checkModule as any).default
+    : bs58checkInterop.default ?? bs58checkModule
 
 import type { Wallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'
@@ -93,12 +99,13 @@ export class TronAdapter implements Wallet, Eip712Capable {
       }
 
       const { EIP712Domain: _domain, ...messageTypes } = types
+      type SignTypedDataInput = Parameters<typeof account.signTypedData>[0]
 
       const sig = await account.signTypedData({
-        domain: domain as any,
-        types: messageTypes as any,
+        domain: domain as SignTypedDataInput['domain'],
+        types: messageTypes as SignTypedDataInput['types'],
         primaryType,
-        message: message as any,
+        message: message as SignTypedDataInput['message'],
       })
       return sig.slice(2)
     } catch (e) {

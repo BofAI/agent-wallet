@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
+
 class Network(StrEnum):
     """Supported blockchain networks."""
 

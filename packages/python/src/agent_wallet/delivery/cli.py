@@ -18,18 +18,18 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from agent_wallet.core.base import Eip712Capable, WalletType
+from agent_wallet.core.config import (
+    LocalSecureWalletConfig,
+    RawSecretMnemonicConfig,
+    RawSecretPrivateKeyConfig,
+    RawSecretWalletConfig,
+)
 from agent_wallet.core.constants import RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME
 from agent_wallet.core.errors import (
     DecryptionError,
     UnsupportedOperationError,
     WalletError,
     WalletNotFoundError,
-)
-from agent_wallet.core.config import (
-    LocalSecureWalletConfig,
-    RawSecretMnemonicConfig,
-    RawSecretPrivateKeyConfig,
-    RawSecretWalletConfig,
 )
 from agent_wallet.core.providers.config_provider import ConfigWalletProvider
 from agent_wallet.core.providers.wallet_builder import (

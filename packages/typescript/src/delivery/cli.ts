@@ -222,10 +222,10 @@ function getProvider(dir: string, pw?: string): ConfigWalletProvider {
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(
       `Invalid wallet config in ${join(dir, WALLETS_CONFIG_FILENAME)}: ${message}`,
+      { cause: error },
     )
   }
 }
-
 
 function managedJsonFiles(dir: string): string[] {
   const files: string[] = []

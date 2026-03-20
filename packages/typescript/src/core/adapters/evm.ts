@@ -67,12 +67,13 @@ export class EvmAdapter implements Wallet, Eip712Capable {
 
       // Remove EIP712Domain from types — viem adds it automatically
       const { EIP712Domain: _domain, ...messageTypes } = types
+      type SignTypedDataInput = Parameters<typeof this.account.signTypedData>[0]
 
       const sig = await this.account.signTypedData({
-        domain: domain as any,
-        types: messageTypes as any,
+        domain: domain as SignTypedDataInput['domain'],
+        types: messageTypes as SignTypedDataInput['types'],
         primaryType,
-        message: message as any,
+        message: message as SignTypedDataInput['message'],
       })
       return sig.slice(2)
     } catch (e) {

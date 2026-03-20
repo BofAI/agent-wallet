@@ -5,7 +5,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import type { Wallet, WalletProvider } from './base.js'
+import type { Wallet } from './base.js'
 import {
   ConfigNotFoundError,
   loadConfig,

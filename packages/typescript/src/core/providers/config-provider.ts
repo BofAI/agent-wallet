@@ -9,10 +9,6 @@ import type { Wallet, WalletProvider } from '../base.js'
 import { WalletNotFoundError } from '../errors.js'
 import {
   ConfigNotFoundError,
-  type LocalSecureWalletConfig,
-  type RawSecretMnemonicConfig,
-  type RawSecretPrivateKeyConfig,
-  type RawSecretWalletConfig,
   type WalletConfig,
   type WalletsTopology,
   loadConfig,

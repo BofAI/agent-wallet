@@ -11,7 +11,6 @@ import pytest
 from agent_wallet.core.config import (
     LocalSecureWalletConfig,
     RawSecretMnemonicConfig,
-    RawSecretPrivateKeyConfig,
     RawSecretWalletConfig,
     WalletsTopology,
     load_config,

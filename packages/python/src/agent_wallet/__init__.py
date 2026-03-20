@@ -1,6 +1,6 @@
 """AgentWallet — Universal multi-chain secure signing SDK."""
 
-from agent_wallet.core.base import Network, Eip712Capable, Wallet, WalletType
+from agent_wallet.core.base import Eip712Capable, Network, Wallet, WalletType
 from agent_wallet.core.errors import (
     DecryptionError,
     NetworkError,
@@ -9,18 +9,18 @@ from agent_wallet.core.errors import (
     WalletError,
     WalletNotFoundError,
 )
-from agent_wallet.core.resolver import resolve_wallet, resolve_wallet_provider
 from agent_wallet.core.providers import (
     ConfigWalletProvider,
     EnvWalletProvider,
 )
+from agent_wallet.core.resolver import resolve_wallet, resolve_wallet_provider
 
 __all__ = [
     "ConfigWalletProvider",
     "DecryptionError",
     "Eip712Capable",
-    "EvmAdapter",
     "EnvWalletProvider",
+    "EvmAdapter",
     "Network",
     "NetworkError",
     "SigningError",

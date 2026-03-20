@@ -112,7 +112,9 @@ export function loadRuntimeSecretsPassword(secretsDir: string): string | null {
   try {
     data = JSON.parse(text)
   } catch (error) {
-    throw new Error(`Invalid JSON in ${RUNTIME_SECRETS_FILENAME}: ${(error as Error).message}`)
+    throw new Error(`Invalid JSON in ${RUNTIME_SECRETS_FILENAME}: ${(error as Error).message}`, {
+      cause: error,
+    })
   }
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     throw new Error(`${RUNTIME_SECRETS_FILENAME} must contain a JSON object`)

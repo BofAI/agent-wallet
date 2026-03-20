@@ -6,17 +6,14 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-from agent_wallet.core.base import (
-    Wallet,
-    WalletProvider
-)
-from agent_wallet.core.providers.config_provider import ConfigWalletProvider
-from agent_wallet.core.providers.env_provider import EnvWalletProvider
+from agent_wallet.core.base import Wallet, WalletProvider
 from agent_wallet.core.config import (
     WalletsTopology,
     load_config,
     load_runtime_secrets_password,
 )
+from agent_wallet.core.providers.config_provider import ConfigWalletProvider
+from agent_wallet.core.providers.env_provider import EnvWalletProvider
 from agent_wallet.local.secret_loader import load_local_secret
 
 _DEFAULT_SECRETS_DIR = os.path.join(Path.home(), ".agent-wallet")
