@@ -628,7 +628,11 @@ def start(
             pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
             console.print("\nWallet already initialized.")
         else:
-            explicit_pw = password or os.environ.get("AGENT_WALLET_PASSWORD")
+            explicit_pw = (
+                password
+                or provider.load_runtime_secrets_password()
+                or os.environ.get("AGENT_WALLET_PASSWORD")
+            )
             if explicit_pw:
                 errors = _validate_password_strength(explicit_pw)
                 if errors:

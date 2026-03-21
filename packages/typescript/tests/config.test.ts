@@ -88,7 +88,11 @@ describe('config schemas', () => {
     const pkp = RawSecretPrivateKeyParamsSchema.parse({ source: 'private_key', private_key: '0x1' })
     expect(pkp.source).toBe('private_key')
 
-    const mp = RawSecretMnemonicParamsSchema.parse({ source: 'mnemonic', mnemonic: 'test', account_index: 2 })
+    const mp = RawSecretMnemonicParamsSchema.parse({
+      source: 'mnemonic',
+      mnemonic: 'test',
+      account_index: 2,
+    })
     expect(mp.account_index).toBe(2)
   })
 })
@@ -185,11 +189,17 @@ describe('runtime secrets', () => {
 
   it('throws on invalid runtime secrets JSON', () => {
     writeFileSync(join(secretsDir, 'runtime_secrets.json'), '{bad json', 'utf-8')
-    expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(/Invalid JSON in runtime_secrets\.json/)
+    expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(
+      /Invalid JSON in runtime_secrets\.json/,
+    )
   })
 
   it('throws on non-string password', () => {
-    writeFileSync(join(secretsDir, 'runtime_secrets.json'), JSON.stringify({ password: 123 }), 'utf-8')
+    writeFileSync(
+      join(secretsDir, 'runtime_secrets.json'),
+      JSON.stringify({ password: 123 }),
+      'utf-8',
+    )
     expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(/password must be a string/)
   })
 })

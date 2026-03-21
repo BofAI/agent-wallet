@@ -14,7 +14,7 @@ const bs58checkInterop = bs58checkModule as Bs58checkLike
 const bs58check: typeof bs58checkModule =
   typeof bs58checkInterop.encode === 'function'
     ? bs58checkModule
-    : bs58checkInterop.default ?? bs58checkModule
+    : (bs58checkInterop.default ?? bs58checkModule)
 
 import type { Wallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'

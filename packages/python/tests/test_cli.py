@@ -1045,3 +1045,30 @@ class TestReset:
         result = runner.invoke(app, ["reset", "--dir", secrets_dir, "--yes"])
         assert result.exit_code == 0
         assert not (p / "wallets_config.json").exists()
+
+    def test_start_local_secure_picks_up_runtime_secrets_password(self, secrets_dir):
+        """start (new init) should read password from runtime_secrets.json,
+        not only from -p flag and AGENT_WALLET_PASSWORD env."""
+        p = Path(secrets_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "runtime_secrets.json").write_text(
+            json.dumps({"password": TEST_PASSWORD}), encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "start",
+                "local_secure",
+                "--wallet-id",
+                "from_runtime",
+                "--generate",
+                "--dir",
+                secrets_dir,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        config = _read_config(secrets_dir)
+        assert "from_runtime" in config["wallets"]
+        # Should NOT have prompted for password — runtime_secrets was used
+        assert "New Master Password" not in result.output

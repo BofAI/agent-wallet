@@ -21,10 +21,13 @@ export class EvmSigner implements Wallet, Eip712Capable {
     try {
       const serialized = `0x${Buffer.from(rawTx).toString('hex')}` as `0x${string}`
       const parsed = parseTransaction(serialized)
-      const { r: _r, s: _s, v: _v, yParity: _yParity, ...transaction } = parsed as Record<
-        string,
-        unknown
-      >
+      const {
+        r: _r,
+        s: _s,
+        v: _v,
+        yParity: _yParity,
+        ...transaction
+      } = parsed as Record<string, unknown>
       const sig = await this.account.signTransaction(
         transaction as Parameters<typeof this.account.signTransaction>[0],
       )

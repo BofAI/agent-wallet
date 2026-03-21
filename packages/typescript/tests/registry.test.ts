@@ -5,14 +5,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveWallet, resolveWalletProvider } from '../src/core/resolver.js'
-import {
-  ConfigWalletProvider,
-  EnvWalletProvider,
-} from '../src/core/providers/index.js'
-import {
-  type WalletsTopology,
-  saveConfig,
-} from '../src/core/config.js'
+import { ConfigWalletProvider, EnvWalletProvider } from '../src/core/providers/index.js'
+import { type WalletsTopology, saveConfig } from '../src/core/config.js'
 import { WalletNotFoundError, DecryptionError } from '../src/core/errors.js'
 import { SecureKVStore } from '../src/local/kv-store.js'
 import { loadLocalSecret } from '../src/local/secret-loader.js'

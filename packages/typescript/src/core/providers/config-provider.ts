@@ -79,11 +79,7 @@ export class ConfigWalletProvider implements WalletProvider {
     return this.config.active_wallet ?? null
   }
 
-  addWallet(
-    walletId: string,
-    config: WalletConfig,
-    opts?: { setActiveIfMissing?: boolean },
-  ): void {
+  addWallet(walletId: string, config: WalletConfig, opts?: { setActiveIfMissing?: boolean }): void {
     if (this.config.wallets[walletId]) {
       throw new Error(`Wallet '${walletId}' already exists`)
     }
@@ -138,11 +134,7 @@ export class ConfigWalletProvider implements WalletProvider {
     if (!password) return
     this.ensureDir()
     const path = this.runtimeSecretsPath()
-    writeFileSync(
-      path,
-      JSON.stringify({ password }, null, 2) + '\n',
-      'utf-8',
-    )
+    writeFileSync(path, JSON.stringify({ password }, null, 2) + '\n', 'utf-8')
     try {
       chmodSync(path, 0o600)
     } catch {

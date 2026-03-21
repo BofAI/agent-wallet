@@ -11,12 +11,8 @@ describe('module load smoke', () => {
     expect(sdk.LocalSecureSigner).toBe(LocalSecureSigner)
     expect(sdk.RawSecretSigner).toBe(RawSecretSigner)
 
-    const secure = new LocalSecureSigner(
-      { secret_ref: 'secure' },
-      '.',
-      'pw',
-      'eip155:1',
-      () => Uint8Array.from(Buffer.from('11'.repeat(32), 'hex')),
+    const secure = new LocalSecureSigner({ secret_ref: 'secure' }, '.', 'pw', 'eip155:1', () =>
+      Uint8Array.from(Buffer.from('11'.repeat(32), 'hex')),
     )
     const raw = new RawSecretSigner(
       {

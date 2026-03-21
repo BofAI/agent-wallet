@@ -7,7 +7,10 @@ import bs58check from 'bs58check'
 import { TronSigner } from '../src/core/adapters/tron.js'
 import { EvmSigner } from '../src/core/adapters/evm.js'
 
-const TEST_KEY = Buffer.from('4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b', 'hex')
+const TEST_KEY = Buffer.from(
+  '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b',
+  'hex',
+)
 
 // Derive expected Tron address the same way tronpy does: 0x41 + ethAddress
 const TEST_ETH_ACCOUNT = privateKeyToAccount(`0x${TEST_KEY.toString('hex')}`)
@@ -167,16 +170,16 @@ describe('signRaw', () => {
 describe('signTransaction validation', () => {
   it('rejects non-hex txID', async () => {
     const wallet = makeWallet()
-    await expect(
-      wallet.signTransaction({ txID: 'not-hex', raw_data_hex: 'abcd' }),
-    ).rejects.toThrow(/txID must be a 32-byte hex string/)
+    await expect(wallet.signTransaction({ txID: 'not-hex', raw_data_hex: 'abcd' })).rejects.toThrow(
+      /txID must be a 32-byte hex string/,
+    )
   })
 
   it('rejects short txID', async () => {
     const wallet = makeWallet()
-    await expect(
-      wallet.signTransaction({ txID: 'abcd', raw_data_hex: 'abcd' }),
-    ).rejects.toThrow(/txID must be a 32-byte hex string/)
+    await expect(wallet.signTransaction({ txID: 'abcd', raw_data_hex: 'abcd' })).rejects.toThrow(
+      /txID must be a 32-byte hex string/,
+    )
   })
 })
 
@@ -313,7 +316,11 @@ describe('Cross-language test vectors', () => {
   it('should match hardcoded PermitSingle signature', async () => {
     const wallet = makeWallet()
     const sig = await wallet.signTypedData({
-      domain: { name: 'Permit2', chainId: 728126428, verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC' },
+      domain: {
+        name: 'Permit2',
+        chainId: 728126428,
+        verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC',
+      },
       types: {
         EIP712Domain: [
           { name: 'name', type: 'string' },
@@ -334,7 +341,12 @@ describe('Cross-language test vectors', () => {
       },
       primaryType: 'PermitSingle',
       message: {
-        details: { token: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', amount: '1000000', expiration: '1700000000', nonce: '0' },
+        details: {
+          token: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+          amount: '1000000',
+          expiration: '1700000000',
+          nonce: '0',
+        },
         spender: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
         sigDeadline: '1700000000',
       },
@@ -398,7 +410,11 @@ describe('TronWeb signTypedData cross-validation', () => {
       fullHost: 'https://api.trongrid.io',
       privateKey: keyHex,
     })
-    const tronWebSig = await tw.trx._signTypedData(PERMIT2_DOMAIN, PERMIT2_TYPES, PERMIT_SINGLE_VALUE)
+    const tronWebSig = await tw.trx._signTypedData(
+      PERMIT2_DOMAIN,
+      PERMIT2_TYPES,
+      PERMIT_SINGLE_VALUE,
+    )
 
     // Our sign — explicit primaryType
     const ourSig = await wallet.signTypedData({

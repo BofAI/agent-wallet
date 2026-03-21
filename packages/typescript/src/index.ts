@@ -29,11 +29,7 @@ export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
 export type { ResolvedWalletProvider } from './core/resolver.js'
 
 // Config types and functions
-export {
-  loadConfig,
-  saveConfig,
-  loadRuntimeSecretsPassword,
-} from './core/config.js'
+export { loadConfig, saveConfig, loadRuntimeSecretsPassword } from './core/config.js'
 export type {
   WalletConfig,
   WalletsTopology,

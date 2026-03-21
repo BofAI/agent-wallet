@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { main } from "./cli.js";
+import { main } from './cli.js'
 
-main().then((code) => process.exit(code));
+main().then((code) => process.exit(code))
