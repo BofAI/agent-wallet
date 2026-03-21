@@ -1,7 +1,7 @@
 # agent-wallet
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Python](https://img.shields.io/badge/Python-≥3.10-blue.svg)
+![Python](https://img.shields.io/badge/Python-≥3.11-blue.svg)
 ![Node.js](https://img.shields.io/badge/Node.js-≥18-339933)
 
 **Wallet signing for AI agents and apps** — store keys safely (or use env for quick tests), pick an active wallet, and **sign** transactions, messages, and typed data on **TRON** and **EVM** chains.
@@ -12,6 +12,8 @@
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
+   - [SDK Integrated](#sdk-integrated)
+   - [CLI](#cli)
 - [Examples](#examples)
 - [Documentation](#documentation)
 - [Security](#security)
@@ -32,6 +34,30 @@ It fits workflows where an **MCP server** or **agent** needs a consistent way to
 
 Pick **one** path below. CLI data lives under `~/.agent-wallet` unless you set **`AGENT_WALLET_DIR`**.
 
+### SDK Integrated
+
+#### Wallet Setup Via CLI (Recommended)
+
+Set up wallets with the [CLI](#cli) first, then let the SDK resolve from your local wallet config.
+
+- Best for `local_secure`
+- Supports encrypted key storage and active-wallet switching
+- Use [`agent-wallet init`](./doc/getting-started.md#4-init) or [`agent-wallet start`](./doc/getting-started.md#3-quick-start-start) to create your wallet setup
+- When your SDK process needs to unlock a `local_secure` wallet, provide [`AGENT_WALLET_PASSWORD`](./doc/getting-started.md#13-environment-variables) or use `--save-runtime-secrets`
+
+#### Wallet Setup Via Env
+
+If no usable CLI wallet config is available, the SDK can resolve directly from environment variables:
+
+| Environment variable | Purpose |
+|----------------------|---------|
+| `AGENT_WALLET_PRIVATE_KEY` | Private key used for SDK wallet resolution. |
+| `AGENT_WALLET_MNEMONIC` | Mnemonic used for SDK wallet resolution. |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index used when deriving from `AGENT_WALLET_MNEMONIC`. |
+
+- The SDK also remains compatible with legacy `TRON_PRIVATE_KEY`, `TRON_MNEMONIC`, and `TRON_ACCOUNT_INDEX` environment variables.
+- If CLI config resolution is unavailable, the SDK falls back to these environment variables.
+
 ### CLI
 
 Install the CLI:
@@ -41,6 +67,7 @@ npm install -g @bankofai/agent-wallet
 #or
 pip install bankofai-agent-wallet
 ```
+
 
 Create your first **encrypted** wallet. If you omit `-p` / `--password`, the CLI shows the password requirements, lets you enter a new master password, or auto-generates one if you press Enter:
 
@@ -58,11 +85,11 @@ Wallet initialized!
 ? Import source: generate  — Generate a new random private key
 
 Wallets:
-┌───────────┬──────────────┐
-│ Wallet ID │ Type         │
-├───────────┼──────────────┤
-│ default_secure │ local_secure │
-└───────────┴──────────────┘
+┌──────────────────────┬──────────────────────┐
+│ Wallet ID            │ Type                 │
+├──────────────────────┼──────────────────────┤
+│ default_secure       │ local_secure         │
+└──────────────────────┴──────────────────────┘
 
 🔑 Your master password: WiJxcI#t6@73K#OE
 ⚠️ Keep this password safe. You'll need it for signing and other operations.
@@ -82,12 +109,12 @@ agent-wallet list
 ```
 
 ```
-             Wallets
-┌────┬───────────┬──────────────┐
-│    │ Wallet ID │ Type         │
-├────┼───────────┼──────────────┤
-│ *  │ default_secure │ local_secure │
-└────┴───────────┴──────────────┘
+                        Wallets
+┌────┬──────────────────────┬──────────────────────┐
+│    │ Wallet ID            │ Type                 │
+├────┼──────────────────────┼──────────────────────┤
+│ *  │ default_secure       │ local_secure         │
+└────┴──────────────────────┴──────────────────────┘
 ```
 
 Sign a message:
@@ -110,7 +137,6 @@ agent-wallet sign msg "MESSAGE" -n tron   # no -p needed
 Or use `--save-runtime-secrets` on any command to persist it to `~/.agent-wallet/runtime_secrets.json` (auto-detected on next run).
 
 **Next steps:** `agent-wallet use <id>` to switch the active wallet, `agent-wallet sign -h` for all sign options. Full walkthrough: [Getting started](./doc/getting-started.md).
-
 
 ## Examples
 
