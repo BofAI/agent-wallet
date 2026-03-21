@@ -12,31 +12,60 @@ import sys
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from agent_wallet.core.base import Eip712Capable, WalletType
+from agent_wallet.core.config import (
+    LocalSecureWalletParams,
+    RawSecretMnemonicParams,
+    RawSecretPrivateKeyParams,
+    WalletConfig,
+)
+from agent_wallet.core.constants import RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME
+from agent_wallet.core.errors import (
+    DecryptionError,
+    UnsupportedOperationError,
+    WalletError,
+    WalletNotFoundError,
+)
+from agent_wallet.core.providers.config_provider import ConfigWalletProvider
+from agent_wallet.core.providers.wallet_builder import (
+    decode_private_key,
+    derive_key_from_mnemonic,
+    parse_network_family,
+)
+from agent_wallet.local.kv_store import SecureKVStore
+from agent_wallet.local.secret_loader import load_local_secret
 
 
-def _interactive_select(prompt_text: str, choices: list[str]) -> str | None:
+def _interactive_select(
+    prompt_text: str,
+    choices: list[str],
+    descriptions: dict[str, str] | None = None,
+) -> str | None:
     """Try questionary arrow-key select; return None if unavailable."""
     if not sys.stdin.isatty():
         return None
     try:
         import questionary
 
+        if descriptions:
+            from questionary import Choice
+
+            q_choices = [
+                Choice(title=f"{c}  — {descriptions[c]}", value=c)
+                if c in descriptions
+                else Choice(title=c, value=c)
+                for c in choices
+            ]
+            return questionary.select(prompt_text, choices=q_choices).unsafe_ask()
         return questionary.select(prompt_text, choices=choices).unsafe_ask()
     except (ImportError, EOFError, OSError, ValueError):
         return None
-from agent_wallet.core.errors import DecryptionError, WalletError
-from agent_wallet.local.config import (
-    WalletConfig,
-    WalletsTopology,
-    load_config,
-    save_config,
-)
-from agent_wallet.local.kv_store import SecureKVStore
+
 
 app = typer.Typer(
     name="agent-wallet",
@@ -74,6 +103,24 @@ def _password_option():
     return typer.Option(None, "--password", "-p", help="Master password (skip prompt)")
 
 
+def _derive_as_option():
+    """Reusable mnemonic derivation profile option."""
+    return typer.Option(
+        None,
+        "--derive-as",
+        help="Mnemonic derivation profile: eip155 or tron",
+    )
+
+
+def _save_runtime_secrets_option():
+    """Reusable flag for persisting password to runtime secrets."""
+    return typer.Option(
+        False,
+        "--save-runtime-secrets",
+        help="Persist the password to runtime secrets when this command uses one",
+    )
+
+
 def _validate_password_strength(password: str) -> list[str]:
     """Return list of unmet password requirements."""
     import re
@@ -93,13 +140,52 @@ def _validate_password_strength(password: str) -> list[str]:
 
 
 def _format_password_error(errors: list[str]) -> str:
-    return f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]\n  Example of a strong password: MyWallet#2024"
+    return f"[red]Password too weak. Requirements: {', '.join(errors)}.[/red]\n  Example of a strong password: Abc12345!@"
 
 
-def _get_password(*, confirm: bool = False, explicit: str | None = None) -> str:
-    """Get password from explicit flag, env var, or interactive prompt."""
-    # Priority: explicit -p flag > AGENT_WALLET_PASSWORD env > interactive prompt
-    pw = explicit or os.environ.get("AGENT_WALLET_PASSWORD")
+PASSWORD_REQUIREMENTS_HINT = (
+    "Password requirements: at least 8 characters, with uppercase, lowercase, digit, and special character. "
+    "e.g. Abc12345!@"
+)
+NEW_MASTER_PASSWORD_LABEL = "New Master Password"
+
+
+def _require_interactive(action: str) -> None:
+    if sys.stdin.isatty():
+        return
+    console.print(
+        f"[red]Cannot prompt for {action} in a non-interactive environment. "
+        "Pass the required flags explicitly.[/red]"
+    )
+    raise typer.Exit(1)
+
+
+def _prompt_password_value(label: str, *, allow_empty: bool = False) -> str:
+    _require_interactive(label.lower())
+    value = Prompt.ask(f"[bold]{label}[/bold]", password=True)
+    if not value and not allow_empty:
+        console.print("[red]Password cannot be empty.[/red]")
+        raise typer.Exit(1)
+    return value
+
+
+def _get_password(
+    *,
+    provider: ConfigWalletProvider | None = None,
+    confirm: bool = False,
+    explicit: str | None = None,
+    prompt_if_missing: bool = True,
+) -> str | None:
+    """Get password from explicit flag, runtime secrets, env var, or interactive prompt."""
+    pw = explicit
+    if not pw and provider is not None:
+        try:
+            pw = provider.load_runtime_secrets_password()
+        except ValueError as exc:
+            console.print(f"[red]Invalid runtime secrets: {exc}[/red]")
+            raise typer.Exit(1) from exc
+    if not pw:
+        pw = os.environ.get("AGENT_WALLET_PASSWORD")
     if pw:
         if confirm:
             errors = _validate_password_strength(pw)
@@ -107,17 +193,95 @@ def _get_password(*, confirm: bool = False, explicit: str | None = None) -> str:
                 console.print(_format_password_error(errors))
                 raise typer.Exit(1)
         return pw
-    pw = Prompt.ask("[bold]Master password[/bold]", password=True)
+    if not prompt_if_missing:
+        return None
+    label = (
+        NEW_MASTER_PASSWORD_LABEL
+        if confirm
+        else "Master Password (enter your existing password to unlock)"
+    )
+    pw = _prompt_password_value(label)
     if confirm:
         errors = _validate_password_strength(pw)
         if errors:
             console.print(_format_password_error(errors))
             raise typer.Exit(1)
-        pw2 = Prompt.ask("[bold]Confirm password[/bold]", password=True)
+        pw2 = _prompt_password_value("Confirm New Master Password")
         if pw != pw2:
             console.print("[red]Passwords do not match.[/red]")
             raise typer.Exit(1)
     return pw
+
+
+def _get_verified_password(
+    dir: str,
+    *,
+    provider: ConfigWalletProvider | None = None,
+    explicit: str | None = None,
+    prompt_if_missing: bool = True,
+) -> tuple[str, SecureKVStore]:
+    """Get password, verify it against master.json, and return (pw, kv_store).
+
+    If the password came from -p flag, env, or runtime secrets, fail on wrong password.
+    If the password was entered interactively, re-prompt up to 3 times.
+    """
+    pw = _get_password(
+        provider=provider, explicit=explicit, prompt_if_missing=prompt_if_missing,
+    )
+    if pw is None:
+        console.print("[red]Password required for local_secure wallets.[/red]")
+        raise typer.Exit(1)
+
+    was_interactive = (
+        explicit is None
+        and not (provider and provider.load_runtime_secrets_password())
+        and not os.environ.get("AGENT_WALLET_PASSWORD")
+    )
+
+    kv_store = SecureKVStore(dir, pw)
+    try:
+        kv_store.verify_password()
+        return pw, kv_store
+    except DecryptionError:
+        if not was_interactive:
+            console.print("[red]Wrong password. Please try again.[/red]")
+            raise typer.Exit(1)
+
+    # Interactive retry loop
+    for _attempt in range(2):  # 2 more attempts (3 total)
+        console.print("[red]✖ Wrong password, please try again.[/red]")
+        pw = _prompt_password_value("Master Password (enter your existing password to unlock)")
+        kv_store = SecureKVStore(dir, pw)
+        try:
+            kv_store.verify_password()
+            return pw, kv_store
+        except DecryptionError:
+            pass
+
+    console.print("[red]Wrong password. 3 attempts failed.[/red]")
+    raise typer.Exit(1)
+
+
+def _maybe_save_runtime_secrets(
+    provider: ConfigWalletProvider,
+    password: str | None,
+    save_runtime_secrets: bool,
+) -> None:
+    """Persist password to runtime secrets when explicitly requested."""
+    if not password:
+        return
+    if not save_runtime_secrets:
+        return
+    provider.save_runtime_secrets(password)
+
+
+def _maybe_update_runtime_secrets_after_password_change(
+    provider: ConfigWalletProvider,
+    password: str,
+    save_runtime_secrets: bool,
+) -> None:
+    if save_runtime_secrets or provider.has_runtime_secrets():
+        provider.save_runtime_secrets(password)
 
 
 def _generate_password() -> str:
@@ -140,46 +304,268 @@ def _generate_password() -> str:
     return "".join(chars)
 
 
-def _load_config_safe(secrets_dir: str) -> WalletsTopology:
-    """Load config, returning empty topology if file doesn't exist."""
-    try:
-        return load_config(secrets_dir)
-    except FileNotFoundError:
-        return WalletsTopology(wallets={})
-
-
-def _derive_address(wallet_type: WalletType, private_key: bytes) -> str:
-    """Derive address from private key based on wallet type."""
-    if wallet_type == WalletType.EVM_LOCAL:
-        from eth_account import Account
-
-        return Account.from_key(private_key).address
-    elif wallet_type == WalletType.TRON_LOCAL:
-        from tronpy.keys import PrivateKey
-
-        return PrivateKey(private_key).public_key.to_base58check_address()
-    return ""
-
-
-def _print_wallet_table(rows: list[tuple[str, str, str]]) -> None:
-    """Print a table of wallets (Wallet ID, Type, Address)."""
+def _print_wallet_table(rows: list[tuple[str, str]]) -> None:
+    """Print a table of wallets (Wallet ID, Type)."""
     from rich.box import SQUARE
 
     table = Table(show_header=True, box=SQUARE, padding=(0, 1))
     table.add_column("Wallet ID", style="cyan")
     table.add_column("Type", style="green")
-    table.add_column("Address", style="dim")
-    for wid, wtype, addr in rows:
-        table.add_row(wid, wtype, addr)
+    for wid, wtype in rows:
+        table.add_row(wid, wtype)
     console.print(table)
 
 
-_START_TYPE_MAP: dict[str, WalletType] = {
-    "tron": WalletType.TRON_LOCAL,
-    "evm": WalletType.EVM_LOCAL,
-    "tron_local": WalletType.TRON_LOCAL,
-    "evm_local": WalletType.EVM_LOCAL,
-}
+def _managed_json_files(secrets_path: Path) -> list[Path]:
+    """Return agent-wallet managed JSON files inside the secrets directory."""
+    files: list[Path] = []
+    for filename in ("master.json", WALLETS_CONFIG_FILENAME, RUNTIME_SECRETS_FILENAME):
+        path = secrets_path / filename
+        if path.exists():
+            files.append(path)
+    files.extend(sorted(secrets_path.glob("secret_*.json")))
+    return files
+
+
+async def _sign_transaction_with_provider(
+    provider: ConfigWalletProvider,
+    wallet_id: str,
+    network: str,
+    tx_data: dict,
+) -> str:
+    wallet = await provider.get_wallet(wallet_id, network)
+    return await wallet.sign_transaction(tx_data)
+
+
+async def _sign_message_with_provider(
+    provider: ConfigWalletProvider,
+    wallet_id: str,
+    network: str,
+    message: bytes,
+) -> str:
+    wallet = await provider.get_wallet(wallet_id, network)
+    return await wallet.sign_message(message)
+
+
+async def _sign_typed_data_with_provider(
+    provider: ConfigWalletProvider,
+    wallet_id: str,
+    network: str,
+    typed_data: dict,
+) -> str:
+    wallet = await provider.get_wallet(wallet_id, network)
+    if not isinstance(wallet, Eip712Capable):
+        raise UnsupportedOperationError(
+            "This wallet does not support EIP-712 signing."
+        )
+    return await wallet.sign_typed_data(typed_data)
+
+
+def _get_provider(dir: str, pw: str | None = None):
+    """Create a ConfigWalletProvider for the given dir."""
+    try:
+        return ConfigWalletProvider(dir, password=pw, secret_loader=load_local_secret)
+    except (ValidationError, ValueError) as exc:
+        console.print(
+            f"[red]Invalid wallet config in {Path(dir) / WALLETS_CONFIG_FILENAME}: {exc}[/red]"
+        )
+        console.print(
+            "[red]This wallet directory appears to use an unsupported or stale schema. "
+            "Reset it or replace wallets_config.json with the current format.[/red]"
+        )
+        raise typer.Exit(1) from exc
+
+
+def _select_wallet_type(explicit: str | None, *, prompt_text: str = "Quick start type") -> WalletType:
+    """Resolve wallet type from argument or interactive prompt."""
+    if explicit is not None:
+        try:
+            wtype = WalletType(explicit)
+        except ValueError:
+            console.print(
+                f"[red]Unknown wallet type: {explicit}. Use: {', '.join(t.value for t in WalletType)}[/red]"
+            )
+            raise typer.Exit(1)
+        return wtype
+
+    choices = [t.value for t in WalletType]
+    descriptions = {
+        "local_secure": "Encrypted key stored locally (recommended)",
+        "raw_secret": "Private key/mnemonic saved in plaintext config",
+    }
+    selected = _interactive_select(f"{prompt_text}:", choices, descriptions)
+    if selected is None:
+        selected = Prompt.ask(f"[bold]{prompt_text}[/bold]", choices=choices)
+    return WalletType(selected)
+
+
+def _select_import_source(
+    *,
+    generate: bool,
+    private_key: str | None,
+    mnemonic: str | None,
+    allow_generate: bool,
+) -> str:
+    """Resolve import source from explicit flags or interactive prompt."""
+    selected_count = sum(bool(value) for value in (generate, private_key, mnemonic))
+    if selected_count > 1:
+        console.print(
+            "[red]Use only one of --generate, --private-key or --mnemonic.[/red]"
+        )
+        raise typer.Exit(1)
+
+    if generate:
+        if not allow_generate:
+            console.print("[red]--generate is only valid for local_secure wallets.[/red]")
+            raise typer.Exit(1)
+        return "generate"
+    if private_key:
+        return "private_key"
+    if mnemonic:
+        return "mnemonic"
+
+    choices = ["private_key", "mnemonic"]
+    if allow_generate:
+        choices.insert(0, "generate")
+
+    descriptions = {
+        "generate": "Generate a new random private key",
+        "private_key": "Import an existing hex private key",
+        "mnemonic": "Derive from a BIP-39 mnemonic phrase",
+    }
+    selected = _interactive_select("Import source:", choices, descriptions)
+    if selected is None:
+        selected = Prompt.ask("[bold]Import source[/bold]", choices=choices, default=choices[0])
+    return selected
+
+
+def _prompt_derivation_profile() -> str:
+    """Prompt for mnemonic derivation profile."""
+    _require_interactive("mnemonic derivation profile")
+    choices = ["eip155", "tron"]
+    descriptions = {
+        "eip155": "EVM chains (Ethereum, BSC, Polygon, etc.)",
+        "tron": "TRON network",
+    }
+    selected = _interactive_select("Derive mnemonic as:", choices, descriptions)
+    if selected is None:
+        selected = Prompt.ask("[bold]Derive mnemonic as[/bold]", choices=choices, default="eip155")
+    return selected
+
+
+def _resolve_private_key_input(
+    *,
+    explicit_generate: bool,
+    explicit_private_key: str | None,
+    explicit_mnemonic: str | None,
+    derivation_profile: str | None,
+    mnemonic_index: int,
+    allow_generate: bool,
+) -> bytes | None:
+    """Resolve a private key from flags or interactive prompts."""
+    if mnemonic_index and not explicit_mnemonic:
+        console.print("[red]--mnemonic-index requires --mnemonic.[/red]")
+        raise typer.Exit(1)
+
+    source = _select_import_source(
+        generate=explicit_generate,
+        private_key=explicit_private_key,
+        mnemonic=explicit_mnemonic,
+        allow_generate=allow_generate,
+    )
+    if source == "generate":
+        return None
+
+    if source == "private_key":
+        key_hex = explicit_private_key
+        if key_hex is None:
+            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
+        try:
+            return decode_private_key(key_hex)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from exc
+
+    mnemonic = explicit_mnemonic
+    if mnemonic is None:
+        mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
+        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
+        try:
+            mnemonic_index = int(index_value)
+        except ValueError:
+            console.print("[red]Invalid account index.[/red]")
+            raise typer.Exit(1)
+
+    network = parse_network_family(derivation_profile or _prompt_derivation_profile())
+    return derive_key_from_mnemonic(network, mnemonic.strip(), mnemonic_index)
+
+
+def _build_raw_secret_config(
+    *,
+    explicit_private_key: str | None,
+    explicit_mnemonic: str | None,
+    derive_as: str | None,
+    mnemonic_index: int,
+) -> WalletConfig:
+    """Resolve and build a raw_secret config from flags or interactive input."""
+    source = _select_import_source(
+        generate=False,
+        private_key=explicit_private_key,
+        mnemonic=explicit_mnemonic,
+        allow_generate=False,
+    )
+
+    if source == "private_key":
+        key_hex = explicit_private_key
+        if key_hex is None:
+            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
+        try:
+            normalized = "0x" + decode_private_key(key_hex).hex()
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from exc
+        return WalletConfig(
+            type="raw_secret",
+            params=RawSecretPrivateKeyParams(
+                source="private_key",
+                private_key=normalized,
+            ),
+        )
+
+    source_mnemonic = explicit_mnemonic
+    if source_mnemonic is None:
+        source_mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
+        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
+        try:
+            mnemonic_index = int(index_value)
+        except ValueError:
+            console.print("[red]Invalid account index.[/red]")
+            raise typer.Exit(1)
+
+    parse_network_family(derive_as or _prompt_derivation_profile())
+
+    return WalletConfig(
+        type="raw_secret",
+        params=RawSecretMnemonicParams(
+            source="mnemonic",
+            mnemonic=source_mnemonic.strip(),
+            account_index=mnemonic_index,
+        ),
+    )
+
+
+def _prompt_wallet_id(default: str, provider: ConfigWalletProvider | None = None) -> str:
+    """Prompt for a wallet id with an interactive default. Re-prompts on duplicates."""
+    while True:
+        name = Prompt.ask("[bold]Wallet ID[/bold] (e.g. my_wallet_1)", default=default)
+        if provider is not None:
+            try:
+                provider.get_wallet_config(name)
+                console.print(f"[yellow]Wallet '{name}' already exists. Please choose a different ID.[/yellow]")
+                continue
+            except WalletNotFoundError:
+                pass
+        return name
 
 
 # --- Commands ---
@@ -187,129 +573,172 @@ _START_TYPE_MAP: dict[str, WalletType] = {
 
 @app.command()
 def start(
+    wallet_type: str | None = typer.Argument(None, help="Quick-start type: local_secure or raw_secret"),
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
     dir: str = _dir_option(),
     password: str | None = _password_option(),
-    import_type: str | None = typer.Option(None, "--import", "-i", help="Import wallet type (tron or evm)"),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
 ) -> None:
     """Quick setup: initialize and create default wallets."""
+    # Check if wallets already exist — prompt to confirm unless --override
+    if not override:
+        try:
+            existing = _get_provider(dir)
+            rows = existing.list_wallets()
+            if rows:
+                active_id = existing.get_active_id()
+                console.print(f"Already initialized with {len(rows)} wallet(s), active: [cyan]{active_id}[/cyan]")
+                descriptions = {
+                    "add": "Configure a new wallet",
+                    "exit": "Exit without changes",
+                }
+                selected = _interactive_select("What would you like to do?", ["add", "exit"], descriptions)
+                if selected is None:
+                    selected = Prompt.ask("[bold]Add a new wallet?[/bold]", choices=["add", "exit"], default="exit")
+                if selected == "exit":
+                    raise typer.Exit(0)
+        except (SystemExit, typer.Exit):
+            raise
+        except Exception:
+            pass  # No existing config — continue with normal start
+
+    wtype = _select_wallet_type(wallet_type)
+    provider: ConfigWalletProvider | None = None
+
     secrets_path = Path(dir)
     auto_generated = False
 
-    if (secrets_path / "master.json").exists():
-        # Already initialized — need existing password
-        pw = _get_password(explicit=password)
-        kv_store = SecureKVStore(dir, pw)
-        try:
-            kv_store.verify_password()
-        except DecryptionError:
-            console.print("[red]❌ Wrong password. Please try again.[/red]")
-            raise typer.Exit(1)
-        config = _load_config_safe(dir)
-        console.print("\n🔐 Wallet already initialized.")
-    else:
-        # Fresh init
-        explicit_pw = password or os.environ.get("AGENT_WALLET_PASSWORD")
-        if explicit_pw:
-            errors = _validate_password_strength(explicit_pw)
-            if errors:
-                console.print(_format_password_error(errors))
-                raise typer.Exit(1)
-            pw = explicit_pw
-        else:
-            pw = _generate_password()
-            auto_generated = True
-
-        secrets_path.mkdir(parents=True, exist_ok=True)
-        os.chmod(secrets_path, stat.S_IRWXU)
-        kv_store = SecureKVStore(dir, pw)
-        kv_store.init_master()
-        config = WalletsTopology(wallets={})
-        save_config(dir, config)
-        console.print("\n🔐 Wallet initialized!")
-
-    if import_type:
-        # Import mode: single wallet
-        wallet_type = _START_TYPE_MAP.get(import_type)
-        if not wallet_type:
-            console.print(f"[red]Unknown wallet type: {import_type}. Use: tron, evm, tron_local, evm_local[/red]")
-            raise typer.Exit(1)
-        name = "default_tron" if wallet_type == WalletType.TRON_LOCAL else "default_evm"
-
-        if name in config.wallets:
-            # Already exists — just show info
-            conf = config.wallets[name]
-            console.print("\n🪙 Wallet already exists:")
-            _print_wallet_table([(name, conf.type.value, conf.address or "")])
-        else:
-            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
-            key_hex = key_hex.strip().removeprefix("0x")
+    if wtype == WalletType.LOCAL_SECURE:
+        provider = _get_provider(dir)
+        if wallet_id:
             try:
-                private_key = bytes.fromhex(key_hex)
-            except ValueError:
-                console.print("[red]Invalid hex string.[/red]")
+                provider.get_wallet_config(wallet_id)
+                console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
                 raise typer.Exit(1)
-            if len(private_key) != 32:
-                console.print("[red]Invalid private key length. Expected 32 bytes.[/red]")
-                raise typer.Exit(1)
-            kv_store.save_private_key(name, private_key)
-
-            address = _derive_address(wallet_type, private_key)
-            config.wallets[name] = WalletConfig.model_validate(
-                {"type": wallet_type.value, "identity_file": name, "address": address}
-            )
-            if not config.active_wallet:
-                config.active_wallet = name
-            save_config(dir, config)
-
-            console.print("\n🪙 Imported wallet:")
-            _print_wallet_table([(name, wallet_type.value, address)])
-    else:
-        # Default mode: create missing wallets
-        rows: list[tuple[str, str, str]] = []
-        changed = False
-
-        if "default_tron" in config.wallets:
-            c = config.wallets["default_tron"]
-            rows.append(("default_tron", c.type.value, c.address or ""))
+            except WalletNotFoundError:
+                pass
+        # Local secure mode: needs password and master key
+        if (secrets_path / "master.json").exists():
+            pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
+            console.print("\nWallet already initialized.")
         else:
-            tron_key = kv_store.generate_key("default_tron")
-            tron_addr = _derive_address(WalletType.TRON_LOCAL, tron_key)
-            config.wallets["default_tron"] = WalletConfig.model_validate(
-                {"type": WalletType.TRON_LOCAL.value, "identity_file": "default_tron", "address": tron_addr}
+            explicit_pw = (
+                password
+                or provider.load_runtime_secrets_password()
+                or os.environ.get("AGENT_WALLET_PASSWORD")
             )
-            rows.append(("default_tron", WalletType.TRON_LOCAL.value, tron_addr))
-            changed = True
+            if explicit_pw:
+                errors = _validate_password_strength(explicit_pw)
+                if errors:
+                    console.print(_format_password_error(errors))
+                    raise typer.Exit(1)
+                pw = explicit_pw
+            else:
+                console.print(PASSWORD_REQUIREMENTS_HINT)
+                pw = _prompt_password_value(
+                    "New Master Password (press Enter to auto-generate a strong password)",
+                    allow_empty=True,
+                )
+                if pw:
+                    errors = _validate_password_strength(pw)
+                    if errors:
+                        console.print(_format_password_error(errors))
+                        raise typer.Exit(1)
+                    pw2 = _prompt_password_value("Confirm New Master Password")
+                    if pw != pw2:
+                        console.print("[red]Passwords do not match.[/red]")
+                        raise typer.Exit(1)
+                else:
+                    pw = _generate_password()
+                    auto_generated = True
 
-        if "default_evm" in config.wallets:
-            c = config.wallets["default_evm"]
-            rows.append(("default_evm", c.type.value, c.address or ""))
+            secrets_path.mkdir(parents=True, exist_ok=True)
+            os.chmod(secrets_path, stat.S_IRWXU)
+            kv_store = SecureKVStore(dir, pw)
+            kv_store.init_master()
+            provider.ensure_storage()
+            console.print("\nWallet initialized!")
+        _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
+        target_name = wallet_id or _prompt_wallet_id("default_secure", provider)
+
+        secret = _resolve_private_key_input(
+            explicit_generate=generate,
+            explicit_private_key=private_key,
+            explicit_mnemonic=mnemonic,
+            derivation_profile=derive_as,
+            mnemonic_index=mnemonic_index,
+            allow_generate=True,
+        )
+
+        if secret is None:
+            kv_store.generate_secret(target_name)
         else:
-            evm_key = kv_store.generate_key("default_evm")
-            evm_addr = _derive_address(WalletType.EVM_LOCAL, evm_key)
-            config.wallets["default_evm"] = WalletConfig.model_validate(
-                {"type": WalletType.EVM_LOCAL.value, "identity_file": "default_evm", "address": evm_addr}
-            )
-            rows.append(("default_evm", WalletType.EVM_LOCAL.value, evm_addr))
-            changed = True
+            kv_store.save_secret(target_name, secret)
+        provider.add_wallet(
+            target_name,
+            WalletConfig(
+                type="local_secure",
+                params=LocalSecureWalletParams(secret_ref=target_name),
+            ),
+        )
+        provider.set_active(target_name)
+        rows: list[tuple[str, str]] = [(target_name, "local_secure")]
 
-        if not config.active_wallet:
-            config.active_wallet = "default_tron"
-        if changed:
-            save_config(dir, config)
-
-        console.print("\n🪙 Wallets:")
+        console.print("\nWallets:")
         _print_wallet_table(rows)
 
-    console.print(f"\n⭐ Active wallet: {config.active_wallet}")
+        if auto_generated:
+            console.print(f"\n🔑 Your master password: {pw}")
+            console.print(
+                "[red]⚠️  Keep this password safe.[/red] You'll need it for signing and other operations."
+            )
 
-    if auto_generated:
-        console.print(f"\n🔑 Your master password: {pw}")
-        console.print("   ⚠️  Save this password! You'll need it for signing and other operations.")
+    elif wtype == WalletType.RAW_SECRET:
+        if password:
+            console.print("[red]--password is only valid for local_secure quick start.[/red]")
+            raise typer.Exit(1)
+        console.print("[yellow]Warning: Raw secret material will be stored in plaintext in wallets_config.json.[/yellow]")
+        provider = _get_provider(dir)
+        if wallet_id:
+            try:
+                provider.get_wallet_config(wallet_id)
+                console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+                raise typer.Exit(1)
+            except WalletNotFoundError:
+                pass
+        target_name = wallet_id or _prompt_wallet_id("default_raw", provider)
+        raw_secret_config = _build_raw_secret_config(
+            explicit_private_key=private_key,
+            explicit_mnemonic=mnemonic,
+            derive_as=derive_as,
+            mnemonic_index=mnemonic_index,
+        )
 
-    console.print("\n💡 Quick guide:")
-    console.print("   agent-wallet list              — View your wallets")
-    console.print("   agent-wallet sign tx '{...}'   — Sign a transaction")
-    console.print("   agent-wallet start -h          — See all options")
+        try:
+            provider.add_wallet(target_name, raw_secret_config)
+            provider.set_active(target_name)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from exc
+
+        console.print(f"\nWallet '{target_name}' created:")
+        _print_wallet_table([(target_name, "raw_secret")])
+    else:
+        console.print(f"[red]Unsupported quick-start type: {wtype.value}[/red]")
+        raise typer.Exit(1)
+
+    assert provider is not None
+    console.print(f"\nActive wallet: {provider.get_active_id()}")
+    console.print("\nQuick guide:")
+    console.print("   agent-wallet list              -- View your wallets")
+    console.print("   agent-wallet sign tx '{...}'   -- Sign a transaction")
+    console.print("   agent-wallet start -h          -- See all options")
     console.print("")
 
 
@@ -317,6 +746,7 @@ def start(
 def init(
     dir: str = _dir_option(),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
 ) -> None:
     """Initialize secrets directory and set master password."""
     secrets_path = Path(dir)
@@ -328,93 +758,104 @@ def init(
     secrets_path.mkdir(parents=True, exist_ok=True)
     os.chmod(secrets_path, stat.S_IRWXU)  # 700
 
-    pw = _get_password(confirm=True, explicit=password)
+    provider = _get_provider(dir)
+    console.print(PASSWORD_REQUIREMENTS_HINT)
+    pw = _get_password(provider=provider, confirm=True, explicit=password)
 
     kv_store = SecureKVStore(dir, pw)
     kv_store.init_master()
 
-    # Create empty wallets config
-    save_config(dir, WalletsTopology(wallets={}))
+    provider = _get_provider(dir, pw)
+    provider.ensure_storage()
+    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
 
     console.print(f"[green]Initialized.[/green] Secrets directory: {secrets_path}")
 
 
 @app.command()
 def add(
+    wallet_type: str | None = typer.Argument(None, help="Wallet type: local_secure or raw_secret"),
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
     dir: str = _dir_option(),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
 ) -> None:
     """Add a new wallet (interactive)."""
-    pw = _get_password(explicit=password)
-    kv_store = SecureKVStore(dir, pw)
     try:
-        kv_store.verify_password()
-    except DecryptionError:
-        console.print("[red]❌ Wrong password. Please try again.[/red]")
-        raise typer.Exit(1)
-    except FileNotFoundError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        wtype = _select_wallet_type(wallet_type, prompt_text="Wallet type")
+    except ValueError:
+        console.print(f"[red]Unknown wallet type: {wallet_type}. Use: {', '.join(t.value for t in WalletType)}[/red]")
         raise typer.Exit(1)
 
-    config = _load_config_safe(dir)
-
-    # Wallet name
-    name = Prompt.ask("[bold]Wallet name[/bold]")
-    if name in config.wallets:
-        console.print(f"[red]Wallet '{name}' already exists.[/red]")
+    provider = _get_provider(dir)
+    if not provider.is_initialized():
+        console.print("[red]Wallet not initialized. Run 'agent-wallet start' or 'agent-wallet init' first.[/red]")
         raise typer.Exit(1)
 
-    # Wallet type
-    type_choices = [t.value for t in WalletType]
-    type_str = _interactive_select("Wallet type:", type_choices)
-    if type_str is None:
-        type_str = Prompt.ask("[bold]Wallet type[/bold]", choices=type_choices)
-    wallet_type = WalletType(type_str)
+    if wallet_id:
+        try:
+            provider.get_wallet_config(wallet_id)
+            console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+            raise typer.Exit(1)
+        except WalletNotFoundError:
+            pass
+    if wtype == WalletType.LOCAL_SECURE:
+        try:
+            pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
+        except FileNotFoundError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+        secure_provider = _get_provider(dir, pw)
+        _maybe_save_runtime_secrets(secure_provider, pw, save_runtime_secrets)
+        target_name = wallet_id or _prompt_wallet_id("default_secure", provider)
 
-    wallet_conf: dict = {"type": wallet_type.value}
-
-    if wallet_type in (WalletType.EVM_LOCAL, WalletType.TRON_LOCAL):
-        # Private key: generate or import
-        action = _interactive_select("Private key:", ["generate", "import"])
-        if action is None:
-            action = Prompt.ask("[bold]Private key[/bold]", choices=["generate", "import"], default="generate")
-
-        identity_file = name
-        if action == "generate":
-            private_key = kv_store.generate_key(identity_file)
+        secret = _resolve_private_key_input(
+            explicit_generate=generate,
+            explicit_private_key=private_key,
+            explicit_mnemonic=mnemonic,
+            derivation_profile=derive_as,
+            mnemonic_index=mnemonic_index,
+            allow_generate=True,
+        )
+        if secret is None:
+            kv_store.generate_secret(target_name)
             console.print("[green]Generated new private key.[/green]")
         else:
-            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
-            key_hex = key_hex.strip().removeprefix("0x")
-            try:
-                private_key = bytes.fromhex(key_hex)
-            except ValueError:
-                console.print("[red]Invalid hex string.[/red]")
-                raise typer.Exit(1)
-            kv_store.save_private_key(identity_file, private_key)
-            console.print("[green]Imported private key.[/green]")
+            kv_store.save_secret(target_name, secret)
+            console.print("[green]Imported secret material.[/green]")
 
-        wallet_conf["identity_file"] = identity_file
+        provider.add_wallet(
+            target_name,
+            WalletConfig(
+                type="local_secure",
+                params=LocalSecureWalletParams(secret_ref=target_name),
+            ),
+        )
+        console.print(f"  Saved:   [dim]secret_{target_name}.json[/dim]")
 
-        address = _derive_address(wallet_type, private_key)
-        wallet_conf["address"] = address
-        console.print(f"  Address: [cyan]{address}[/cyan]")
-        console.print(f"  Saved:   [dim]id_{identity_file}.json[/dim]")
-
-    else:
-        console.print(f"[yellow]Wallet type '{wallet_type}' is not yet fully supported.[/yellow]")
-        raise typer.Exit(1)
-
-    # Auto-set as active if no active wallet exists
-    if not config.active_wallet:
-        config.active_wallet = name
-
-    # Update config
-    config.wallets[name] = WalletConfig.model_validate(wallet_conf)
-    save_config(dir, config)
-    console.print(f"[green]Wallet '{name}' added.[/green] Config updated.")
-    if config.active_wallet == name:
-        console.print(f"  Active wallet set to '{name}'.")
+    elif wtype == WalletType.RAW_SECRET:
+        if password:
+            console.print("[red]--password is only valid for local_secure wallets.[/red]")
+            raise typer.Exit(1)
+        console.print("[yellow]Warning: Raw secret material will be stored in plaintext in wallets_config.json.[/yellow]")
+        target_name = wallet_id or _prompt_wallet_id("default_raw", provider)
+        provider.add_wallet(
+            target_name,
+            _build_raw_secret_config(
+                explicit_private_key=private_key,
+                explicit_mnemonic=mnemonic,
+                derive_as=derive_as,
+                mnemonic_index=mnemonic_index,
+            ),
+        )
+    console.print(f"[green]Wallet '{target_name}' added.[/green] Config updated.")
+    if provider.get_active_id() == target_name:
+        console.print(f"  Active wallet set to '{target_name}'.")
 
 
 @app.command("list")
@@ -422,9 +863,9 @@ def list_wallets(
     dir: str = _dir_option(),
 ) -> None:
     """List all configured wallets."""
-    config = _load_config_safe(dir)
-
-    if not config.wallets:
+    provider = _get_provider(dir)
+    rows = provider.list_wallets()
+    if not rows:
         console.print("[dim]No wallets configured.[/dim]")
         return
 
@@ -434,11 +875,10 @@ def list_wallets(
     table.add_column("", style="bold yellow", width=2)
     table.add_column("Wallet ID", style="cyan")
     table.add_column("Type", style="green")
-    table.add_column("Address", style="dim")
 
-    for wid, conf in config.wallets.items():
-        marker = "*" if wid == config.active_wallet else ""
-        table.add_row(marker, wid, conf.type.value, conf.address or "—")
+    for wid, conf, is_active in rows:
+        marker = "*" if is_active else ""
+        table.add_row(marker, wid, conf.type)
 
     console.print(table)
 
@@ -448,25 +888,31 @@ def inspect(
     wallet_id: str = typer.Argument(help="Wallet ID to inspect"),
     dir: str = _dir_option(),
 ) -> None:
-    """Show wallet details including address."""
-    config = _load_config_safe(dir)
-    if wallet_id not in config.wallets:
+    """Show wallet details."""
+    provider = _get_provider(dir)
+    try:
+        conf = provider.get_wallet_config(wallet_id)
+    except WalletNotFoundError:
         console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
         raise typer.Exit(1)
-
-    conf = config.wallets[wallet_id]
-    secrets_path = Path(dir)
-    id_status = "✓" if conf.identity_file and (secrets_path / f"id_{conf.identity_file}.json").exists() else "—"
-    cred_status = "✓" if conf.cred_file and (secrets_path / f"cred_{conf.cred_file}.json").exists() else "—"
 
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Key", style="bold")
     table.add_column("Value")
     table.add_row("Wallet", wallet_id)
-    table.add_row("Type", conf.type.value)
-    table.add_row("Address", conf.address or "—")
-    table.add_row("Identity", f"id_{conf.identity_file}.json {id_status}" if conf.identity_file else "—")
-    table.add_row("Credential", f"cred_{conf.cred_file}.json {cred_status}" if conf.cred_file else "—")
+    table.add_row("Type", conf.type)
+
+    if conf.type == "local_secure":
+        secret_status = "ok" if provider.has_secret_file(wallet_id) else "-"
+        table.add_row("Secret", f"secret_{conf.secret_ref}.json {secret_status}")
+    elif conf.type == "raw_secret":
+        params = conf.params
+        table.add_row("Source Type", params.source)
+        if isinstance(params, RawSecretPrivateKeyParams):
+            table.add_row("Private Key", "[redacted]")
+        elif isinstance(params, RawSecretMnemonicParams):
+            table.add_row("Mnemonic", "[redacted]")
+            table.add_row("Account Index", str(params.account_index))
 
     console.print(table)
 
@@ -478,8 +924,10 @@ def remove(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Remove a wallet and its associated files."""
-    config = _load_config_safe(dir)
-    if wallet_id not in config.wallets:
+    provider = _get_provider(dir)
+    try:
+        conf = provider.get_wallet_config(wallet_id)
+    except WalletNotFoundError:
         console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
         raise typer.Exit(1)
 
@@ -487,58 +935,66 @@ def remove(
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(0)
 
-    conf = config.wallets[wallet_id]
-    secrets_path = Path(dir)
-
-    # Delete associated files
-    if conf.identity_file:
-        id_path = secrets_path / f"id_{conf.identity_file}.json"
-        if id_path.exists():
-            id_path.unlink()
-            console.print(f"  Deleted: [dim]{id_path.name}[/dim]")
-
-    if conf.cred_file:
-        cred_path = secrets_path / f"cred_{conf.cred_file}.json"
-        if cred_path.exists():
-            cred_path.unlink()
-            console.print(f"  Deleted: [dim]{cred_path.name}[/dim]")
-
-    if config.active_wallet == wallet_id:
-        config.active_wallet = None
-
-    del config.wallets[wallet_id]
-    save_config(dir, config)
+    if conf.type == "local_secure" and provider.has_secret_file(wallet_id):
+        console.print(f"  Deleted: [dim]secret_{conf.secret_ref}.json[/dim]")
+    provider.remove_wallet(wallet_id)
     console.print(f"[green]Wallet '{wallet_id}' removed.[/green]")
 
 
 @app.command()
 def use(
-    wallet_id: str = typer.Argument(help="Wallet ID to set as active"),
+    wallet_id: str | None = typer.Argument(None, help="Wallet ID to set as active"),
     dir: str = _dir_option(),
 ) -> None:
     """Set the active wallet."""
-    config = _load_config_safe(dir)
-    if wallet_id not in config.wallets:
-        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+    provider = _get_provider(dir)
+    target_id = wallet_id
+    if target_id is None:
+        rows = provider.list_wallets()
+        if not rows:
+            console.print("[red]No wallets configured.[/red]")
+            raise typer.Exit(1)
+        choices = [wid for wid, _conf, _is_active in rows]
+        descriptions = {
+            wid: f"{conf.type}{' (active)' if is_active else ''}"
+            for wid, conf, is_active in rows
+        }
+        selected = _interactive_select("Select wallet:", choices, descriptions)
+        if selected is None:
+            selected = Prompt.ask("[bold]Select wallet[/bold]", choices=choices, default=choices[0])
+        target_id = selected
+    try:
+        conf = provider.set_active(target_id)
+    except WalletNotFoundError:
+        console.print(f"[red]Wallet '{target_id}' not found.[/red]")
         raise typer.Exit(1)
+    console.print(f"Active wallet: {target_id} ({conf.type})")
 
-    config.active_wallet = wallet_id
-    save_config(dir, config)
-    console.print(f"Active wallet: {wallet_id} ({config.wallets[wallet_id].type.value})")
+
+def _needs_password(dir: str, wallet_id: str) -> bool:
+    """Check if the given wallet requires a password (i.e. is local_secure)."""
+    try:
+        provider = _get_provider(dir)
+        conf = provider.get_wallet_config(wallet_id)
+        return conf.type == "local_secure"
+    except (WalletNotFoundError, SystemExit):
+        return True  # default to requiring password if we can't determine
 
 
 def _resolve_wallet_id(explicit: str | None, dir: str) -> str:
     """Resolve wallet ID from explicit flag, active wallet, or error."""
     if explicit:
         return explicit
-    try:
-        config = load_config(dir)
-    except FileNotFoundError:
-        console.print("[red]Wallet not initialized. Run 'agent-wallet init' first.[/red]")
+    provider = _get_provider(dir)
+    if not provider.is_initialized():
+        console.print(
+            "[red]Wallet not initialized. Run 'agent-wallet start' or 'agent-wallet init' first.[/red]"
+        )
         raise typer.Exit(1)
-    if config.active_wallet:
-        return config.active_wallet
-    console.print("[red]No wallet specified and no active wallet set. Use '--wallet <id>' or 'agent-wallet use <id>'.[/red]")
+    active_id = provider.get_active_id()
+    if active_id:
+        return active_id
+    console.print("[red]No wallet specified and no active wallet set. Use '--wallet-id <id>' or 'agent-wallet use <id>'.[/red]")
     raise typer.Exit(1)
 
 
@@ -548,22 +1004,27 @@ def _resolve_wallet_id(explicit: str | None, dir: str) -> str:
 @sign_app.command("tx")
 def sign_tx(
     payload: str = typer.Argument(help="Transaction payload (JSON)"),
-    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign a transaction."""
-    wallet_id = _resolve_wallet_id(wallet, dir)
-    pw = _get_password(explicit=password)
-
-    from agent_wallet.core.providers.local import LocalWalletProvider
+    wallet_id = _resolve_wallet_id(wallet_id, dir)
+    pw = _get_password(
+        provider=_get_provider(dir),
+        explicit=password,
+        prompt_if_missing=_needs_password(dir, wallet_id),
+    )
+    provider = _get_provider(dir, pw)
+    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
 
     try:
-        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet_id))
         tx_data = json.loads(payload)
-        signed = asyncio.run(w.sign_transaction(tx_data))
-        # Pretty-print if JSON, otherwise print as-is
+        signed = asyncio.run(
+            _sign_transaction_with_provider(provider, wallet_id, network, tx_data)
+        )
         try:
             parsed = json.loads(signed)
             console.print("[green]Signed tx:[/green]")
@@ -571,7 +1032,10 @@ def sign_tx(
         except (json.JSONDecodeError, TypeError):
             console.print(f"[green]Signed tx:[/green] {signed}")
     except DecryptionError:
-        console.print("[red]❌ Wrong password. Please try again.[/red]")
+        console.print("[red]Wrong password. Please try again.[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
     except (WalletError, json.JSONDecodeError) as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -581,23 +1045,32 @@ def sign_tx(
 @sign_app.command("msg")
 def sign_msg(
     message: str = typer.Argument(help="Message to sign"),
-    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign a message."""
-    wallet_id = _resolve_wallet_id(wallet, dir)
-    pw = _get_password(explicit=password)
-
-    from agent_wallet.core.providers.local import LocalWalletProvider
+    wallet_id = _resolve_wallet_id(wallet_id, dir)
+    pw = _get_password(
+        provider=_get_provider(dir),
+        explicit=password,
+        prompt_if_missing=_needs_password(dir, wallet_id),
+    )
+    provider = _get_provider(dir, pw)
+    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
 
     try:
-        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet_id))
-        signature = asyncio.run(w.sign_message(message.encode()))
+        signature = asyncio.run(
+            _sign_message_with_provider(provider, wallet_id, network, message.encode())
+        )
         console.print(f"[green]Signature:[/green] {signature}")
     except DecryptionError:
-        console.print("[red]❌ Wrong password. Please try again.[/red]")
+        console.print("[red]Wrong password. Please try again.[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
     except WalletError as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -607,27 +1080,33 @@ def sign_msg(
 @sign_app.command("typed-data")
 def sign_typed_data(
     data: str = typer.Argument(help="EIP-712 typed data (JSON)"),
-    wallet: str | None = typer.Option(None, "--wallet", "-w", help="Wallet ID"),
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
 ) -> None:
     """Sign EIP-712 typed data."""
-    wallet_id = _resolve_wallet_id(wallet, dir)
-    pw = _get_password(explicit=password)
-
-    from agent_wallet.core.providers.local import LocalWalletProvider
+    wallet_id = _resolve_wallet_id(wallet_id, dir)
+    pw = _get_password(
+        provider=_get_provider(dir),
+        explicit=password,
+        prompt_if_missing=_needs_password(dir, wallet_id),
+    )
+    provider = _get_provider(dir, pw)
+    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
 
     try:
-        provider = LocalWalletProvider(secrets_dir=dir, password=pw)
-        w = asyncio.run(provider.get_wallet(wallet_id))
-        if not isinstance(w, Eip712Capable):
-            console.print("[red]This wallet does not support EIP-712 signing.[/red]")
-            raise typer.Exit(1)
         typed_data = json.loads(data)
-        signature = asyncio.run(w.sign_typed_data(typed_data))
+        signature = asyncio.run(
+            _sign_typed_data_with_provider(provider, wallet_id, network, typed_data)
+        )
         console.print(f"[green]Signature:[/green] {signature}")
     except DecryptionError:
-        console.print("[red]❌ Wrong password. Please try again.[/red]")
+        console.print("[red]Wrong password. Please try again.[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
     except (WalletError, json.JSONDecodeError) as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -638,27 +1117,26 @@ def sign_typed_data(
 def change_password(
     dir: str = _dir_option(),
     password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
 ) -> None:
     """Change master password and re-encrypt all files."""
-    old_pw = password or os.environ.get("AGENT_WALLET_PASSWORD") or Prompt.ask("[bold]Current password[/bold]", password=True)
-
-    # Verify old password
-    kv_store_old = SecureKVStore(dir, old_pw)
+    provider = _get_provider(dir)
     try:
-        kv_store_old.verify_password()
-    except DecryptionError:
-        console.print("[red]❌ Wrong password. Please try again.[/red]")
-        raise typer.Exit(1)
+        _old_pw, kv_store_old = _get_verified_password(dir, provider=provider, explicit=password)
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    new_pw = Prompt.ask("[bold]New password[/bold]", password=True)
+    console.print(PASSWORD_REQUIREMENTS_HINT)
+    new_pw = Prompt.ask(
+        f"[bold]{NEW_MASTER_PASSWORD_LABEL}[/bold]",
+        password=True,
+    )
     errors = _validate_password_strength(new_pw)
     if errors:
         console.print(_format_password_error(errors))
         raise typer.Exit(1)
-    new_pw2 = Prompt.ask("[bold]Confirm new password[/bold]", password=True)
+    new_pw2 = Prompt.ask("[bold]Confirm New Master Password[/bold]", password=True)
     if new_pw != new_pw2:
         console.print("[red]Passwords do not match.[/red]")
         raise typer.Exit(1)
@@ -669,25 +1147,23 @@ def change_password(
 
     # Re-encrypt master.json
     kv_store_new.init_master()
-    console.print("  [green]✓[/green] master.json")
+    console.print("  [green]ok[/green] master.json")
     re_encrypted += 1
 
-    # Re-encrypt all id_*.json and cred_*.json
-    for path in sorted(secrets_path.glob("id_*.json")):
-        name = path.stem.removeprefix("id_")
-        key = kv_store_old.load_private_key(name)
-        kv_store_new.save_private_key(name, key)
-        console.print(f"  [green]✓[/green] {path.name}")
-        re_encrypted += 1
-
-    for path in sorted(secrets_path.glob("cred_*.json")):
-        name = path.stem.removeprefix("cred_")
-        cred = kv_store_old.load_credential(name)
-        kv_store_new.save_credential(name, cred)
-        console.print(f"  [green]✓[/green] {path.name}")
+    # Re-encrypt all secret_*.json
+    for path in sorted(secrets_path.glob("secret_*.json")):
+        name = path.stem.removeprefix("secret_")
+        secret = kv_store_old.load_secret(name)
+        kv_store_new.save_secret(name, secret)
+        console.print(f"  [green]ok[/green] {path.name}")
         re_encrypted += 1
 
     console.print(f"\n[green]Password changed.[/green] Re-encrypted {re_encrypted} files.")
+    _maybe_update_runtime_secrets_after_password_change(
+        _get_provider(dir, new_pw),
+        new_pw,
+        save_runtime_secrets,
+    )
 
 
 @app.command()
@@ -695,14 +1171,14 @@ def reset(
     dir: str = _dir_option(),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
-    """Delete all wallet data (master key, wallets, credentials)."""
+    """Delete all agent-wallet managed files in the secrets directory."""
     secrets_path = Path(dir)
-    if not (secrets_path / "master.json").exists():
-        console.print("[yellow]⚠️  No wallet data found in:[/yellow] " + dir)
+    files = _managed_json_files(secrets_path)
+    if not files:
+        console.print("[yellow]No wallet data found in:[/yellow] " + dir)
         raise typer.Exit(1)
 
-    files = [f for f in secrets_path.iterdir() if f.suffix == ".json"]
-    console.print(f"[yellow]⚠️  This will delete ALL wallet data in:[/yellow] {dir}")
+    console.print(f"[yellow]This will delete ALL wallet data in:[/yellow] {dir}")
     console.print(f"   {len(files)} file(s): {', '.join(f.name for f in files)}")
     console.print()
 
@@ -716,6 +1192,6 @@ def reset(
 
     for f in files:
         f.unlink()
-        console.print(f"  🗑️  Deleted: [dim]{f.name}[/dim]")
+        console.print(f"  Deleted: [dim]{f.name}[/dim]")
     console.print()
-    console.print("[green]✅ Wallet data reset complete.[/green]")
+    console.print("[green]Wallet data reset complete.[/green]")

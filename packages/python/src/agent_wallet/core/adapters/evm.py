@@ -1,19 +1,19 @@
-"""EvmWallet — Local EVM signing adapter using eth-account."""
+"""EvmSigner — Local EVM signing helper using eth-account."""
 
 from __future__ import annotations
 
-from eth_account import Account
-from eth_account.messages import encode_defunct, encode_typed_data
-
-from agent_wallet.core.base import BaseWallet, Eip712Capable
+from agent_wallet.core.base import Eip712Capable, Wallet
 from agent_wallet.core.errors import SigningError
 
 
-class EvmWallet(BaseWallet, Eip712Capable):
+class EvmSigner(Wallet, Eip712Capable):
     """EVM wallet using local ECDSA signing via eth-account."""
 
-    def __init__(self, private_key: bytes) -> None:
+    def __init__(self, private_key: bytes, network: str = "eip155") -> None:
+        from eth_account import Account
+
         self._account = Account.from_key(private_key)
+        self._network = network
 
     async def get_address(self) -> str:
         return self._account.address
@@ -34,6 +34,8 @@ class EvmWallet(BaseWallet, Eip712Capable):
 
     async def sign_message(self, msg: bytes) -> str:
         try:
+            from eth_account.messages import encode_defunct
+
             signable = encode_defunct(primitive=msg)
             signed = self._account.sign_message(signable)
             return signed.signature.hex()
@@ -52,6 +54,8 @@ class EvmWallet(BaseWallet, Eip712Capable):
         }
         """
         try:
+            from eth_account.messages import encode_typed_data
+
             signable = encode_typed_data(full_message=data)
             signed = self._account.sign_message(signable)
             return signed.signature.hex()

@@ -2,7 +2,7 @@
  * Demo: Switch active wallet via the agent-wallet SDK.
  *
  * This example shows how to use the active wallet feature programmatically:
- *   1. Initialize a LocalWalletProvider
+ *   1. Resolve a ConfigWalletProvider
  *   2. List all wallets and show which one is active
  *   3. Switch the active wallet
  *   4. Sign a message using the active wallet (no wallet ID needed)
@@ -15,19 +15,22 @@
  *   AGENT_WALLET_PASSWORD=<your-password> npx tsx examples/switch-active-wallet.ts
  */
 
-import { LocalWalletProvider } from "../src/index.js";
+import { ConfigWalletProvider, resolveWalletProvider } from "../src/index.js";
 
 // --- Configuration ---
 
 const SECRETS_DIR =
   process.env.AGENT_WALLET_DIR ?? `${process.env.HOME}/.agent-wallet`;
-const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? "";
+const NETWORK = process.env.AGENT_WALLET_NETWORK ?? "eip155";
 
 async function main() {
   // ----------------------------------------------------------------
   // Step 1: Create provider (decrypts all keys, then discards password)
   // ----------------------------------------------------------------
-  const provider = new LocalWalletProvider(SECRETS_DIR, PASSWORD);
+  const provider = resolveWalletProvider({ dir: SECRETS_DIR, network: NETWORK });
+  if (!(provider instanceof ConfigWalletProvider)) {
+    throw new Error("switch-active-wallet.ts requires a config-backed wallet directory.");
+  }
 
   // ----------------------------------------------------------------
   // Step 2: List wallets and show current active wallet
@@ -36,9 +39,9 @@ async function main() {
   const activeId = provider.getActiveId();
 
   console.log("Available wallets:");
-  for (const w of wallets) {
-    const marker = w.id === activeId ? " *" : "";
-    console.log(`  - ${w.id} (${w.type})${marker}`);
+  for (const [walletId, conf, isActive] of wallets) {
+    const marker = isActive ? " *" : "";
+    console.log(`  - ${walletId} (${conf.type})${marker}`);
   }
   console.log(`\nActive wallet: ${activeId ?? "(none)"}`);
   console.log();
@@ -65,7 +68,7 @@ async function main() {
   }
 
   // Pick a wallet that is NOT the current active one
-  const newActive = wallets.find((w) => w.id !== activeId)!.id;
+  const newActive = wallets.find(([walletId]) => walletId !== activeId)![0];
   provider.setActive(newActive);
   console.log(`Switched active wallet to '${newActive}'`);
   console.log();

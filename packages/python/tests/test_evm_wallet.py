@@ -1,4 +1,4 @@
-"""Tests for EvmWallet — comprehensive sign/verify roundtrip."""
+"""Tests for EvmSigner — comprehensive sign/verify roundtrip."""
 
 import os
 
@@ -6,7 +6,7 @@ import pytest
 from eth_account import Account
 from eth_account.messages import encode_defunct, encode_typed_data
 
-from agent_wallet.core.adapters.evm import EvmWallet
+from agent_wallet.core.adapters.evm import EvmSigner
 
 # Known test private key (DO NOT use in production)
 TEST_KEY = bytes.fromhex(
@@ -17,7 +17,7 @@ TEST_ADDRESS = Account.from_key(TEST_KEY).address
 
 @pytest.fixture
 def evm_wallet():
-    return EvmWallet(private_key=TEST_KEY)
+    return EvmSigner(private_key=TEST_KEY)
 
 
 # --- Address ---
@@ -33,7 +33,7 @@ async def test_get_address(evm_wallet):
 async def test_get_address_checksum():
     """Address should be EIP-55 checksummed."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     addr = await wallet.get_address()
     assert addr == Account.from_key(key).address
     assert addr.startswith("0x")
@@ -63,7 +63,7 @@ async def test_sign_message_different_messages(evm_wallet):
 async def test_sign_message_recover():
     """Sign → recover signer address, verify it matches."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     expected_addr = Account.from_key(key).address
 
     msg = b"verify this message"
@@ -78,7 +78,7 @@ async def test_sign_message_recover():
 async def test_sign_message_matches_eth_account():
     """Our signature must be byte-identical to eth_account's direct signing."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     account = Account.from_key(key)
 
     msg = b"compare signatures"
@@ -126,7 +126,7 @@ EIP712_DATA = {
 async def test_sign_typed_data_recover():
     """Sign EIP-712 → recover signer, verify it matches."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     expected_addr = Account.from_key(key).address
 
     sig_hex = await wallet.sign_typed_data(EIP712_DATA)
@@ -140,7 +140,7 @@ async def test_sign_typed_data_recover():
 async def test_sign_typed_data_matches_eth_account():
     """Our EIP-712 signature must match eth_account's direct signing."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     account = Account.from_key(key)
 
     our_sig = await wallet.sign_typed_data(EIP712_DATA)
@@ -165,7 +165,7 @@ async def test_sign_typed_data_deterministic(evm_wallet):
 async def test_sign_transaction_eip1559():
     """Sign an EIP-1559 transaction and verify the signer."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     expected_addr = Account.from_key(key).address
 
     tx = {
@@ -191,7 +191,7 @@ async def test_sign_transaction_eip1559():
 async def test_sign_transaction_matches_eth_account():
     """Our signed tx must be identical to eth_account's."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     account = Account.from_key(key)
 
     tx = {
@@ -277,7 +277,7 @@ def _x402_evm_sign_typed_data(private_key: bytes, domain, types, message):
 async def test_x402_compat_with_version():
     """Our sign_typed_data must match x402's split-param signing (with version)."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
 
     our_sig = await wallet.sign_typed_data(EIP712_DATA)
     x402_sig = _x402_evm_sign_typed_data(
@@ -294,7 +294,7 @@ async def test_x402_compat_with_version():
 async def test_x402_compat_no_version():
     """Our sign_typed_data must match x402 for domain WITHOUT version field."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
 
     our_sig = await wallet.sign_typed_data(EIP712_NO_VERSION)
     x402_sig = _x402_evm_sign_typed_data(
@@ -311,7 +311,7 @@ async def test_x402_compat_no_version():
 async def test_x402_compat_no_version_recover():
     """Domain without version: signature must still be recoverable."""
     key = os.urandom(32)
-    wallet = EvmWallet(private_key=key)
+    wallet = EvmSigner(private_key=key)
     expected_addr = Account.from_key(key).address
 
     sig_hex = await wallet.sign_typed_data(EIP712_NO_VERSION)
@@ -327,8 +327,8 @@ async def test_x402_compat_no_version_recover():
 @pytest.mark.asyncio
 async def test_different_keys_different_signatures():
     """Two different keys must produce different signatures for the same message."""
-    wallet_a = EvmWallet(private_key=os.urandom(32))
-    wallet_b = EvmWallet(private_key=os.urandom(32))
+    wallet_a = EvmSigner(private_key=os.urandom(32))
+    wallet_b = EvmSigner(private_key=os.urandom(32))
 
     msg = b"same message"
     sig_a = await wallet_a.sign_message(msg)

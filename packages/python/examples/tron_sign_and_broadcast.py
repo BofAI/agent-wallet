@@ -3,8 +3,8 @@ Demo: Sign a TRON transaction and broadcast it using agent-wallet SDK.
 
 This example shows how mcp-server-tron (or any other integration) can use
 the agent-wallet SDK to:
-  1. Initialize via resolve_wallet_provider (decrypt keys once)
-  2. Get a wallet by ID
+  1. Resolve a wallet directly from config/env
+  2. Get the wallet address
   3. Sign a message (pure local, no network)
   4. Build an unsigned tx via TronGrid, sign it with the SDK, and broadcast
 
@@ -25,7 +25,7 @@ import json
 
 import httpx
 
-from agent_wallet import resolve_wallet_provider
+from agent_wallet import resolve_wallet
 
 # --- Configuration ---
 
@@ -43,14 +43,9 @@ TRONGRID_URLS = {
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider from env and resolve the active wallet
+    # Step 1: Resolve the active wallet
     # ----------------------------------------------------------------
-    provider = resolve_wallet_provider(network="tron")
-
-    # ----------------------------------------------------------------
-    # Step 2: Get wallet instance
-    # ----------------------------------------------------------------
-    wallet = await provider.get_active_wallet()
+    wallet = await resolve_wallet(network="tron")
     address = await wallet.get_address()
     print(f"Address:      {address}")
     print()

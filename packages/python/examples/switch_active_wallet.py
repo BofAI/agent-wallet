@@ -2,7 +2,7 @@
 Demo: Switch active wallet via the agent-wallet SDK.
 
 This example shows how to use the active wallet feature programmatically:
-  1. Initialize a LocalWalletProvider
+  1. Resolve a ConfigWalletProvider
   2. List all wallets and show which one is active
   3. Switch the active wallet
   4. Sign a message using the active wallet (no wallet ID needed)
@@ -18,30 +18,34 @@ Usage:
 import asyncio
 import os
 
-from agent_wallet import LocalWalletProvider
+from agent_wallet import ConfigWalletProvider, resolve_wallet_provider
 
 # --- Configuration ---
 
 SECRETS_DIR = os.environ.get("AGENT_WALLET_DIR", os.path.expanduser("~/.agent-wallet"))
-PASSWORD = os.environ.get("AGENT_WALLET_PASSWORD", "")
+NETWORK = os.environ.get("AGENT_WALLET_NETWORK", "eip155")
 
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider (decrypts all keys, then discards password)
+    # Step 1: Resolve config-backed provider
     # ----------------------------------------------------------------
-    provider = LocalWalletProvider(SECRETS_DIR, PASSWORD)
+    provider = resolve_wallet_provider(dir=SECRETS_DIR, network=NETWORK)
+    if not isinstance(provider, ConfigWalletProvider):
+        raise RuntimeError(
+            "switch_active_wallet.py requires a config-backed wallet directory."
+        )
 
     # ----------------------------------------------------------------
     # Step 2: List wallets and show current active wallet
     # ----------------------------------------------------------------
-    wallets = await provider.list_wallets()
+    wallets = provider.list_wallets()
     active_id = provider.get_active_id()
 
     print("Available wallets:")
-    for w in wallets:
-        marker = " *" if w.id == active_id else ""
-        print(f"  - {w.id} ({w.type}){marker}")
+    for wallet_id, conf, is_active in wallets:
+        marker = " *" if is_active else ""
+        print(f"  - {wallet_id} ({conf.type}){marker}")
     print(f"\nActive wallet: {active_id or '(none)'}")
     print()
 
@@ -65,7 +69,7 @@ async def main():
         return
 
     # Pick a wallet that is NOT the current active one
-    new_active = next(w.id for w in wallets if w.id != active_id)
+    new_active = next(wallet_id for wallet_id, _conf, _is_active in wallets if wallet_id != active_id)
     provider.set_active(new_active)
     print(f"Switched active wallet to '{new_active}'")
     print()

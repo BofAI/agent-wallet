@@ -1,5 +1,5 @@
 /**
- * Demo: Resolve both TRON and EVM signers from one external env input.
+ * Demo: Resolve both TRON and EVM signers from one external input.
  *
  * This example maps one of these external environment variables into the SDK's
  * expected env vars:
@@ -50,34 +50,6 @@ const PAYMENT_PERMIT = {
 };
 
 async function main() {
-  const privateKey = process.env.PRIVATE_KEY?.trim() ?? "";
-  const mnemonic = process.env.MNEMONIC?.trim() ?? "";
-  const walletPassword = process.env.WALLET_PASSWORD?.trim() ?? "";
-  const accountIndex = process.env.MNEMONIC_ACCOUNT_INDEX?.trim() ?? "";
-  const configuredModes = [privateKey, mnemonic, walletPassword].filter(Boolean).length;
-
-  if (configuredModes > 1) {
-    throw new Error("Set only one of PRIVATE_KEY, MNEMONIC, or WALLET_PASSWORD.");
-  }
-  if (configuredModes === 0) {
-    throw new Error("Set PRIVATE_KEY, MNEMONIC, or WALLET_PASSWORD before running this example.");
-  }
-
-  delete process.env.AGENT_WALLET_PRIVATE_KEY;
-  delete process.env.AGENT_WALLET_MNEMONIC;
-  delete process.env.AGENT_WALLET_PASSWORD;
-  delete process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX;
-  if (privateKey) {
-    process.env.AGENT_WALLET_PRIVATE_KEY = privateKey;
-  } else if (mnemonic) {
-    process.env.AGENT_WALLET_MNEMONIC = mnemonic;
-    if (accountIndex) {
-      process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = accountIndex;
-    }
-  } else {
-    process.env.AGENT_WALLET_PASSWORD = walletPassword;
-  }
-
   const tronProvider = resolveWalletProvider({ network: "tron" });
   const tronWallet = (await tronProvider.getActiveWallet()) as unknown as Eip712Capable & {
     getAddress(): Promise<string>;

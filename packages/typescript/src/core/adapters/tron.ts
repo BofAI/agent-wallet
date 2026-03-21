@@ -5,19 +5,28 @@ import bs58checkModule from 'bs58check'
 
 // Normalize CJS/ESM interop: bs58check v4 exports differ between CJS and ESM,
 // and tsup's __toESM() wrapper can add an extra .default layer in CJS bundles.
+type Bs58checkLike = {
+  encode?: (input: Uint8Array) => string
+  default?: typeof bs58checkModule
+}
+
+const bs58checkInterop = bs58checkModule as Bs58checkLike
 const bs58check: typeof bs58checkModule =
-  typeof (bs58checkModule as any).encode === 'function'
+  typeof bs58checkInterop.encode === 'function'
     ? bs58checkModule
-    : (bs58checkModule as any).default
-import type { BaseWallet, Eip712Capable } from '../base.js'
+    : (bs58checkInterop.default ?? bs58checkModule)
+
+import type { Wallet, Eip712Capable } from '../base.js'
 import { SigningError } from '../errors.js'
 
-export class TronWallet implements BaseWallet, Eip712Capable {
-  private privateKeyBytes: Uint8Array
-  private address: string
+export class TronSigner implements Wallet, Eip712Capable {
+  private readonly privateKeyBytes: Uint8Array
+  private readonly address: string
+  private readonly network: string
 
-  constructor(privateKey: Uint8Array) {
+  constructor(privateKey: Uint8Array, network: string = 'tron') {
     this.privateKeyBytes = privateKey
+    this.network = network
 
     // Derive Tron address: 0x41 + ethAddress (without 0x prefix)
     const hex = `0x${Buffer.from(privateKey).toString('hex')}` as `0x${string}`
@@ -49,9 +58,16 @@ export class TronWallet implements BaseWallet, Eip712Capable {
   async signTransaction(payload: Record<string, unknown>): Promise<string> {
     try {
       if (!payload.txID || !payload.raw_data_hex) {
-        throw new Error('Payload must be an unsigned transaction with {txID, raw_data_hex}. ' + 'Use TronGrid API to build the transaction first.')
+        throw new Error(
+          'Payload must be an unsigned transaction with {txID, raw_data_hex}. ' +
+            'Use TronGrid API to build the transaction first.',
+        )
       }
-      const txIdBytes = Buffer.from(payload.txID as string, 'hex')
+      const txId = payload.txID as string
+      if (!/^[0-9a-fA-F]{64}$/.test(txId)) {
+        throw new Error('Payload txID must be a 32-byte hex string')
+      }
+      const txIdBytes = Buffer.from(txId, 'hex')
       const signature = this.signDigest(txIdBytes)
       const signedTx = { ...payload, signature: [signature] }
       return JSON.stringify(signedTx)
@@ -83,12 +99,13 @@ export class TronWallet implements BaseWallet, Eip712Capable {
       }
 
       const { EIP712Domain: _domain, ...messageTypes } = types
+      type SignTypedDataInput = Parameters<typeof account.signTypedData>[0]
 
       const sig = await account.signTypedData({
-        domain: domain as any,
-        types: messageTypes as any,
+        domain: domain as SignTypedDataInput['domain'],
+        types: messageTypes as SignTypedDataInput['types'],
         primaryType,
-        message: message as any,
+        message: message as SignTypedDataInput['message'],
       })
       return sig.slice(2)
     } catch (e) {

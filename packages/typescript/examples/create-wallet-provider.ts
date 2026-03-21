@@ -1,12 +1,11 @@
 /**
- * Demo: Create wallet providers using `createWalletProvider` with explicit options.
+ * Demo: Resolve wallet providers using `resolveWalletProvider`.
  *
- * This example shows all four modes of `createWalletProvider`:
+ * This example shows three resolution paths:
  *
- *   1. Private key mode  — pass a hex private key + network
- *   2. Mnemonic mode     — pass a BIP-39 mnemonic + network (+ optional account index)
- *   3. Local mode        — pass a password (+ optional secrets dir)
- *   4. Env fallback mode — no explicit credentials, reads from environment variables
+ *   1. Raw private key env fallback
+ *   2. Raw mnemonic env fallback
+ *   3. Config-backed local_secure mode
  *
  * Usage:
  *   PRIVATE_KEY=<hex> npx tsx examples/create-wallet-provider.ts
@@ -15,10 +14,7 @@
  *   WALLET_PASSWORD=<password> npx tsx examples/create-wallet-provider.ts
  */
 
-import {
-  createWalletProvider,
-  type Eip712Capable,
-} from "../src/index.js";
+import { resolveWalletProvider, type Eip712Capable } from "../src/index.js";
 
 async function main() {
   const privateKey = process.env.PRIVATE_KEY?.trim() ?? "";
@@ -34,34 +30,38 @@ async function main() {
     throw new Error("Set PRIVATE_KEY, MNEMONIC, or WALLET_PASSWORD before running this example.");
   }
 
-  // --- Build providers using createWalletProvider with explicit options ---
+  // --- Build providers via env/config resolution ---
 
   if (privateKey) {
     console.log("Mode: privateKey\n");
+    process.env.AGENT_WALLET_PRIVATE_KEY = privateKey
 
-    const tronProvider = createWalletProvider({ privateKey, network: "tron" });
-    const evmProvider = createWalletProvider({ privateKey, network: "eip155" });
+    const tronProvider = resolveWalletProvider({ network: "tron" });
+    const evmProvider = resolveWalletProvider({ network: "eip155" });
 
     await printWallet("TRON", tronProvider);
     await printWallet("EVM", evmProvider);
   } else if (mnemonic) {
     console.log(`Mode: mnemonic (accountIndex=${accountIndex})\n`);
+    process.env.AGENT_WALLET_MNEMONIC = mnemonic
+    process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = String(accountIndex)
 
-    const tronProvider = createWalletProvider({ mnemonic, network: "tron", accountIndex });
-    const evmProvider = createWalletProvider({ mnemonic, network: "eip155", accountIndex });
+    const tronProvider = resolveWalletProvider({ network: "tron" });
+    const evmProvider = resolveWalletProvider({ network: "eip155" });
 
     await printWallet("TRON", tronProvider);
     await printWallet("EVM", evmProvider);
   } else {
-    console.log("Mode: local (password)\n");
+    console.log("Mode: local_secure (password)\n");
+    process.env.AGENT_WALLET_PASSWORD = walletPassword
 
-    const provider = createWalletProvider({ password: walletPassword });
+    const provider = resolveWalletProvider({ network: "eip155" });
 
     await printWallet("Local", provider);
   }
 }
 
-async function printWallet(label: string, provider: Awaited<ReturnType<typeof createWalletProvider>>) {
+async function printWallet(label: string, provider: ReturnType<typeof resolveWalletProvider>) {
   const wallet = (await provider.getActiveWallet()) as unknown as Eip712Capable & {
     getAddress(): Promise<string>;
   };

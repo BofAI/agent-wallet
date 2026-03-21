@@ -1,23 +1,24 @@
-"""BaseWallet abstract interface, capability mixins, and core enums."""
+"""Wallet abstract interface, capability mixins, and core enums."""
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
 
+class Network(StrEnum):
+    """Supported blockchain networks."""
+
+    EVM = "evm"
+    TRON = "tron"
+
+
 class WalletType(StrEnum):
-    """Supported wallet types."""
+    """How private keys are managed."""
 
-    EVM_LOCAL = "evm_local"
-    TRON_LOCAL = "tron_local"
-
-    # TODO: add more wallet types as needed, e.g.:
-    # COINBASE_WAAS = "coinbase_waas"
-    # PRIVY_WAAS = "privy_waas"
+    LOCAL_SECURE = "local_secure"
+    RAW_SECRET = "raw_secret"
 
 
-
-
-class BaseWallet(ABC):
+class Wallet(ABC):
     """Minimal interface shared by all wallets."""
 
     @abstractmethod
@@ -30,7 +31,7 @@ class BaseWallet(ABC):
 
     @abstractmethod
     async def sign_transaction(self, payload: dict) -> str:
-        """Build and sign a transaction from high-level intent (to, amount, etc.)."""
+        """Build and sign a transaction from high-level intent."""
 
     @abstractmethod
     async def sign_message(self, msg: bytes) -> str:
@@ -43,3 +44,11 @@ class Eip712Capable(ABC):
     @abstractmethod
     async def sign_typed_data(self, data: dict) -> str:
         """Sign EIP-712 typed data, return signature hex."""
+
+
+class WalletProvider(ABC):
+    """Abstract interface for resolving a signable wallet."""
+
+    @abstractmethod
+    async def get_active_wallet(self, network: str | None = None) -> Wallet:
+        """Return the wallet instance that callers should use for signing."""

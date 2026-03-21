@@ -2,8 +2,8 @@
 Demo: Sign a BSC (BNB Smart Chain) transaction and broadcast it using agent-wallet SDK.
 
 This example shows how to use the agent-wallet SDK to:
-  1. Initialize via resolve_wallet_provider (decrypt keys once)
-  2. Get an EVM wallet by ID
+  1. Resolve an EVM wallet from config/env
+  2. Get the EVM wallet address
   3. Sign a message (pure local, no network)
   4. Build a BNB transfer tx, sign it with the SDK, and broadcast via BSC testnet RPC
 
@@ -21,7 +21,7 @@ import asyncio
 import httpx
 from eth_utils import to_checksum_address
 
-from agent_wallet import resolve_wallet_provider
+from agent_wallet import resolve_wallet
 
 # --- Configuration ---
 
@@ -36,14 +36,9 @@ CHAIN_ID = 97  # BSC testnet
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider from env and resolve the active wallet
+    # Step 1: Resolve the active wallet
     # ----------------------------------------------------------------
-    provider = resolve_wallet_provider(network="eip155:97")
-
-    # ----------------------------------------------------------------
-    # Step 2: Get wallet instance
-    # ----------------------------------------------------------------
-    wallet = await provider.get_active_wallet()
+    wallet = await resolve_wallet(network="eip155:97")
     address = await wallet.get_address()
     print(f"Address:      {address}")
     print()

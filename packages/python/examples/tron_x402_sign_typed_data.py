@@ -24,11 +24,11 @@ import base58
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 
-from agent_wallet import resolve_wallet_provider
+from agent_wallet import resolve_wallet
 
 # --- Configuration ---
 
-# resolve_wallet_provider resolves the active wallet directly from environment.
+# resolve_wallet resolves the active wallet directly from config/env.
 
 
 # --- x402 PaymentPermit typed data ---
@@ -94,10 +94,9 @@ STANDARD_TYPED_DATA = {
 
 async def main():
     # ----------------------------------------------------------------
-    # Step 1: Create provider from env and resolve the active wallet
+    # Step 1: Resolve the active wallet
     # ----------------------------------------------------------------
-    provider = resolve_wallet_provider(network="tron")
-    wallet = await provider.get_active_wallet()
+    wallet = await resolve_wallet(network="tron")
     address = await wallet.get_address()
     print(f"Address: {address}")
     print()
