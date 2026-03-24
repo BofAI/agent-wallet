@@ -11,6 +11,7 @@ from Crypto.Protocol.KDF import scrypt as scrypt_kdf
 from eth_hash.auto import keccak
 
 from agent_wallet.core.errors import DecryptionError
+from agent_wallet.core.utils import safe_chmod
 
 # Keystore V3 scrypt parameters
 SCRYPT_N = 262144
@@ -167,3 +168,4 @@ class SecureKVStore:
             json.dumps(data, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+        safe_chmod(path, 0o600)

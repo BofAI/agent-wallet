@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 import secrets
-import stat
 import string
 import sys
 from pathlib import Path
@@ -37,6 +36,7 @@ from agent_wallet.core.providers.wallet_builder import (
     derive_key_from_mnemonic,
     parse_network_family,
 )
+from agent_wallet.core.utils import safe_chmod
 from agent_wallet.local.kv_store import SecureKVStore
 from agent_wallet.local.secret_loader import load_local_secret
 
@@ -659,7 +659,7 @@ def start(
                     auto_generated = True
 
             secrets_path.mkdir(parents=True, exist_ok=True)
-            os.chmod(secrets_path, stat.S_IRWXU)
+            safe_chmod(secrets_path, 0o700)
             kv_store = SecureKVStore(dir, pw)
             kv_store.init_master()
             provider.ensure_storage()
@@ -756,7 +756,7 @@ def init(
         raise typer.Exit(1)
 
     secrets_path.mkdir(parents=True, exist_ok=True)
-    os.chmod(secrets_path, stat.S_IRWXU)  # 700
+    safe_chmod(secrets_path, 0o700)
 
     provider = _get_provider(dir)
     console.print(PASSWORD_REQUIREMENTS_HINT)

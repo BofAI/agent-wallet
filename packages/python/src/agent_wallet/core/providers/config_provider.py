@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
 from collections.abc import Callable
 from pathlib import Path
 
@@ -21,6 +19,7 @@ from agent_wallet.core.errors import WalletNotFoundError
 from agent_wallet.core.providers.wallet_builder import (
     create_adapter,
 )
+from agent_wallet.core.utils import safe_chmod
 
 
 class ConfigWalletProvider(WalletProvider):
@@ -158,7 +157,7 @@ class ConfigWalletProvider(WalletProvider):
     def _ensure_dir(self) -> None:
         path = Path(self._config_dir)
         path.mkdir(parents=True, exist_ok=True)
-        os.chmod(path, stat.S_IRWXU)
+        safe_chmod(path, 0o700)
 
     def _persist(self) -> None:
         self._ensure_dir()

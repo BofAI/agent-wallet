@@ -83,7 +83,7 @@ export async function resolveWallet(options?: {
 // ---------------------------------------------------------------------------
 
 function expandTilde(p: string): string {
-  if (p === '~' || p.startsWith('~/')) return join(homedir(), p.slice(1))
+  if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2))
   return p
 }
 

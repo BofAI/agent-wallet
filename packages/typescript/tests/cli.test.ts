@@ -17,6 +17,7 @@ import {
   cmdSignMsg,
   cmdStart,
   cmdUse,
+  expandTilde,
   main,
 } from '../src/delivery/cli.js'
 import { saveConfig } from '../src/core/config.js'
@@ -781,5 +782,26 @@ describe('change-password / reset', () => {
     await cmdReset(secretsDir, true, ioReset)
 
     expect(existsSync(join(secretsDir, 'wallets_config.json'))).toBe(false)
+  })
+})
+
+describe('expandTilde', () => {
+  it('expands ~ alone to homedir', () => {
+    expect(expandTilde('~')).toBe(require('node:os').homedir())
+  })
+
+  it('expands ~/ prefix', () => {
+    const home = require('node:os').homedir()
+    expect(expandTilde('~/foo')).toBe(join(home, 'foo'))
+  })
+
+  it('expands ~\\ prefix (Windows backslash)', () => {
+    const home = require('node:os').homedir()
+    expect(expandTilde('~\\foo')).toBe(join(home, 'foo'))
+  })
+
+  it('leaves non-tilde paths unchanged', () => {
+    expect(expandTilde('/usr/local')).toBe('/usr/local')
+    expect(expandTilde('relative/path')).toBe('relative/path')
   })
 })
