@@ -97,7 +97,7 @@ jobs:
         env:
           AGENT_WALLET_DIR: ${{ runner.temp }}/agent-wallet-typescript-smoke
         run: |
-          pnpm exec agent-wallet init -p "Abc12345!"
-          pnpm exec agent-wallet add local_secure -w wallet_1 -g -p "Abc12345!"
-          pnpm exec agent-wallet sign msg "hello world" -n tron -p "Abc12345!"
+          node dist/delivery/bin.js init -p "Abc12345!"
+          node dist/delivery/bin.js add local_secure -w wallet_1 -g -p "Abc12345!"
+          node dist/delivery/bin.js sign msg "hello world" -n tron -p "Abc12345!"
           node -e "const fs = require('node:fs'); const path = require('node:path'); const dir = process.env.AGENT_WALLET_DIR; const expected = ['master.json', 'wallets_config.json', 'secret_wallet_1.json']; const missing = expected.filter((name) => !fs.existsSync(path.join(dir, name))); if (missing.length) { throw new Error(`Missing files in ${dir}: ${missing.join(', ')}`) } console.log(fs.readdirSync(dir).sort())"
