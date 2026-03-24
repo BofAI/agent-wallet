@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import stat
 import warnings
 from pathlib import Path
@@ -14,6 +15,9 @@ def test_safe_chmod_sets_permissions(tmp_path: Path) -> None:
     f = tmp_path / "secret.json"
     f.write_text("{}")
     safe_chmod(f, stat.S_IRUSR | stat.S_IWUSR)
+    if os.name == "nt":
+        assert f.exists()
+        return
     assert f.stat().st_mode & 0o777 == 0o600
 
 
