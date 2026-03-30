@@ -99,6 +99,14 @@ describe('cmdInit', () => {
     const provider = new ConfigWalletProvider(secretsDir, TEST_PASSWORD)
     expect(provider.isInitialized()).toBe(true)
   })
+
+  it('re-prompts when the entered password is too weak', async () => {
+    const io = mockIO(['weak', TEST_PASSWORD, TEST_PASSWORD])
+    await cmdInit(secretsDir, io)
+
+    expect(out(io)).toContain('Password too weak.')
+    expect(existsSync(join(secretsDir, 'master.json'))).toBe(true)
+  })
 })
 
 describe('cmdStart', () => {
@@ -724,6 +732,26 @@ describe('change-password / reset', () => {
     delete process.env.AGENT_WALLET_PASSWORD
     const io = mockIO([TEST_PASSWORD, 'New-password-456!', 'New-password-456!'])
     await cmdChangePassword(secretsDir, io)
+
+    const provider = new ConfigWalletProvider(secretsDir, 'New-password-456!', {
+      secretLoader: loadLocalSecret,
+    })
+    const wallet = await provider.getWallet('signer', 'eip155:1')
+    expect(await wallet.getAddress()).toBeTruthy()
+  })
+
+  it('change-password re-prompts until the new password is valid and confirmed', async () => {
+    const io = mockIO([
+      'weak',
+      'New-password-456!',
+      'mismatch',
+      'New-password-456!',
+      'New-password-456!',
+    ])
+    await cmdChangePassword(secretsDir, io)
+
+    expect(out(io)).toContain('Password too weak.')
+    expect(out(io)).toContain('Passwords do not match.')
 
     const provider = new ConfigWalletProvider(secretsDir, 'New-password-456!', {
       secretLoader: loadLocalSecret,
