@@ -63,8 +63,8 @@ export function deriveKeyFromMnemonic(
   return privateKey
 }
 
-function expandTilde(p: string): string {
-  if (p === '~' || p.startsWith('~/')) return join(homedir(), p.slice(1))
+export function expandTilde(p: string): string {
+  if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2))
   return p
 }
 
