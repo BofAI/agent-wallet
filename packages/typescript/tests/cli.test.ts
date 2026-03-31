@@ -13,6 +13,7 @@ import {
   cmdInspect,
   cmdList,
   cmdRemove,
+  cmdResolveAddress,
   cmdReset,
   cmdSignMsg,
   cmdStart,
@@ -75,6 +76,7 @@ beforeEach(() => {
   delete process.env.AGENT_WALLET_MNEMONIC
   delete process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 afterEach(() => {
@@ -824,15 +826,57 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
   it('inspect shows local_secure details', async () => {
     const io = mockIO()
     await cmdInspect('local-one', secretsDir, io)
-    expect(out(io)).toContain('Type        local_secure')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('local_secure')
     expect(out(io)).toContain('secret_local-one.json')
   })
 
   it('inspect shows raw_secret details', async () => {
     const io = mockIO()
     await cmdInspect('hot', secretsDir, io)
-    expect(out(io)).toContain('Type        raw_secret')
-    expect(out(io)).toContain('Source Type private_key')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('raw_secret')
+    expect(out(io)).toContain('Source Type')
+    expect(out(io)).toContain('private_key')
+  })
+
+  it('resolve-address shows whitelist output for local_secure wallets', async () => {
+    const io = mockIO([TEST_PASSWORD])
+    await cmdResolveAddress('local-one', secretsDir, io)
+    expect(out(io)).toContain('Wallet')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('Addresses')
+    expect(out(io)).toMatch(/EVM\s+0x/i)
+    expect(out(io)).toMatch(/TRON\s+T/i)
+  })
+
+  it('resolve-address shows whitelist output for raw_secret wallets', async () => {
+    const io = mockIO()
+    await cmdResolveAddress('hot', secretsDir, io)
+    expect(out(io)).toContain('Addresses')
+    expect(out(io)).toMatch(/EVM\s+0x/i)
+    expect(out(io)).toMatch(/TRON\s+T/i)
+  })
+
+  it('resolve-address shows a single address for privy wallets', async () => {
+    await cmdAdd(secretsDir, mockIO(['app-id', 'app-secret', 'wallet-1']), {
+      walletType: 'privy',
+      walletId: 'privy-one',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { address: '0xabc', chain_type: 'ethereum' } }),
+      })) as typeof fetch,
+    )
+
+    const io = mockIO()
+    await cmdResolveAddress('privy-one', secretsDir, io)
+    expect(out(io)).toContain('Address')
+    expect(out(io)).toContain('0xabc')
+    expect(out(io)).not.toContain('Addresses')
   })
 
   it('remove deletes local secure secret file', async () => {

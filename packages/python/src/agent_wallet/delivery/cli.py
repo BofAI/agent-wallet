@@ -16,6 +16,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from agent_wallet.core.address_resolution import resolve_wallet_addresses
 from agent_wallet.core.base import Eip712Capable, WalletType
 from agent_wallet.core.config import (
     LocalSecureWalletParams,
@@ -1321,6 +1322,58 @@ def inspect(
         table.add_row("Privy Wallet ID", "[redacted]")
 
     console.print(table)
+
+
+@app.command("resolve-address")
+def resolve_address(
+    wallet_id: str = typer.Argument(help="Wallet ID to resolve"),
+    dir: str = _dir_option(),
+    password: str | None = _password_option(),
+) -> None:
+    """Resolve wallet address output for display."""
+    provider = _get_provider(dir)
+    try:
+        conf = provider.get_wallet_config(wallet_id)
+    except WalletNotFoundError:
+        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+        raise typer.Exit(1)
+
+    resolved_password: str | None = None
+    if conf.type == "local_secure":
+        resolved_password, _kv_store = _get_verified_password(dir, provider=provider, explicit=password)
+    elif password:
+        console.print("[red]--password is only valid for local_secure wallets.[/red]")
+        raise typer.Exit(1)
+
+    result = asyncio.run(
+        resolve_wallet_addresses(
+            conf,
+            config_dir=dir,
+            password=resolved_password,
+            secret_loader=load_local_secret,
+        )
+    )
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Key", style="bold")
+    table.add_column("Value")
+    table.add_row("Wallet", wallet_id)
+    table.add_row("Type", conf.type)
+    if result.mode == "single":
+        entry = result.entries[0]
+        table.add_row(entry.label, entry.address)
+        console.print(table)
+        return
+
+    console.print(table)
+    console.print()
+    addr_table = Table(show_header=False, box=None, padding=(0, 2))
+    addr_table.add_column("Label", style="bold cyan")
+    addr_table.add_column("Address")
+    for entry in result.entries:
+        addr_table.add_row(entry.label, entry.address)
+    console.print("[bold]Addresses[/bold]")
+    console.print(addr_table)
 
 
 @app.command()

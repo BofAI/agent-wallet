@@ -23,6 +23,7 @@ import { decodePrivateKey, deriveKeyFromMnemonic } from '../core/utils/keys.js'
 import { parseNetworkFamily } from '../core/utils/network.js'
 import { SecureKVStore } from '../local/kv-store.js'
 import { loadLocalSecret } from '../local/secret-loader.js'
+import { resolveWalletAddresses } from '../core/address-resolution.js'
 
 // --- Helpers ---
 export function expandTilde(p: string): string {
@@ -1116,27 +1117,81 @@ export async function cmdInspect(walletId: string, dir: string, io: CliIO): Prom
     throw new CliExit(1)
   }
 
-  io.print(`Wallet      ${walletId}`)
-  io.print(`Type        ${conf.type}`)
-
+  const rows: [string, string][] = [
+    ['Wallet', walletId],
+    ['Type', conf.type],
+  ]
   if (conf.type === 'local_secure') {
     const params = conf.params as LocalSecureWalletParams
     const secretStatus = provider.hasSecretFile(walletId) ? '\u2713' : '\u2014'
-    io.print(`Secret      secret_${params.secret_ref}.json ${secretStatus}`)
+    rows.push(['Secret', `secret_${params.secret_ref}.json ${secretStatus}`])
   } else if (conf.type === 'raw_secret') {
     const params = conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams
-    io.print(`Source Type ${params.source}`)
+    rows.push(['Source Type', params.source])
     if (params.source === 'private_key') {
-      io.print('Private Key [redacted]')
+      rows.push(['Private Key', '[redacted]'])
     } else if (params.source === 'mnemonic') {
-      io.print('Mnemonic    [redacted]')
-      io.print(`Account Index ${params.account_index}`)
+      rows.push(['Mnemonic', '[redacted]'])
+      rows.push(['Account Index', String(params.account_index)])
     }
   } else if (conf.type === 'privy') {
-    io.print('Privy App ID [redacted]')
-    io.print('Privy App Secret [redacted]')
-    io.print('Privy Wallet ID [redacted]')
+    rows.push(['Privy App ID', '[redacted]'])
+    rows.push(['Privy App Secret', '[redacted]'])
+    rows.push(['Privy Wallet ID', '[redacted]'])
   }
+  printDetailRows(io, rows)
+}
+
+export async function cmdResolveAddress(
+  walletId: string,
+  dir: string,
+  io: CliIO,
+  opts?: { password?: string },
+): Promise<void> {
+  const provider = getProvider(dir)
+  let conf: WalletConfig
+  try {
+    conf = provider.getWalletConfig(walletId)
+  } catch {
+    io.print(`Wallet '${walletId}' not found.`)
+    throw new CliExit(1)
+  }
+
+  let password = opts?.password
+  if (conf.type === WalletType.LOCAL_SECURE) {
+    const verified = await getVerifiedPassword(dir, io, {
+      explicit: opts?.password,
+      provider,
+    })
+    password = verified.pw
+  } else if (opts?.password) {
+    io.print('--password is only valid for local_secure wallets.')
+    throw new CliExit(1)
+  }
+
+  const result = await resolveWalletAddresses(conf, {
+    configDir: dir,
+    password,
+    secretLoader: loadLocalSecret,
+  })
+
+  const rows: [string, string][] = [
+    ['Wallet', walletId],
+    ['Type', conf.type],
+  ]
+  if (result.mode === 'single') {
+    rows.push([result.entries[0].label, result.entries[0].address])
+    printDetailRows(io, rows)
+    return
+  }
+
+  printDetailRows(io, rows)
+  io.print('')
+  io.print('Addresses')
+  printDetailRows(
+    io,
+    result.entries.map((entry) => [entry.label, entry.address]),
+  )
 }
 
 export async function cmdRemove(
@@ -1504,6 +1559,13 @@ function printWalletTable(io: CliIO, rows: [string, string][]): void {
   io.print(hr('└', '┴', '┘'))
 }
 
+function printDetailRows(io: CliIO, rows: [string, string][]): void {
+  const width = Math.max(...rows.map(([label]) => label.length))
+  for (const [label, value] of rows) {
+    io.print(`${label.padEnd(width)}  ${value}`)
+  }
+}
+
 // --- Reset Command ---
 
 export async function cmdReset(dir: string, yes: boolean, io: CliIO): Promise<void> {
@@ -1787,6 +1849,16 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print(DIR_OPT)
         io.print(HELP_OPT)
         break
+      case 'resolve-address':
+        io.print('Usage: agent-wallet resolve-address <wallet-id> [options]')
+        io.print('')
+        io.print('Resolve wallet address output for display.')
+        io.print('')
+        io.print('Options:')
+        io.print(PW_OPT)
+        io.print(DIR_OPT)
+        io.print(HELP_OPT)
+        break
       case 'remove':
         io.print('Usage: agent-wallet remove [wallet-id] [options]')
         io.print('')
@@ -1863,6 +1935,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('  list              List all configured wallets')
         io.print('  use [id]          Set the active wallet (interactive if omitted)')
         io.print('  inspect <id>      Show wallet details')
+        io.print('  resolve-address <id>  Resolve wallet address output')
         io.print('  remove <id>       Remove a wallet')
         io.print('  sign tx <data>    Sign a transaction (JSON payload)')
         io.print('  sign msg <data>   Sign a message')
@@ -1947,6 +2020,13 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           return 1
         }
         await cmdInspect(subcommand ?? args[0], dir, cliIO)
+        break
+      case 'resolve-address':
+        if (!subcommand && args.length === 0) {
+          cliIO.print('Usage: agent-wallet resolve-address <wallet-id>')
+          return 1
+        }
+        await cmdResolveAddress(subcommand ?? args[0], dir, cliIO, { password })
         break
       case 'remove':
         await cmdRemove(

@@ -521,6 +521,70 @@ class TestRemove:
         assert "not found" in result.output
 
 
+class TestResolveAddress:
+    def test_resolve_address_shows_whitelist_for_local_secure(self, dir_with_local_secure_wallet):
+        result = runner.invoke(
+            app,
+            ["resolve-address", "sign_wallet", "--dir", dir_with_local_secure_wallet],
+            input=f"{TEST_PASSWORD}\n",
+        )
+        assert result.exit_code == 0
+        assert "Addresses" in result.output
+        assert "EVM" in result.output
+        assert "TRON" in result.output
+        assert "0x" in result.output
+
+    def test_resolve_address_shows_whitelist_for_raw_secret(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--dir", initialized_dir],
+            input=f"hot_wallet\nprivate_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["resolve-address", "hot_wallet", "--dir", initialized_dir],
+        )
+        assert result.exit_code == 0
+        assert "Addresses" in result.output
+        assert "EVM" in result.output
+        assert "TRON" in result.output
+
+    def test_resolve_address_shows_single_address_for_privy(self, initialized_dir, monkeypatch):
+        runner.invoke(
+            app,
+            ["add", "privy", "--dir", initialized_dir],
+            input="\napp-id\napp-secret\nwallet-1\n",
+        )
+
+        class _FakeResponse:
+            def __init__(self, payload):
+                self.status = 200
+                self._payload = payload
+
+            def read(self):
+                return json.dumps(self._payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        def fake_urlopen(_req):
+            return _FakeResponse({"data": {"address": "0xabc", "chain_type": "ethereum"}})
+
+        monkeypatch.setattr("agent_wallet.core.clients.privy.urlopen", fake_urlopen)
+
+        result = runner.invoke(
+            app,
+            ["resolve-address", "default_privy", "--dir", initialized_dir],
+        )
+        assert result.exit_code == 0
+        assert "Address" in result.output
+        assert "0xabc" in result.output
+        assert "Addresses" not in result.output
+
+
 class TestSign:
     def test_sign_message(self, dir_with_local_secure_wallet):
         result = runner.invoke(
