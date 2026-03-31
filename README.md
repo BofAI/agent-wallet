@@ -126,6 +126,25 @@ agent-wallet list
 └────┴──────────────────────┴──────────────────────┘
 ```
 
+Resolve the wallet address output without signing:
+
+```bash
+agent-wallet resolve-address
+```
+
+If you omit the wallet id, the CLI prompts you to select a wallet interactively.
+
+Example output:
+
+```text
+  Wallet    default_secure
+  Type      local_secure
+
+Addresses
+  EVM     0x53c4443Ec09b859A2FC09D46c464e268AE5E51a1
+  TRON    THc8CpdxbSrtRKo1S8hStQL4iSVEjBXNnW
+```
+
 Sign a message:
 
 ```bash
@@ -147,7 +166,7 @@ Or use `--save-runtime-secrets` on any command to persist it to `~/.agent-wallet
 
 For mode-specific help, use hierarchical commands such as `agent-wallet start local_secure --help` or `agent-wallet add privy --help`.
 
-**Next steps:** `agent-wallet use <id>` to switch the active wallet, `agent-wallet sign -h` for all sign options. Full walkthrough: [Getting started](./doc/getting-started.md).
+**Next steps:** `agent-wallet use <id>` to switch the active wallet, `agent-wallet resolve-address` to inspect addresses, `agent-wallet sign -h` for all sign options. Full walkthrough: [Getting started](./doc/getting-started.md).
 
 ## Examples
 

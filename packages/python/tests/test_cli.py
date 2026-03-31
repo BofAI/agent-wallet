@@ -584,6 +584,29 @@ class TestResolveAddress:
         assert "0xabc" in result.output
         assert "Addresses" not in result.output
 
+    def test_resolve_address_prompts_to_select_wallet_when_missing(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "hot_wallet", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["resolve-address", "--dir", initialized_dir],
+            input="hot_wallet\n",
+        )
+        assert result.exit_code == 0
+        assert "Wallet" in result.output
+        assert "hot_wallet" in result.output
+
+    def test_resolve_address_without_wallets_fails_cleanly(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["resolve-address", "--dir", initialized_dir],
+        )
+        assert result.exit_code == 1
+        assert "No wallets configured." in result.output
+
 
 class TestSign:
     def test_sign_message(self, dir_with_local_secure_wallet):

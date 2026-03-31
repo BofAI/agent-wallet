@@ -16,7 +16,6 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from agent_wallet.core.address_resolution import resolve_wallet_addresses
 from agent_wallet.core.base import Eip712Capable, WalletType
 from agent_wallet.core.config import (
     LocalSecureWalletParams,
@@ -1326,16 +1325,38 @@ def inspect(
 
 @app.command("resolve-address")
 def resolve_address(
-    wallet_id: str = typer.Argument(help="Wallet ID to resolve"),
+    wallet_id: str | None = typer.Argument(None, help="Wallet ID to resolve"),
     dir: str = _dir_option(),
     password: str | None = _password_option(),
 ) -> None:
     """Resolve wallet address output for display."""
+    from agent_wallet.core.address_resolution import resolve_wallet_addresses
+
     provider = _get_provider(dir)
+    target_id = wallet_id
+    if target_id is None:
+        rows = provider.list_wallets()
+        if not rows:
+            console.print("[red]No wallets configured.[/red]")
+            raise typer.Exit(1)
+        choices = [wid for wid, _conf, _is_active in rows]
+        descriptions = {
+            wid: f"{conf.type}{' (active)' if is_active else ''}"
+            for wid, conf, is_active in rows
+        }
+        selected = _interactive_select("Select wallet to resolve", choices, descriptions)
+        if selected is None:
+            selected = _prompt_text(
+                "Select wallet to resolve",
+                choices=choices,
+                default=choices[0],
+                action="wallet selection",
+            )
+        target_id = selected
     try:
-        conf = provider.get_wallet_config(wallet_id)
+        conf = provider.get_wallet_config(target_id)
     except WalletNotFoundError:
-        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+        console.print(f"[red]Wallet '{target_id}' not found.[/red]")
         raise typer.Exit(1)
 
     resolved_password: str | None = None
@@ -1357,7 +1378,7 @@ def resolve_address(
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Key", style="bold")
     table.add_column("Value")
-    table.add_row("Wallet", wallet_id)
+    table.add_row("Wallet", target_id)
     table.add_row("Type", conf.type)
     if result.mode == "single":
         entry = result.entries[0]

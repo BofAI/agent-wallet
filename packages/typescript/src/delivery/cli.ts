@@ -23,7 +23,6 @@ import { decodePrivateKey, deriveKeyFromMnemonic } from '../core/utils/keys.js'
 import { parseNetworkFamily } from '../core/utils/network.js'
 import { SecureKVStore } from '../local/kv-store.js'
 import { loadLocalSecret } from '../local/secret-loader.js'
-import { resolveWalletAddresses } from '../core/address-resolution.js'
 
 // --- Helpers ---
 export function expandTilde(p: string): string {
@@ -1143,17 +1142,38 @@ export async function cmdInspect(walletId: string, dir: string, io: CliIO): Prom
 }
 
 export async function cmdResolveAddress(
-  walletId: string,
+  walletId: string | undefined,
   dir: string,
   io: CliIO,
   opts?: { password?: string },
 ): Promise<void> {
+  const { resolveWalletAddresses } = await import('../core/address-resolution.js')
   const provider = getProvider(dir)
+  let targetId = walletId
+  if (!targetId) {
+    const rows = provider.listWallets()
+    if (rows.length === 0) {
+      io.print('No wallets configured.')
+      throw new CliExit(1)
+    }
+    const choices = rows.map(([wid]) => wid)
+    const descriptions = Object.fromEntries(
+      rows.map(([wid, conf, isActive]) => [wid, `${conf.type}${isActive ? ' (active)' : ''}`]),
+    )
+    targetId = await selectInput(
+      io,
+      'Select wallet to resolve',
+      choices,
+      descriptions,
+      choices[0],
+      'wallet selection',
+    )
+  }
   let conf: WalletConfig
   try {
-    conf = provider.getWalletConfig(walletId)
+    conf = provider.getWalletConfig(targetId)
   } catch {
-    io.print(`Wallet '${walletId}' not found.`)
+    io.print(`Wallet '${targetId}' not found.`)
     throw new CliExit(1)
   }
 
@@ -1176,7 +1196,7 @@ export async function cmdResolveAddress(
   })
 
   const rows: [string, string][] = [
-    ['Wallet', walletId],
+    ['Wallet', targetId],
     ['Type', conf.type],
   ]
   if (result.mode === 'single') {
@@ -1850,7 +1870,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print(HELP_OPT)
         break
       case 'resolve-address':
-        io.print('Usage: agent-wallet resolve-address <wallet-id> [options]')
+        io.print('Usage: agent-wallet resolve-address [wallet-id] [options]')
         io.print('')
         io.print('Resolve wallet address output for display.')
         io.print('')
@@ -2022,10 +2042,6 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         await cmdInspect(subcommand ?? args[0], dir, cliIO)
         break
       case 'resolve-address':
-        if (!subcommand && args.length === 0) {
-          cliIO.print('Usage: agent-wallet resolve-address <wallet-id>')
-          return 1
-        }
         await cmdResolveAddress(subcommand ?? args[0], dir, cliIO, { password })
         break
       case 'remove':

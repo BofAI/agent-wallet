@@ -858,6 +858,21 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
     expect(out(io)).toMatch(/TRON\s+T/i)
   })
 
+  it('resolve-address prompts to select wallet when id is omitted', async () => {
+    const io = mockIO(['hot'])
+    await cmdResolveAddress(undefined, secretsDir, io)
+    expect(out(io)).toContain('Wallet')
+    expect(out(io)).toContain('hot')
+  })
+
+  it('resolve-address without wallets fails cleanly', async () => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(initializedTemplateDir, 'agent-wallet-cli-test-')
+    const io = mockIO()
+    await expect(cmdResolveAddress(undefined, secretsDir, io)).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('No wallets configured.')
+  })
+
   it('resolve-address shows a single address for privy wallets', async () => {
     await cmdAdd(secretsDir, mockIO(['app-id', 'app-secret', 'wallet-1']), {
       walletType: 'privy',

@@ -33,6 +33,7 @@ Commands:
   list              List all configured wallets
   use <id>          Set the active wallet
   inspect <id>      Show wallet details
+  resolve-address   Resolve wallet address output
   remove <id>       Remove a wallet
   sign tx <data>    Sign a transaction
   sign msg <data>   Sign a message
@@ -178,7 +179,20 @@ agent-wallet inspect <wallet_id> [-d DIR]
 
 Shows type, `secret_<ref>.json` status for `local_secure`, or redacted raw-secret metadata.
 
-## 9. `remove`
+## 9. `resolve-address`
+
+```bash
+agent-wallet resolve-address [wallet_id] [-d DIR] [-p PASSWORD]
+```
+
+Resolves and prints the wallet address or addresses without signing.
+
+- If `wallet_id` is omitted, the CLI prompts you to select a wallet interactively.
+- `local_secure` and `raw_secret` wallets print both EVM and TRON addresses derived from the same secret material.
+- `privy` wallets print the hosted wallet address returned by Privy.
+- `-p` / `--password` is only needed for `local_secure` wallets.
+
+## 10. `remove`
 
 ```bash
 agent-wallet remove [wallet_id] [-d DIR] [--yes|-y]
@@ -188,7 +202,7 @@ If `wallet_id` is omitted, the CLI prompts you to select a wallet interactively 
 
 If you remove the active wallet and other wallets still exist, the CLI can optionally prompt you to choose a new active wallet immediately.
 
-## 10. `sign`
+## 11. `sign`
 
 All subcommands require **`--network` / `-n`**.
 
@@ -211,7 +225,7 @@ agent-wallet sign typed-data '<json>' -n eip155:1 [-w WALLET_ID] ...
 
 Signed tx: if the result parses as JSON it is pretty-printed; otherwise hex is printed as text.
 
-## 11. `change-password`
+## 12. `change-password`
 
 ```bash
 agent-wallet change-password [-d DIR] [-p CURRENT] [--save-runtime-secrets]
@@ -219,7 +233,7 @@ agent-wallet change-password [-d DIR] [-p CURRENT] [--save-runtime-secrets]
 
 Re-encrypts `master.json` and every `secret_*.json`. Updates `runtime_secrets.json` when `--save-runtime-secrets` is set **or** that file already exists.
 
-## 12. `reset`
+## 13. `reset`
 
 ```bash
 agent-wallet reset [-d DIR] [--yes|-y]
@@ -229,14 +243,14 @@ Deletes **only managed** JSON files: `master.json`, `wallets_config.json`, `runt
 
 Requires `master.json` to exist; otherwise prints that no wallet data was found.
 
-## 13. Environment variables
+## 14. Environment variables
 
 | Variable | Role |
 |----------|------|
 | `AGENT_WALLET_DIR` | Default secrets directory |
 | `AGENT_WALLET_PASSWORD` | Default master password when `-p` is not passed |
 
-## 14. File layout (Python / `local_secure`)
+## 15. File layout (Python / `local_secure`)
 
 ```
 ~/.agent-wallet/          (mode 700)
