@@ -70,7 +70,17 @@ app = typer.Typer(
     help="Universal multi-chain secure signing SDK.",
     no_args_is_help=True,
 )
+start_app = typer.Typer(
+    help="Quick setup: initialize and create default wallets.",
+    invoke_without_command=True,
+)
+add_app = typer.Typer(
+    help="Add a new wallet.",
+    invoke_without_command=True,
+)
 sign_app = typer.Typer(help="Sign transactions or messages.")
+app.add_typer(start_app, name="start")
+app.add_typer(add_app, name="add")
 app.add_typer(sign_app, name="sign")
 
 console = Console()
@@ -117,6 +127,18 @@ def _save_runtime_secrets_option():
         "--save-runtime-secrets",
         help="Persist the password to runtime secrets when this command uses one",
     )
+
+
+def _privy_app_id_option():
+    return typer.Option(None, "--app-id", help="Privy app id")
+
+
+def _privy_app_secret_option():
+    return typer.Option(None, "--app-secret", help="Privy app secret")
+
+
+def _privy_wallet_id_option():
+    return typer.Option(None, "--privy-wallet-id", help="Privy wallet id")
 
 
 def _validate_password_strength(password: str) -> list[str]:
@@ -619,7 +641,13 @@ def _prompt_mnemonic_with_index(
         return mnemonic, _prompt_account_index(mnemonic_index)
 
 
-def _build_privy_config(provider: ConfigWalletProvider | None = None) -> WalletConfig:
+def _build_privy_config(
+    provider: ConfigWalletProvider | None = None,
+    *,
+    explicit_app_id: str | None = None,
+    explicit_app_secret: str | None = None,
+    explicit_privy_wallet_id: str | None = None,
+) -> WalletConfig:
     existing = []
     if provider is not None:
         existing = [
@@ -627,7 +655,7 @@ def _build_privy_config(provider: ConfigWalletProvider | None = None) -> WalletC
             for wallet_id, conf, _ in provider.list_wallets()
             if conf.type == "privy"
         ]
-    if existing:
+    if existing and explicit_app_id is None and explicit_app_secret is None:
         reuse_choice = "Enter new Privy credentials"
         choices = [*existing, reuse_choice]
         selection = _interactive_select(
@@ -644,7 +672,7 @@ def _build_privy_config(provider: ConfigWalletProvider | None = None) -> WalletC
             if conf.type != "privy":
                 raise typer.Exit(1)
             params = conf.params
-            wallet_id = _prompt_required("Privy wallet id")
+            wallet_id = explicit_privy_wallet_id or _prompt_required("Privy wallet id")
             return WalletConfig(
                 type="privy",
                 params=PrivyWalletParams(
@@ -654,9 +682,9 @@ def _build_privy_config(provider: ConfigWalletProvider | None = None) -> WalletC
                 ),
             )
 
-    app_id = _prompt_required("Privy app id")
-    app_secret = _prompt_required("Privy app secret (input hidden)", password=True)
-    wallet_id = _prompt_required("Privy wallet id")
+    app_id = explicit_app_id or _prompt_required("Privy app id")
+    app_secret = explicit_app_secret or _prompt_required("Privy app secret (input hidden)", password=True)
+    wallet_id = explicit_privy_wallet_id or _prompt_required("Privy wallet id")
 
     return WalletConfig(
         type="privy",
@@ -682,27 +710,24 @@ def _prompt_wallet_id(default: str, provider: ConfigWalletProvider | None = None
         return name
 
 
-# --- Commands ---
-
-
-@app.command()
-def start(
-    wallet_type: str | None = typer.Argument(
-        None, help="Quick-start type: local_secure, raw_secret, or privy"
-    ),
-    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
-    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
-    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
-    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
-    derive_as: str | None = _derive_as_option(),
-    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
-    dir: str = _dir_option(),
-    password: str | None = _password_option(),
-    save_runtime_secrets: bool = _save_runtime_secrets_option(),
-    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
+def _run_start(
+    *,
+    wallet_type: str | None,
+    wallet_id: str | None,
+    generate: bool,
+    private_key: str | None,
+    mnemonic: str | None,
+    derive_as: str | None,
+    mnemonic_index: int,
+    dir: str,
+    password: str | None,
+    save_runtime_secrets: bool,
+    override: bool,
+    app_id: str | None = None,
+    app_secret: str | None = None,
+    privy_wallet_id: str | None = None,
 ) -> None:
-    """Quick setup: initialize and create default wallets."""
-    # Check if wallets already exist — prompt to confirm unless --override
+    """Quick setup flow shared by start callback and typed subcommands."""
     if not override:
         try:
             existing = _get_provider(dir)
@@ -727,7 +752,7 @@ def start(
         except (SystemExit, typer.Exit):
             raise
         except Exception:
-            pass  # No existing config — continue with normal start
+            pass
 
     wtype = _select_wallet_type(wallet_type)
     provider: ConfigWalletProvider | None = None
@@ -744,7 +769,6 @@ def start(
                 raise typer.Exit(1)
             except WalletNotFoundError:
                 pass
-        # Local secure mode: needs password and master key
         if (secrets_path / "master.json").exists():
             pw, kv_store = _get_verified_password(dir, provider=provider, explicit=password)
             console.print("\nWallet already initialized.")
@@ -854,7 +878,12 @@ def start(
             except WalletNotFoundError:
                 pass
         target_name = wallet_id or _prompt_wallet_id("default_privy", provider)
-        privy_config = _build_privy_config(provider)
+        privy_config = _build_privy_config(
+            provider,
+            explicit_app_id=app_id,
+            explicit_app_secret=app_secret,
+            explicit_privy_wallet_id=privy_wallet_id,
+        )
 
         try:
             provider.add_wallet(target_name, privy_config)
@@ -878,52 +907,23 @@ def start(
     console.print("")
 
 
-@app.command()
-def init(
-    dir: str = _dir_option(),
-    password: str | None = _password_option(),
-    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+def _run_add(
+    *,
+    wallet_type: str | None,
+    wallet_id: str | None,
+    generate: bool,
+    private_key: str | None,
+    mnemonic: str | None,
+    derive_as: str | None,
+    mnemonic_index: int,
+    dir: str,
+    password: str | None,
+    save_runtime_secrets: bool,
+    app_id: str | None = None,
+    app_secret: str | None = None,
+    privy_wallet_id: str | None = None,
 ) -> None:
-    """Initialize secrets directory and set master password."""
-    secrets_path = Path(dir)
-
-    if (secrets_path / "master.json").exists():
-        console.print(f"[yellow]Already initialized:[/yellow] {secrets_path}")
-        raise typer.Exit(1)
-
-    secrets_path.mkdir(parents=True, exist_ok=True)
-    safe_chmod(secrets_path, 0o700)
-
-    provider = _get_provider(dir)
-    console.print(PASSWORD_REQUIREMENTS_HINT)
-    pw = _get_password(provider=provider, confirm=True, explicit=password)
-
-    kv_store = SecureKVStore(dir, pw)
-    kv_store.init_master()
-
-    provider = _get_provider(dir, pw)
-    provider.ensure_storage()
-    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
-
-    console.print(f"[green]Initialized.[/green] Secrets directory: {secrets_path}")
-
-
-@app.command()
-def add(
-    wallet_type: str | None = typer.Argument(
-        None, help="Wallet type: local_secure, raw_secret, or privy"
-    ),
-    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
-    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
-    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
-    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
-    derive_as: str | None = _derive_as_option(),
-    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
-    dir: str = _dir_option(),
-    password: str | None = _password_option(),
-    save_runtime_secrets: bool = _save_runtime_secrets_option(),
-) -> None:
-    """Add a new wallet (interactive)."""
+    """Add-wallet flow shared by add callback and typed subcommands."""
     try:
         wtype = _select_wallet_type(wallet_type, prompt_text="Wallet type")
     except ValueError:
@@ -996,10 +996,268 @@ def add(
             console.print("[red]--password is only valid for local_secure wallets.[/red]")
             raise typer.Exit(1)
         target_name = wallet_id or _prompt_wallet_id("default_privy", provider)
-        provider.add_wallet(target_name, _build_privy_config(provider))
+        provider.add_wallet(
+            target_name,
+            _build_privy_config(
+                provider,
+                explicit_app_id=app_id,
+                explicit_app_secret=app_secret,
+                explicit_privy_wallet_id=privy_wallet_id,
+            ),
+        )
+    else:
+        console.print(f"[red]Unknown wallet type: {wtype.value}. Use: {', '.join(t.value for t in WalletType)}[/red]")
+        raise typer.Exit(1)
     console.print(f"[green]Wallet '{target_name}' added.[/green] Config updated.")
     if provider.get_active_id() == target_name:
         console.print(f"  Active wallet set to '{target_name}'.")
+
+
+# --- Commands ---
+
+
+@start_app.callback(invoke_without_command=True)
+def start(
+    ctx: typer.Context,
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
+) -> None:
+    """Quick setup: initialize and create default wallets."""
+    if ctx.invoked_subcommand:
+        return
+    _run_start(
+        wallet_type=None,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=None,
+        mnemonic=None,
+        derive_as=None,
+        mnemonic_index=0,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+        override=override,
+    )
+
+
+@start_app.command("local_secure")
+def start_local_secure(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
+    dir: str = _dir_option(),
+    password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
+) -> None:
+    """Quick start with an encrypted local wallet."""
+    _run_start(
+        wallet_type=WalletType.LOCAL_SECURE.value,
+        wallet_id=wallet_id,
+        generate=generate,
+        private_key=private_key,
+        mnemonic=mnemonic,
+        derive_as=derive_as,
+        mnemonic_index=mnemonic_index,
+        dir=dir,
+        password=password,
+        save_runtime_secrets=save_runtime_secrets,
+        override=override,
+    )
+
+
+@start_app.command("raw_secret")
+def start_raw_secret(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
+) -> None:
+    """Quick start with a plaintext raw secret wallet."""
+    _run_start(
+        wallet_type=WalletType.RAW_SECRET.value,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=private_key,
+        mnemonic=mnemonic,
+        derive_as=derive_as,
+        mnemonic_index=mnemonic_index,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+        override=override,
+    )
+
+
+@start_app.command("privy")
+def start_privy(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    override: bool = typer.Option(False, "--override", help="Skip confirmation when wallets already exist"),
+    app_id: str | None = _privy_app_id_option(),
+    app_secret: str | None = _privy_app_secret_option(),
+    privy_wallet_id: str | None = _privy_wallet_id_option(),
+) -> None:
+    """Quick start with a Privy-backed wallet."""
+    _run_start(
+        wallet_type=WalletType.PRIVY.value,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=None,
+        mnemonic=None,
+        derive_as=None,
+        mnemonic_index=0,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+        override=override,
+        app_id=app_id,
+        app_secret=app_secret,
+        privy_wallet_id=privy_wallet_id,
+    )
+
+
+@app.command()
+def init(
+    dir: str = _dir_option(),
+    password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+) -> None:
+    """Initialize secrets directory and set master password."""
+    secrets_path = Path(dir)
+
+    if (secrets_path / "master.json").exists():
+        console.print(f"[yellow]Already initialized:[/yellow] {secrets_path}")
+        raise typer.Exit(1)
+
+    secrets_path.mkdir(parents=True, exist_ok=True)
+    safe_chmod(secrets_path, 0o700)
+
+    provider = _get_provider(dir)
+    console.print(PASSWORD_REQUIREMENTS_HINT)
+    pw = _get_password(provider=provider, confirm=True, explicit=password)
+
+    kv_store = SecureKVStore(dir, pw)
+    kv_store.init_master()
+
+    provider = _get_provider(dir, pw)
+    provider.ensure_storage()
+    _maybe_save_runtime_secrets(provider, pw, save_runtime_secrets)
+
+    console.print(f"[green]Initialized.[/green] Secrets directory: {secrets_path}")
+
+
+@add_app.callback(invoke_without_command=True)
+def add(
+    ctx: typer.Context,
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+) -> None:
+    """Add a new wallet (interactive)."""
+    if ctx.invoked_subcommand:
+        return
+    _run_add(
+        wallet_type=None,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=None,
+        mnemonic=None,
+        derive_as=None,
+        mnemonic_index=0,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+    )
+
+
+@add_app.command("local_secure")
+def add_local_secure(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
+    dir: str = _dir_option(),
+    password: str | None = _password_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+) -> None:
+    """Add an encrypted local wallet."""
+    _run_add(
+        wallet_type=WalletType.LOCAL_SECURE.value,
+        wallet_id=wallet_id,
+        generate=generate,
+        private_key=private_key,
+        mnemonic=mnemonic,
+        derive_as=derive_as,
+        mnemonic_index=mnemonic_index,
+        dir=dir,
+        password=password,
+        save_runtime_secrets=save_runtime_secrets,
+    )
+
+
+@add_app.command("raw_secret")
+def add_raw_secret(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
+    mnemonic: str | None = typer.Option(None, "--mnemonic", "-m", help="Import from mnemonic"),
+    derive_as: str | None = _derive_as_option(),
+    mnemonic_index: int = typer.Option(0, "--mnemonic-index", "-mi", help="Mnemonic account index"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+) -> None:
+    """Add a plaintext raw secret wallet."""
+    _run_add(
+        wallet_type=WalletType.RAW_SECRET.value,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=private_key,
+        mnemonic=mnemonic,
+        derive_as=derive_as,
+        mnemonic_index=mnemonic_index,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+    )
+
+
+@add_app.command("privy")
+def add_privy(
+    wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
+    dir: str = _dir_option(),
+    save_runtime_secrets: bool = _save_runtime_secrets_option(),
+    app_id: str | None = _privy_app_id_option(),
+    app_secret: str | None = _privy_app_secret_option(),
+    privy_wallet_id: str | None = _privy_wallet_id_option(),
+) -> None:
+    """Add a Privy-backed wallet."""
+    _run_add(
+        wallet_type=WalletType.PRIVY.value,
+        wallet_id=wallet_id,
+        generate=False,
+        private_key=None,
+        mnemonic=None,
+        derive_as=None,
+        mnemonic_index=0,
+        dir=dir,
+        password=None,
+        save_runtime_secrets=save_runtime_secrets,
+        app_id=app_id,
+        app_secret=app_secret,
+        privy_wallet_id=privy_wallet_id,
+    )
 
 
 @app.command("list")
@@ -1067,30 +1325,110 @@ def inspect(
 
 @app.command()
 def remove(
-    wallet_id: str = typer.Argument(help="Wallet ID to remove"),
+    wallet_id: str | None = typer.Argument(None, help="Wallet ID to remove"),
     dir: str = _dir_option(),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Remove a wallet and its associated files."""
     provider = _get_provider(dir)
+    active_before = provider.get_active_id()
+    target_id = wallet_id
+    warned_local_secure = False
+    if target_id is None:
+        rows = provider.list_wallets()
+        if not rows:
+            console.print("[red]No wallets configured.[/red]")
+            raise typer.Exit(1)
+        if any(conf.type == "local_secure" for _wid, conf, _is_active in rows):
+            console.print(
+                "[yellow]Warning:[/yellow] Transfer out any assets first. If this "
+                "[bold]local_secure[/bold] wallet was generated by agent-wallet, removing it will "
+                "permanently delete the only recoverable wallet record. The private key cannot be "
+                "recovered after removal."
+            )
+            warned_local_secure = True
+        choices = [wid for wid, _conf, _is_active in rows]
+        descriptions = {
+            wid: f"{conf.type}{' (active)' if is_active else ''}"
+            for wid, conf, is_active in rows
+        }
+        target_id = _interactive_select("Select wallet to remove", choices, descriptions)
+        if target_id is None:
+            target_id = _prompt_text(
+                "Select wallet to remove",
+                choices=choices,
+                default=choices[0],
+                action="wallet removal selection",
+            )
     try:
-        conf = provider.get_wallet_config(wallet_id)
+        conf = provider.get_wallet_config(target_id)
     except WalletNotFoundError:
-        console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
+        console.print(f"[red]Wallet '{target_id}' not found.[/red]")
         raise typer.Exit(1)
 
+    if conf.type == "local_secure" and not warned_local_secure:
+        console.print(
+            "[yellow]Warning:[/yellow] Transfer out any assets first. If this "
+            "[bold]local_secure[/bold] wallet was generated by agent-wallet, removing it will "
+            "permanently delete the only recoverable wallet record. The private key cannot be "
+            "recovered after removal."
+        )
+
     if not yes and not _confirm_action(
-        f"Remove wallet '{wallet_id}'?",
+        f"PERMANENTLY delete wallet '{target_id}'? This cannot be undone and the wallet configuration will be removed immediately.",
         default=False,
         action="wallet removal confirmation",
     ):
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(0)
 
-    if conf.type == "local_secure" and provider.has_secret_file(wallet_id):
+    if conf.type == "local_secure" and provider.has_secret_file(target_id):
         console.print(f"  Deleted: [dim]secret_{conf.secret_ref}.json[/dim]")
-    provider.remove_wallet(wallet_id)
-    console.print(f"[green]Wallet '{wallet_id}' removed.[/green]")
+    provider.remove_wallet(target_id)
+    console.print(f"[green]Wallet '{target_id}' removed.[/green]")
+
+    if active_before == target_id:
+        rows = provider.list_wallets()
+        if rows:
+            prompt_reassign = _interactive_select(
+                "Removed the active wallet. Select a new active wallet now?",
+                ["yes", "no"],
+                {
+                    "yes": "Choose a replacement active wallet",
+                    "no": "Leave active wallet unset",
+                },
+            )
+            if prompt_reassign is None:
+                try:
+                    prompt_reassign = _prompt_text(
+                        "Select a new active wallet now?",
+                        choices=["yes", "no"],
+                        default="yes",
+                        action="active wallet reassignment",
+                    )
+                except typer.Exit:
+                    prompt_reassign = None
+            if prompt_reassign == "yes":
+                choices = [wid for wid, _conf, _is_active in rows]
+                descriptions = {
+                    wid: conf.type
+                    for wid, conf, _is_active in rows
+                }
+                new_active = _interactive_select("Select new active wallet", choices, descriptions)
+                if new_active is None:
+                    try:
+                        new_active = _prompt_text(
+                            "Select new active wallet",
+                            choices=choices,
+                            default=choices[0],
+                            action="new active wallet selection",
+                        )
+                    except typer.Exit:
+                        new_active = None
+                if new_active is None:
+                    return
+                provider.set_active(new_active)
+                console.print(f"[green]Active wallet: {new_active}[/green]")
 
 
 @app.command()

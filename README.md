@@ -145,6 +145,8 @@ agent-wallet sign msg "MESSAGE" -n tron   # no -p needed
 
 Or use `--save-runtime-secrets` on any command to persist it to `~/.agent-wallet/runtime_secrets.json` (auto-detected on next run).
 
+For mode-specific help, use hierarchical commands such as `agent-wallet start local_secure --help` or `agent-wallet add privy --help`.
+
 **Next steps:** `agent-wallet use <id>` to switch the active wallet, `agent-wallet sign -h` for all sign options. Full walkthrough: [Getting started](./doc/getting-started.md).
 
 ## Examples

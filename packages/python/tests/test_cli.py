@@ -183,6 +183,21 @@ class TestInit:
 
 
 class TestAdd:
+    def test_add_help_shows_subcommands(self, initialized_dir):
+        result = runner.invoke(app, ["add", "--help"])
+        assert result.exit_code == 0
+        assert "local_secure" in result.output
+        assert "raw_secret" in result.output
+        assert "privy" in result.output
+        assert "--save-runtime-secrets" in result.output
+
+    def test_add_privy_help_is_mode_specific(self, initialized_dir):
+        result = runner.invoke(app, ["add", "privy", "--help"])
+        assert result.exit_code == 0
+        assert "--app-id" in result.output
+        assert "--privy-wallet-id" in result.output
+        assert "--password" not in result.output
+
     def test_add_prompts_for_wallet_type_when_missing(self, initialized_dir):
         result = runner.invoke(
             app,
@@ -336,6 +351,31 @@ class TestAdd:
         assert result.exit_code == 1
         assert "only one of --generate" in result.output
 
+    def test_add_privy_accepts_explicit_flags(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            [
+                "add",
+                "privy",
+                "--wallet-id",
+                "privy_a",
+                "--app-id",
+                "app-id",
+                "--app-secret",
+                "app-secret",
+                "--privy-wallet-id",
+                "wallet-1",
+                "--dir",
+                initialized_dir,
+            ],
+        )
+        assert result.exit_code == 0
+        config = _read_config(initialized_dir)
+        params = config["wallets"]["privy_a"]["params"]
+        assert params["app_id"] == "app-id"
+        assert params["app_secret"] == "app-secret"
+        assert params["wallet_id"] == "wallet-1"
+
 
 class TestListAndInspect:
     def test_list_with_wallets(self, initialized_dir):
@@ -385,6 +425,92 @@ class TestRemove:
         )
         assert result.exit_code == 0
         assert not (Path(initialized_dir) / "secret_remove_me.json").exists()
+
+    def test_remove_prompts_to_select_wallet_when_missing(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w1", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w2", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["remove", "--dir", initialized_dir],
+            input="w2\ny\n",
+        )
+        assert result.exit_code == 0
+        assert "Wallet 'w2' removed." in result.output
+        assert "w2" not in _read_config(initialized_dir)["wallets"]
+
+    def test_remove_without_wallets_fails_cleanly(self, initialized_dir):
+        result = runner.invoke(
+            app,
+            ["remove", "--dir", initialized_dir, "--yes"],
+        )
+        assert result.exit_code == 1
+        assert "No wallets configured." in result.output
+
+    def test_remove_cancelled_after_selection(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w1", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        result = runner.invoke(
+            app,
+            ["remove", "--dir", initialized_dir],
+            input="w1\nn\n",
+        )
+        assert result.exit_code == 0
+        assert "Cancelled." in result.output
+        assert "w1" in _read_config(initialized_dir)["wallets"]
+
+    def test_remove_active_wallet_can_select_new_active_wallet(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w1", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w2", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        runner.invoke(app, ["use", "w1", "--dir", initialized_dir])
+
+        result = runner.invoke(
+            app,
+            ["remove", "w1", "--dir", initialized_dir],
+            input="y\nyes\nw2\n",
+        )
+        assert result.exit_code == 0
+        assert "Active wallet: w2" in result.output
+        assert _read_config(initialized_dir)["active_wallet"] == "w2"
+
+    def test_remove_active_wallet_can_leave_active_unset(self, initialized_dir):
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w1", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        runner.invoke(
+            app,
+            ["add", "raw_secret", "--wallet-id", "w2", "--dir", initialized_dir],
+            input=f"private_key\n{TEST_PRIVATE_KEY}\n",
+        )
+        runner.invoke(app, ["use", "w1", "--dir", initialized_dir])
+
+        result = runner.invoke(
+            app,
+            ["remove", "w1", "--dir", initialized_dir],
+            input="y\nno\n",
+        )
+        assert result.exit_code == 0
+        assert _read_config(initialized_dir).get("active_wallet") is None
 
     def test_remove_missing_wallet(self, initialized_dir):
         result = runner.invoke(
@@ -736,8 +862,23 @@ class TestChangePassword:
 class TestStart:
     def test_start_unknown_wallet_type_fails(self, secrets_dir):
         result = runner.invoke(app, ["start", "unknown", "--dir", secrets_dir])
-        assert result.exit_code == 1
-        assert "Unknown wallet type" in result.output
+        assert result.exit_code == 2
+        assert "No such command 'unknown'" in result.output
+
+    def test_start_help_shows_subcommands(self):
+        result = runner.invoke(app, ["start", "--help"])
+        assert result.exit_code == 0
+        assert "local_secure" in result.output
+        assert "raw_secret" in result.output
+        assert "privy" in result.output
+        assert "--save-runtime-secrets" in result.output
+
+    def test_start_local_secure_help_is_mode_specific(self):
+        result = runner.invoke(app, ["start", "local_secure", "--help"])
+        assert result.exit_code == 0
+        assert "--password" in result.output
+        assert "--generate" in result.output
+        assert "--app-id" not in result.output
 
     def test_start_conflicting_generate_and_private_key(self, secrets_dir):
         result = runner.invoke(
@@ -1125,6 +1266,31 @@ class TestStart:
         )
         assert result.exit_code == 1
         assert "Cannot prompt for privy app id" in result.output
+
+    def test_start_privy_accepts_explicit_flags(self, secrets_dir):
+        result = runner.invoke(
+            app,
+            [
+                "start",
+                "privy",
+                "--wallet-id",
+                "privy1",
+                "--app-id",
+                "app-id",
+                "--app-secret",
+                "app-secret",
+                "--privy-wallet-id",
+                "wallet-1",
+                "--dir",
+                secrets_dir,
+            ],
+        )
+        assert result.exit_code == 0
+        config = _read_config(secrets_dir)
+        params = config["wallets"]["privy1"]["params"]
+        assert params["app_id"] == "app-id"
+        assert params["app_secret"] == "app-secret"
+        assert params["wallet_id"] == "wallet-1"
 
     def test_add_explicit_wallet_id_duplicate_errors(self, initialized_dir):
         """add --wallet-id with duplicate should error, not re-prompt."""

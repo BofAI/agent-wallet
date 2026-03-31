@@ -1,6 +1,6 @@
-# Getting Started 
+# Getting Started
 
-> This guide covers the **TypeScript CLI** installed via npm.
+> This guide covers the `agent-wallet` CLI. The npm and PyPI distributions now share the same command structure, though help text formatting may differ slightly.
 
 This guide walks you through every CLI command in `@bankofai/agent-wallet` — from installation to signing.
 
@@ -21,7 +21,7 @@ Verify the installation:
 $ agent-wallet --help
 ```
 
-Expected output:
+Typical output:
 
 ```
 Usage: agent-wallet <command> [options]
@@ -29,19 +29,18 @@ Usage: agent-wallet <command> [options]
 Commands:
   start             Quick setup: init + create default wallets
   init              Initialize secrets directory and set master password
-  add               Add a new wallet (interactive)
+  add               Add a new wallet
   list              List all configured wallets
   use <id>          Set the active wallet
   inspect <id>      Show wallet details
   remove <id>       Remove a wallet
-  sign tx <data>    Sign a transaction (JSON payload as argument)
-  sign msg <data>   Sign a message (message as argument)
-  sign typed-data <data>  Sign EIP-712 typed data (JSON as argument)
+  sign tx <data>    Sign a transaction
+  sign msg <data>   Sign a message
+  sign typed-data <data>  Sign EIP-712 typed data
   change-password   Change master password
   reset             Delete all wallet data
 
 Options:
-  --password, -p <pw>   Master password (skip interactive prompt)
   --dir, -d <path>      Secrets directory path (default: ~/.agent-wallet)
   --help, -h            Show this help message
 
@@ -50,19 +49,15 @@ Run agent-wallet <command> --help for more info on a command.
 
 Running `agent-wallet` with no arguments shows the same help output.
 
-> Installing from **PyPI** (`pip install 'bankofai-agent-wallet[cli]'`) gives a **Typer** CLI — the banner, command names, and global options above will **not** match byte-for-byte; run `agent-wallet --help` locally.
+Use `agent-wallet start --help`, `agent-wallet start local_secure --help`, or `agent-wallet add privy --help` to inspect mode-specific flags locally.
 
 ---
-
-> **Command reference (§2 onward)** matches the **Python** CLI (`bankofai-agent-wallet`, Typer).  
-> Install: `pip install 'bankofai-agent-wallet[evm,tron,cli]'` — entry point is also `agent-wallet`.  
-> The **npm** package may use different wallet types and flags; see `packages/typescript/README.md`.
 
 ## 2. Concepts
 
 | Concept | Meaning |
 |--------|---------|
-| **Wallet types** | `local_secure` — keys in encrypted `secret_<id>.json`; `raw_secret` — key or mnemonic stored **in plaintext** inside `wallets_config.json` (dev only). |
+| **Wallet types** | `local_secure` — keys in encrypted `secret_<id>.json`; `raw_secret` — key or mnemonic stored **in plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID. |
 | **Signing network** | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:nile`). The CLI picks EVM vs Tron **adapter** from this string. |
 | **Active wallet** | Used when you omit `--wallet-id` / `-w` on `sign`. Set with `use <id>`. |
 | **Master password** | Encrypts `master.json` and `local_secure` secrets. Not used for `raw_secret` wallets. |
@@ -72,28 +67,56 @@ Running `agent-wallet` with no arguments shows the same help output.
 Creates or continues setup for one wallet id.
 
 ```bash
-agent-wallet start [local_secure|raw_secret] [options]
+agent-wallet start
+agent-wallet start local_secure [options]
+agent-wallet start raw_secret [options]
+agent-wallet start privy [options]
 ```
 
-Common options:
+`agent-wallet start` with no subcommand keeps the interactive quick-start flow.
+
+Shared `start` options:
 
 | Option | Description |
 |--------|-------------|
-| `--wallet-id` | Wallet ID (default in prompts: `default_secure` for `local_secure`, `default_raw` for `raw_secret`) |
+| `--wallet-id` | Wallet config ID (default in prompts: `default_secure`, `default_raw`, `default_privy`) |
+| `--save-runtime-secrets` | If set **and** this flow uses runtime secrets, write `runtime_secrets.json` (plain JSON; sensitive) |
+| `-d` / `--dir` | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`) |
+| `--override` | Skip the "already initialized" confirmation when wallets already exist |
+
+`start local_secure` options:
+
+| Option | Description |
+|--------|-------------|
 | `-g` / `--generate` | Generate a new key (`local_secure` only) |
 | `-k` / `--private-key` | Import hex private key |
 | `-m` / `--mnemonic` | Import mnemonic |
 | `-mi` / `--mnemonic-index` | Mnemonic account index (default `0`) |
 | `--derive-as` | `eip155` or `tron` — mnemonic derivation when not prompted |
-| `-p` / `--password` | Master password (`local_secure` only; invalid with `raw_secret`) |
-| `--save-runtime-secrets` | If set **and** a master password is used, write `runtime_secrets.json` (plain JSON with password — sensitive) |
-| `-d` / `--dir` | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`) |
+| `-p` / `--password` | Master password |
 
 **`local_secure` (first time):** creates `master.json`, `wallets_config.json`, and encrypts secrets. If you omit `-p`, the CLI first prints the password requirements, then prompts for **New Master Password**; press Enter to auto-generate a strong password and print it once.
 
 **`local_secure` (already initialized):** asks for the existing master password (or uses env / runtime file), then adds or shows the wallet for `--wallet-id`.
 
-**`raw_secret`:** warns about plaintext storage; cannot use `-p` or `--generate` (`--generate` is rejected for non–`local_secure` flows).
+`start raw_secret` options:
+
+| Option | Description |
+|--------|-------------|
+| `-k` / `--private-key` | Import hex private key |
+| `-m` / `--mnemonic` | Import mnemonic |
+| `-mi` / `--mnemonic-index` | Mnemonic account index (default `0`) |
+| `--derive-as` | `eip155` or `tron` — mnemonic derivation when not prompted |
+
+**`raw_secret`:** warns about plaintext storage.
+
+`start privy` options:
+
+| Option | Description |
+|--------|-------------|
+| `--app-id` | Privy app id |
+| `--app-secret` | Privy app secret |
+| `--privy-wallet-id` | Privy wallet id |
 
 When **`start` creates a new wallet**, that wallet is set as **active** (`set_active`). Re-running `start` for an **existing** wallet id only lists it — active wallet is unchanged unless you use `use`.
 
@@ -111,16 +134,26 @@ agent-wallet init [-d DIR] [-p PASSWORD] [--save-runtime-secrets]
 ## 5. `add`
 
 ```bash
-agent-wallet add <local_secure|raw_secret> [options]
+agent-wallet add [options]
+agent-wallet add local_secure [options]
+agent-wallet add raw_secret [options]
+agent-wallet add privy [options]
 ```
 
 Requires `wallets_config.json` to exist (`provider.is_initialized()`). Run `init` or `start` first.  
 For **`local_secure`**, `master.json` must exist too (use `init` or `start local_secure`); otherwise keystore operations fail.
 
-Same key options as `start` (`--wallet-id`, `-g`, `-k`, `-m`, `-mi`, `--derive-as`, `-p`, `--save-runtime-secrets`, `-d`).
+`agent-wallet add` with no subcommand keeps the interactive wallet-type prompt.
 
-- **`raw_secret`:** do not pass `-p` or `-g`.
-- Mutually exclusive: only one of `--generate`, `--private-key`, `--mnemonic` for material source.
+Shared `add` options: `--wallet-id`, `--save-runtime-secrets`, `-d/--dir`.
+
+`add local_secure` options: `-g/--generate`, `-k/--private-key`, `-m/--mnemonic`, `-mi/--mnemonic-index`, `--derive-as`, `-p/--password`.
+
+`add raw_secret` options: `-k/--private-key`, `-m/--mnemonic`, `-mi/--mnemonic-index`, `--derive-as`.
+
+`add privy` options: `--app-id`, `--app-secret`, `--privy-wallet-id`.
+
+- Mutually exclusive: only one of `--generate`, `--private-key`, `--mnemonic` for secret material source.
 - **`add`** sets active only when there was no active wallet (`add_wallet` default); unlike `start`, it does **not** always call `set_active` on the new id.
 
 ## 6. `list`
@@ -134,7 +167,7 @@ Table: active marker `*`, wallet id, type. No password.
 ## 7. `use`
 
 ```bash
-agent-wallet use <wallet_id> [-d DIR]
+agent-wallet use [wallet_id] [-d DIR]
 ```
 
 ## 8. `inspect`
@@ -148,8 +181,12 @@ Shows type, `secret_<ref>.json` status for `local_secure`, or redacted raw-secre
 ## 9. `remove`
 
 ```bash
-agent-wallet remove <wallet_id> [-d DIR] [--yes|-y]
+agent-wallet remove [wallet_id] [-d DIR] [--yes|-y]
 ```
+
+If `wallet_id` is omitted, the CLI prompts you to select a wallet interactively before confirmation.
+
+If you remove the active wallet and other wallets still exist, the CLI can optionally prompt you to choose a new active wallet immediately.
 
 ## 10. `sign`
 

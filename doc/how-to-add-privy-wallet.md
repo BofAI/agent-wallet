@@ -17,7 +17,17 @@ This guide shows how to add an existing Privy wallet to **agent-wallet CLI** (us
 Use `add privy` to add a Privy wallet into `wallets_config.json`.
 
 ```bash
-agent-wallet add privy 
+agent-wallet add privy
+```
+
+Or pass the credentials non-interactively:
+
+```bash
+agent-wallet add privy \
+  --wallet-id my_privy_wallet \
+  --app-id <privy_app_id> \
+  --app-secret <privy_app_secret> \
+  --privy-wallet-id <privy_wallet_id>
 ```
 
 The CLI will guide you depending on your situation:
