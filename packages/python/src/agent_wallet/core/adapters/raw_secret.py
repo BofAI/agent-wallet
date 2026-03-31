@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from agent_wallet.core.adapters.local import LocalSigner
 from agent_wallet.core.config import RawSecretMnemonicParams, RawSecretPrivateKeyParams
-from agent_wallet.core.providers.wallet_builder import (
-    decode_private_key,
-    derive_key_from_mnemonic,
-    parse_network_family,
-)
+from agent_wallet.core.utils.keys import decode_private_key, derive_key_from_mnemonic
+from agent_wallet.core.utils.network import parse_network_family
 
 
 class RawSecretSigner(LocalSigner):
@@ -17,7 +14,7 @@ class RawSecretSigner(LocalSigner):
     def __init__(
         self,
         params: RawSecretPrivateKeyParams | RawSecretMnemonicParams,
-        network: str,
+        network: str | None,
     ) -> None:
         family = parse_network_family(network)
         if isinstance(params, RawSecretPrivateKeyParams):

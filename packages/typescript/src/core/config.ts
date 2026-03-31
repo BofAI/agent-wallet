@@ -41,19 +41,26 @@ export const RawSecretParamsSchema = z.discriminatedUnion('source', [
   RawSecretMnemonicParamsSchema,
 ])
 
+export const PrivyWalletParamsSchema = z.object({
+  app_id: z.string(),
+  app_secret: z.string(),
+  wallet_id: z.string(),
+})
+
 // ---------------------------------------------------------------------------
 // Zod schemas — WalletConfig (unified type + params)
 // ---------------------------------------------------------------------------
 
 export const WalletConfigSchema = z
   .object({
-    type: z.enum(['local_secure', 'raw_secret']),
-    params: z.union([LocalSecureWalletParamsSchema, RawSecretParamsSchema]),
+    type: z.enum(['local_secure', 'raw_secret', 'privy']),
+    params: z.union([LocalSecureWalletParamsSchema, RawSecretParamsSchema, PrivyWalletParamsSchema]),
   })
   .refine(
     (data) => {
       if (data.type === 'local_secure') return 'secret_ref' in data.params
       if (data.type === 'raw_secret') return 'source' in data.params
+      if (data.type === 'privy') return 'app_id' in data.params
       return false
     },
     { message: 'params must match wallet type' },
@@ -72,6 +79,7 @@ export type LocalSecureWalletParams = z.infer<typeof LocalSecureWalletParamsSche
 export type RawSecretPrivateKeyParams = z.infer<typeof RawSecretPrivateKeyParamsSchema>
 export type RawSecretMnemonicParams = z.infer<typeof RawSecretMnemonicParamsSchema>
 export type RawSecretParams = z.infer<typeof RawSecretParamsSchema>
+export type PrivyWalletParams = z.infer<typeof PrivyWalletParamsSchema>
 export type WalletConfig = z.infer<typeof WalletConfigSchema>
 export type WalletsTopology = z.infer<typeof WalletsTopologySchema>
 

@@ -8,61 +8,23 @@ import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { randomBytes } from 'node:crypto'
 
-import { WalletType, type Eip712Capable, Network } from '../core/base.js'
+import { WalletType, type Eip712Capable } from '../core/base.js'
 import {
   type LocalSecureWalletParams,
+  type PrivyWalletParams,
   type RawSecretMnemonicParams,
   type RawSecretPrivateKeyParams,
   type WalletConfig,
 } from '../core/config.js'
-import { mnemonicToAccount } from 'viem/accounts'
 import { RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME } from '../core/constants.js'
 import { DecryptionError, WalletError } from '../core/errors.js'
 import { ConfigWalletProvider } from '../core/providers/config-provider.js'
+import { decodePrivateKey, deriveKeyFromMnemonic } from '../core/utils/keys.js'
+import { parseNetworkFamily } from '../core/utils/network.js'
 import { SecureKVStore } from '../local/kv-store.js'
 import { loadLocalSecret } from '../local/secret-loader.js'
 
 // --- Helpers ---
-export function parseNetworkFamily(network: string | undefined): Network {
-  const normalized = network?.trim().toLowerCase()
-  if (!normalized) throw new Error('network is required')
-  if (normalized === 'tron' || normalized.startsWith('tron:')) return Network.TRON
-  if (normalized === 'eip155' || normalized.startsWith('eip155:')) return Network.EVM
-  throw new Error("network must start with 'tron' or 'eip155'")
-}
-
-export function decodePrivateKey(privateKey: string): Uint8Array {
-  const normalized = privateKey.trim().replace(/^0x/, '')
-  if (normalized.length !== 64) {
-    throw new Error('Private key must be 32 bytes (64 hex characters)')
-  }
-  if (!/^[0-9a-fA-F]+$/.test(normalized)) {
-    throw new Error('Private key must be a valid hex string')
-  }
-  return Uint8Array.from(Buffer.from(normalized, 'hex'))
-}
-
-export function deriveKeyFromMnemonic(
-  network: Network,
-  mnemonic: string,
-  accountIndex: number,
-): Uint8Array {
-  const path =
-    network === Network.TRON
-      ? (`m/44'/195'/0'/0/${accountIndex}` as `m/44'/60'/${string}`)
-      : undefined // viem defaults to m/44'/60'/0'/0/{addressIndex}
-
-  const account = path
-    ? mnemonicToAccount(mnemonic, { path })
-    : mnemonicToAccount(mnemonic, { addressIndex: accountIndex })
-
-  const privateKey = account.getHdKey().privateKey
-  if (!privateKey) {
-    throw new Error(`Failed to derive private key from mnemonic for ${network}`)
-  }
-  return privateKey
-}
-
 export function expandTilde(p: string): string {
   if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2))
   return p
@@ -73,6 +35,7 @@ const ANSI_RED = '\x1b[31m'
 const ANSI_RESET = '\x1b[0m'
 
 export interface CliIO {
+  interactive?: boolean
   print(msg: string): void
   prompt(
     question: string,
@@ -116,6 +79,7 @@ function createConsoleIO(
   output: NodeJS.WritableStream = process.stdout,
 ): CliIO {
   return {
+    interactive: Boolean(process.stdin.isTTY),
     print(msg: string) {
       output.write(msg + '\n')
     },
@@ -164,6 +128,47 @@ function createConsoleIO(
   }
 }
 
+function requireInteractive(io: CliIO, action: string): void {
+  if (io.interactive !== false) return
+  io.print(`Cannot prompt for ${action} in a non-interactive environment. Pass the required flags explicitly.`)
+  throw new CliExit(1)
+}
+
+async function promptInput(
+  io: CliIO,
+  question: string,
+  opts?: { password?: boolean; choices?: string[]; defaultValue?: string },
+  action?: string,
+): Promise<string> {
+  requireInteractive(io, action ?? question.toLowerCase())
+  return io.prompt(question, opts)
+}
+
+async function confirmInput(
+  io: CliIO,
+  question: string,
+  defaultValue = false,
+  action?: string,
+): Promise<boolean> {
+  requireInteractive(io, action ?? question.toLowerCase())
+  return io.confirm(question, defaultValue)
+}
+
+async function selectInput(
+  io: CliIO,
+  promptText: string,
+  choices: string[],
+  descriptions?: Record<string, string>,
+  defaultValue?: string,
+  action?: string,
+): Promise<string> {
+  requireInteractive(io, action ?? promptText.toLowerCase())
+  return (
+    (await io.select?.(promptText, choices, descriptions)) ??
+    (await io.prompt(promptText, { choices, defaultValue: defaultValue ?? choices[0] }))
+  )
+}
+
 function validatePasswordStrength(password: string): string[] {
   const errors: string[] = []
   if (password.length < 8) errors.push('at least 8 characters')
@@ -191,7 +196,7 @@ async function promptNewPassword(
   },
 ): Promise<string> {
   while (true) {
-    const pw = await io.prompt(opts?.promptLabel ?? NEW_MASTER_PASSWORD_LABEL, { password: true })
+    const pw = await promptInput(io, opts?.promptLabel ?? NEW_MASTER_PASSWORD_LABEL, { password: true })
     if (!pw && opts?.allowEmpty) {
       return pw
     }
@@ -202,7 +207,7 @@ async function promptNewPassword(
       continue
     }
 
-    const pw2 = await io.prompt(opts?.confirmLabel ?? 'Confirm New Master Password', {
+    const pw2 = await promptInput(io, opts?.confirmLabel ?? 'Confirm New Master Password', {
       password: true,
     })
     if (pw !== pw2) {
@@ -250,7 +255,12 @@ async function getPassword(
   if (opts?.confirm) {
     return promptNewPassword(io)
   }
-  return io.prompt('Master Password (enter your existing password to unlock)', { password: true })
+  return promptInput(
+    io,
+    'Master Password (enter your existing password to unlock)',
+    { password: true },
+    'master password',
+  )
 }
 
 async function getVerifiedPassword(
@@ -292,9 +302,12 @@ async function getVerifiedPassword(
   // Interactive retry loop
   for (let attempt = 0; attempt < 2; attempt++) {
     io.print('✖ Wrong password, please try again.')
-    const retryPw = await io.prompt('Master Password (enter your existing password to unlock)', {
-      password: true,
-    })
+    const retryPw = await promptInput(
+      io,
+      'Master Password (enter your existing password to unlock)',
+      { password: true },
+      'master password',
+    )
     const retryKv = new SecureKVStore(dir, retryPw)
     try {
       retryKv.verifyPassword()
@@ -391,7 +404,11 @@ async function selectWalletType(
   promptText: string = 'Quick start type',
 ): Promise<WalletType> {
   if (explicit !== undefined) {
-    if (explicit === WalletType.LOCAL_SECURE || explicit === WalletType.RAW_SECRET) {
+    if (
+      explicit === WalletType.LOCAL_SECURE ||
+      explicit === WalletType.RAW_SECRET ||
+      explicit === WalletType.PRIVY
+    ) {
       return explicit
     }
     io.print(`Unknown wallet type: ${explicit}. Use: ${Object.values(WalletType).join(', ')}`)
@@ -401,12 +418,15 @@ async function selectWalletType(
   const descriptions: Record<string, string> = {
     local_secure: 'Encrypted key stored locally (recommended)',
     raw_secret: 'Private key/mnemonic saved in plaintext config',
+    privy: 'Privy API-backed wallet',
   }
-  const selected =
-    (await io.select?.(promptText, choices, descriptions)) ??
-    (await io.prompt(promptText, { choices }))
+  const selected = await selectInput(io, promptText, choices, descriptions, undefined, promptText.toLowerCase())
 
-  if (selected === WalletType.LOCAL_SECURE || selected === WalletType.RAW_SECRET) {
+  if (
+    selected === WalletType.LOCAL_SECURE ||
+    selected === WalletType.RAW_SECRET ||
+    selected === WalletType.PRIVY
+  ) {
     return selected
   }
 
@@ -439,7 +459,12 @@ async function promptWalletId(
   provider?: ConfigWalletProvider,
 ): Promise<string> {
   while (true) {
-    const name = await io.prompt('Wallet ID (e.g. my_wallet_1)', { defaultValue })
+    const name = await promptInput(
+      io,
+      'Wallet ID (e.g. my_wallet_1)',
+      { defaultValue },
+      'wallet id',
+    )
     if (provider) {
       try {
         provider.getWalletConfig(name)
@@ -478,10 +503,7 @@ async function selectImportSourceInteractive(
     private_key: 'Import an existing hex private key',
     mnemonic: 'Derive from a BIP-39 mnemonic phrase',
   }
-  return (
-    (await io.select?.('Import source', choices, descriptions)) ??
-    (await io.prompt('Import source', { choices, defaultValue: choices[0] }))
-  )
+  return selectInput(io, 'Import source', choices, descriptions, choices[0], 'import source')
 }
 
 async function promptDerivationProfile(io: CliIO): Promise<string> {
@@ -490,9 +512,13 @@ async function promptDerivationProfile(io: CliIO): Promise<string> {
     eip155: 'EVM chains (Ethereum, BSC, Polygon, etc.)',
     tron: 'TRON network',
   }
-  return (
-    (await io.select?.('Derive mnemonic as', choices, descriptions)) ??
-    (await io.prompt('Derive mnemonic as', { choices, defaultValue: 'eip155' }))
+  return selectInput(
+    io,
+    'Derive mnemonic as',
+    choices,
+    descriptions,
+    'eip155',
+    'mnemonic derivation profile',
   )
 }
 
@@ -505,15 +531,44 @@ async function promptMnemonicMaterial(
     return { mnemonic: mnemonic.trim(), mnemonicIndex }
   }
 
-  const promptedMnemonic = await io.prompt('Paste mnemonic phrase', { password: true })
-  const promptedIndex = await io.prompt('Account index (0 = first account)', {
-    defaultValue: String(mnemonicIndex),
-  })
-  const parsedIndex = Number(promptedIndex)
-  if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
-    throw new Error('Invalid account index.')
+  while (true) {
+    const promptedMnemonic = (await promptInput(
+      io,
+      'Paste mnemonic phrase',
+      { password: true },
+      'mnemonic phrase',
+    )).trim()
+    if (!promptedMnemonic) {
+      io.print('Paste mnemonic phrase is required.')
+      continue
+    }
+    const promptedIndex = await promptInput(
+      io,
+      'Account index (0 = first account)',
+      { defaultValue: String(mnemonicIndex) },
+      'account index',
+    )
+    const parsedIndex = Number(promptedIndex)
+    if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
+      io.print('Invalid account index.')
+      continue
+    }
+    return { mnemonic: promptedMnemonic, mnemonicIndex: parsedIndex }
   }
-  return { mnemonic: promptedMnemonic.trim(), mnemonicIndex: parsedIndex }
+}
+
+async function promptPrivateKey(io: CliIO, explicitPrivateKey?: string): Promise<Buffer> {
+  if (explicitPrivateKey !== undefined) {
+    return Buffer.from(decodePrivateKey(explicitPrivateKey))
+  }
+  while (true) {
+    const keyHex = await promptInput(io, 'Paste private key (hex)', { password: true }, 'private key')
+    try {
+      return Buffer.from(decodePrivateKey(keyHex))
+    } catch (error) {
+      io.print((error as Error).message)
+    }
+  }
 }
 
 async function resolvePrivateKeyInput(
@@ -535,9 +590,7 @@ async function resolvePrivateKeyInput(
   })
   if (source === 'generate') return null
   if (source === 'private_key') {
-    const keyHex =
-      opts.privateKey ?? (await io.prompt('Paste private key (hex)', { password: true }))
-    return Buffer.from(decodePrivateKey(keyHex))
+    return promptPrivateKey(io, opts.privateKey)
   }
   // mnemonic
   if (opts.mnemonicIndex && !opts.mnemonic) {
@@ -570,9 +623,7 @@ async function buildRawSecretConfig(
   })
 
   if (source === 'private_key') {
-    const keyHex =
-      opts.privateKey ?? (await io.prompt('Paste private key (hex)', { password: true }))
-    const normalized = '0x' + Buffer.from(decodePrivateKey(keyHex)).toString('hex')
+    const normalized = '0x' + (await promptPrivateKey(io, opts.privateKey)).toString('hex')
     return {
       type: 'raw_secret',
       params: { source: 'private_key', private_key: normalized } as RawSecretPrivateKeyParams,
@@ -596,6 +647,64 @@ async function buildRawSecretConfig(
       mnemonic,
       account_index: mnemonicIndex,
     } as RawSecretMnemonicParams,
+  }
+}
+
+async function promptRequired(io: CliIO, label: string, opts?: { password?: boolean }): Promise<string> {
+  while (true) {
+    const value = await promptInput(io, label, { password: opts?.password }, label.toLowerCase())
+    const trimmed = value.trim()
+    if (trimmed) return trimmed
+    io.print(`${label} is required.`)
+  }
+}
+
+async function buildPrivyConfig(io: CliIO, provider?: ConfigWalletProvider): Promise<WalletConfig> {
+  const existing = provider
+    ? provider.listWallets().filter(([, conf]) => conf.type === WalletType.PRIVY)
+    : []
+  if (existing.length > 0) {
+    const reuseChoice = 'Enter new Privy credentials'
+    const choices = existing.map(([walletId]) => walletId).concat(reuseChoice)
+    const selection = await selectInput(
+      io,
+      'Select existing Privy wallet or enter new credentials',
+      choices,
+      undefined,
+      choices[0],
+      'privy wallet selection',
+    )
+    if (selection && selection !== reuseChoice) {
+      const conf = provider?.getWalletConfig(selection)
+      if (!conf || conf.type !== WalletType.PRIVY) {
+        throw new Error('Selected Privy wallet is no longer available')
+      }
+      const params = conf.params as PrivyWalletParams
+      const walletId = await promptRequired(io, 'Privy wallet id')
+      return {
+        type: 'privy',
+        params: {
+          app_id: params.app_id,
+          app_secret: params.app_secret,
+          wallet_id: walletId,
+        },
+      }
+    }
+  }
+
+  const appId = await promptRequired(io, 'Privy app id')
+  const appSecret = await promptRequired(io, 'Privy app secret (input hidden)', {
+    password: true,
+  })
+  const walletId = await promptRequired(io, 'Privy wallet id')
+
+  return {
+    type: 'privy',
+    params: {
+      app_id: appId,
+      app_secret: appSecret,
+      wallet_id: walletId,
+    },
   }
 }
 
@@ -660,9 +769,14 @@ export async function cmdStart(
           exit: 'Exit without changes',
         }
         const choices = ['add', 'exit']
-        const selected =
-          (await io.select?.('What would you like to do?', choices, descriptions)) ??
-          (await io.prompt('Add a new wallet?', { choices, defaultValue: 'exit' }))
+        const selected = await selectInput(
+          io,
+          'What would you like to do?',
+          choices,
+          descriptions,
+          'exit',
+          'existing wallet action',
+        )
         if (selected === 'exit') {
           throw new CliExit(0)
         }
@@ -800,6 +914,35 @@ export async function cmdStart(
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'raw_secret']])
+  } else if (wtype === WalletType.PRIVY) {
+    if (opts?.password) {
+      io.print('--password is only valid for local_secure quick start.')
+      throw new CliExit(1)
+    }
+    provider = getProvider(dir)
+    if (opts?.walletId) {
+      try {
+        provider.getWalletConfig(opts.walletId)
+        io.print(`Wallet '${opts.walletId}' already exists.`)
+        throw new CliExit(1)
+      } catch (e) {
+        if (e instanceof CliExit) throw e
+      }
+    }
+    const targetName = opts?.walletId ?? (await promptWalletId(io, 'default_privy', provider))
+    const privyConfig = await buildPrivyConfig(io, provider)
+
+    provider.ensureStorage()
+    try {
+      provider.addWallet(targetName, privyConfig)
+      provider.setActive(targetName)
+    } catch (e) {
+      io.print(`Error: ${(e as Error).message}`)
+      throw new CliExit(1)
+    }
+
+    io.print(`\nWallet '${targetName}' created:`)
+    printWalletTable(io, [[targetName, 'privy']])
   } else {
     io.print(`Unsupported quick-start type: ${wtype}`)
     throw new CliExit(1)
@@ -894,6 +1037,13 @@ export async function cmdAdd(
         mnemonicIndex: opts?.mnemonicIndex ?? 0,
       }),
     )
+  } else if (wtype === WalletType.PRIVY) {
+    if (opts?.password) {
+      io.print('--password is only valid for local_secure wallets.')
+      throw new CliExit(1)
+    }
+    targetName = opts?.walletId ?? (await promptWalletId(io, 'default_privy', provider))
+    provider.addWallet(targetName, await buildPrivyConfig(io, provider))
   }
 
   io.print(`Wallet '${targetName}' added. Config updated.`)
@@ -954,6 +1104,10 @@ export async function cmdInspect(walletId: string, dir: string, io: CliIO): Prom
       io.print('Mnemonic    [redacted]')
       io.print(`Account Index ${params.account_index}`)
     }
+  } else if (conf.type === 'privy') {
+    io.print('Privy App ID [redacted]')
+    io.print('Privy App Secret [redacted]')
+    io.print('Privy Wallet ID [redacted]')
   }
 }
 
@@ -973,7 +1127,12 @@ export async function cmdRemove(
   }
 
   if (!yes) {
-    const confirmed = await io.confirm(`Remove wallet '${walletId}'?`, false)
+    const confirmed = await confirmInput(
+      io,
+      `Remove wallet '${walletId}'?`,
+      false,
+      'wallet removal confirmation',
+    )
     if (!confirmed) {
       io.print('Cancelled.')
       throw new CliExit(0)
@@ -1000,9 +1159,14 @@ export async function cmdUse(walletId: string, dir: string, io: CliIO): Promise<
     const descriptions = Object.fromEntries(
       rows.map(([wid, conf, isActive]) => [wid, `${conf.type}${isActive ? ' (active)' : ''}`]),
     )
-    const selected =
-      (await io.select?.('Select wallet', choices, descriptions)) ??
-      (await io.prompt('Select wallet', { choices, defaultValue: choices[0] }))
+    const selected = await selectInput(
+      io,
+      'Select wallet',
+      choices,
+      descriptions,
+      choices[0],
+      'wallet selection',
+    )
     targetId = selected
   }
   try {
@@ -1026,7 +1190,7 @@ function resolveWalletId(explicit: string | undefined, dir: string, io: CliIO): 
   const activeId = provider.getActiveId()
   if (activeId) return activeId
   io.print(
-    "No wallet specified and no active wallet set. Use '--wallet-id <id>' or 'agent-wallet use <id>'.",
+    "No wallet specified and no active wallet set. Use '--wallet-id <id>' or 'agent-wallet use [id]'.",
   )
   throw new CliExit(1)
 }
@@ -1049,12 +1213,11 @@ export async function cmdSignTx(
   network: string | undefined,
   dir: string,
   io: CliIO,
-  opts?: { password?: string; saveRuntimeSecrets?: boolean },
+  opts?: {
+    password?: string
+    saveRuntimeSecrets?: boolean
+  },
 ): Promise<void> {
-  if (!network) {
-    io.print('--network is required for sign commands.')
-    throw new CliExit(1)
-  }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
   const pw = await getPassword(io, {
@@ -1085,6 +1248,10 @@ export async function cmdSignTx(
       io.print(`Error: ${(e as Error).message}`)
       throw new CliExit(1)
     }
+    if (e instanceof Error) {
+      io.print(`Error: ${e.message}`)
+      throw new CliExit(1)
+    }
     throw e
   }
 }
@@ -1095,12 +1262,11 @@ export async function cmdSignMsg(
   network: string | undefined,
   dir: string,
   io: CliIO,
-  opts?: { password?: string; saveRuntimeSecrets?: boolean },
+  opts?: {
+    password?: string
+    saveRuntimeSecrets?: boolean
+  },
 ): Promise<void> {
-  if (!network) {
-    io.print('--network is required for sign commands.')
-    throw new CliExit(1)
-  }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
   const pw = await getPassword(io, {
@@ -1124,6 +1290,10 @@ export async function cmdSignMsg(
       io.print(`Error: ${e.message}`)
       throw new CliExit(1)
     }
+    if (e instanceof Error) {
+      io.print(`Error: ${e.message}`)
+      throw new CliExit(1)
+    }
     throw e
   }
 }
@@ -1134,12 +1304,11 @@ export async function cmdSignTypedData(
   network: string | undefined,
   dir: string,
   io: CliIO,
-  opts?: { password?: string; saveRuntimeSecrets?: boolean },
+  opts?: {
+    password?: string
+    saveRuntimeSecrets?: boolean
+  },
 ): Promise<void> {
-  if (!network) {
-    io.print('--network is required for sign commands.')
-    throw new CliExit(1)
-  }
   const walletId = resolveWalletId(wallet, dir, io)
   const baseProvider = getProvider(dir)
   const pw = await getPassword(io, {
@@ -1166,6 +1335,10 @@ export async function cmdSignTypedData(
     }
     if (e instanceof WalletError || e instanceof SyntaxError) {
       io.print(`Error: ${(e as Error).message}`)
+      throw new CliExit(1)
+    }
+    if (e instanceof Error) {
+      io.print(`Error: ${e.message}`)
       throw new CliExit(1)
     }
     throw e
@@ -1252,15 +1425,22 @@ export async function cmdReset(dir: string, yes: boolean, io: CliIO): Promise<vo
   io.print('')
 
   if (!yes) {
-    const confirmed = await io.confirm(
+    const confirmed = await confirmInput(
+      io,
       'Are you sure you want to reset? This cannot be undone.',
       false,
+      'wallet reset confirmation',
     )
     if (!confirmed) {
       io.print('Cancelled.')
       throw new CliExit(0)
     }
-    const confirmed2 = await io.confirm('Really delete everything? Last chance!', false)
+    const confirmed2 = await confirmInput(
+      io,
+      'Really delete everything? Last chance!',
+      false,
+      'wallet reset confirmation',
+    )
     if (!confirmed2) {
       io.print('Cancelled.')
       throw new CliExit(0)
@@ -1343,7 +1523,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('Quick setup: initialize and create default wallets.')
         io.print('')
         io.print('Arguments:')
-        io.print('  wallet_type           local_secure or raw_secret')
+        io.print('  wallet_type           local_secure, raw_secret, or privy')
         io.print('')
         io.print('Options:')
         io.print(
@@ -1377,7 +1557,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('Add a new wallet.')
         io.print('')
         io.print('Arguments:')
-        io.print('  wallet_type           local_secure or raw_secret')
+        io.print('  wallet_type           local_secure, raw_secret, or privy')
         io.print('')
         io.print('Options:')
         io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1401,7 +1581,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print(HELP_OPT)
         break
       case 'use':
-        io.print('Usage: agent-wallet use <wallet-id> [options]')
+        io.print('Usage: agent-wallet use [wallet-id] [options]')
         io.print('')
         io.print('Set the active wallet.')
         io.print('')
@@ -1489,12 +1669,12 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('')
         io.print('Commands:')
         io.print(
-          '  start <type>      Quick setup: init + create wallet (local_secure or raw_secret)',
+          '  start <type>      Quick setup: init + create wallet (local_secure, raw_secret, or privy)',
         )
         io.print('  init              Initialize secrets directory and set master password')
-        io.print('  add <type>        Add a new wallet (local_secure or raw_secret)')
+        io.print('  add <type>        Add a new wallet (local_secure, raw_secret, or privy)')
         io.print('  list              List all configured wallets')
-        io.print('  use <id>          Set the active wallet')
+        io.print('  use [id]          Set the active wallet (interactive if omitted)')
         io.print('  inspect <id>      Show wallet details')
         io.print('  remove <id>       Remove a wallet')
         io.print('  sign tx <data>    Sign a transaction (JSON payload)')
@@ -1567,10 +1747,6 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         await cmdList(dir, cliIO)
         break
       case 'use':
-        if (!subcommand && args.length === 0) {
-          cliIO.print('Usage: agent-wallet use <wallet-id>')
-          return 1
-        }
         await cmdUse(subcommand ?? args[0], dir, cliIO)
         break
       case 'inspect':
@@ -1605,7 +1781,10 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
               (options.network ?? options.n) as string | undefined,
               dir,
               cliIO,
-              { password, saveRuntimeSecrets },
+              {
+                password,
+                saveRuntimeSecrets,
+              },
             )
             break
           case 'msg':
@@ -1615,7 +1794,10 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
               (options.network ?? options.n) as string | undefined,
               dir,
               cliIO,
-              { password, saveRuntimeSecrets },
+              {
+                password,
+                saveRuntimeSecrets,
+              },
             )
             break
           case 'typed-data':
@@ -1625,7 +1807,10 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
               (options.network ?? options.n) as string | undefined,
               dir,
               cliIO,
-              { password, saveRuntimeSecrets },
+              {
+                password,
+                saveRuntimeSecrets,
+              },
             )
             break
           default:

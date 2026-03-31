@@ -25,6 +25,12 @@ const ENV_KEYS = [
   'TRON_MNEMONIC',
   'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
   'TRON_ACCOUNT_INDEX',
+  'PRIVY_APP_ID',
+  'PRIVY_APP_SECRET',
+  'PRIVY_WALLET_ID',
+  'AGENT_WALLET_PRIVY_APP_ID',
+  'AGENT_WALLET_PRIVY_APP_SECRET',
+  'AGENT_WALLET_PRIVY_WALLET_ID',
 ]
 
 const NONEXISTENT_DIR = '/tmp/nonexistent-agent-wallet-test-dir'
@@ -95,28 +101,26 @@ describe('resolver – no valid wallet source', () => {
     })
 
     it('throws when network is missing even with a valid privateKey', async () => {
-      const provider = new EnvWalletProvider({
-        privateKey: '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b',
-      })
+      process.env.AGENT_WALLET_PRIVATE_KEY =
+        '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
+      const provider = new EnvWalletProvider({})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
 
     it('throws when network is missing even with a valid mnemonic', async () => {
-      const provider = new EnvWalletProvider({
-        mnemonic: 'test test test test test test test test test test test junk',
-      })
+      process.env.AGENT_WALLET_MNEMONIC = 'test test test test test test test test test test test junk'
+      const provider = new EnvWalletProvider({})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
 
-    it('constructor throws when both privateKey and mnemonic are provided', () => {
-      expect(
-        () =>
-          new EnvWalletProvider({
-            privateKey: 'deadbeef',
-            mnemonic:
-              'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
-          }),
-      ).toThrow('Provide only one of AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC')
+    it('throws when both privateKey and mnemonic are provided', async () => {
+      process.env.AGENT_WALLET_PRIVATE_KEY = 'deadbeef'
+      process.env.AGENT_WALLET_MNEMONIC =
+        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+      const provider = new EnvWalletProvider({ network: 'evm' })
+      await expect(provider.getActiveWallet()).rejects.toThrow(
+        'Provide only one of AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC',
+      )
     })
   })
 

@@ -1,6 +1,6 @@
 {
   "name": "@bankofai/agent-wallet",
-  "version": "2.3.1",
+  "version": "2.4.0-beta.0",
   "description": "Universal multi-chain secure signing SDK for AI agents",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "tsc --noEmit && eslint src/",
+    "lint": "tsc --noEmit && eslint src/ examples/",
     "format": "prettier --write src/ tests/",
     "format:check": "prettier --check src/ tests/",
     "prepublishOnly": "pnpm build",

@@ -10,6 +10,7 @@ import pytest
 
 from agent_wallet.core.config import (
     LocalSecureWalletParams,
+    PrivyWalletParams,
     RawSecretMnemonicParams,
     WalletConfig,
     WalletsTopology,
@@ -84,6 +85,24 @@ class TestWalletConfig:
                     },
                 }
             )
+
+    def test_privy_wallet(self):
+        conf = WalletsTopology.model_validate(
+            {
+                "wallets": {
+                    "privy": {
+                        "type": "privy",
+                        "params": {
+                            "app_id": "app",
+                            "app_secret": "secret",
+                            "wallet_id": "wallet",
+                        },
+                    }
+                },
+            }
+        )
+        assert conf.wallets["privy"].type == "privy"
+        assert isinstance(conf.wallets["privy"].params, PrivyWalletParams)
 
 
 class TestLoadSaveConfig:

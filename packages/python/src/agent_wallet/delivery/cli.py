@@ -19,6 +19,7 @@ from rich.table import Table
 from agent_wallet.core.base import Eip712Capable, WalletType
 from agent_wallet.core.config import (
     LocalSecureWalletParams,
+    PrivyWalletParams,
     RawSecretMnemonicParams,
     RawSecretPrivateKeyParams,
     WalletConfig,
@@ -31,12 +32,9 @@ from agent_wallet.core.errors import (
     WalletNotFoundError,
 )
 from agent_wallet.core.providers.config_provider import ConfigWalletProvider
-from agent_wallet.core.providers.wallet_builder import (
-    decode_private_key,
-    derive_key_from_mnemonic,
-    parse_network_family,
-)
 from agent_wallet.core.utils import safe_chmod
+from agent_wallet.core.utils.keys import decode_private_key, derive_key_from_mnemonic
+from agent_wallet.core.utils.network import parse_network_family
 from agent_wallet.local.kv_store import SecureKVStore
 from agent_wallet.local.secret_loader import load_local_secret
 
@@ -160,13 +158,53 @@ def _require_interactive(action: str) -> None:
     raise typer.Exit(1)
 
 
+def _prompt_text(
+    label: str,
+    *,
+    password: bool = False,
+    choices: list[str] | None = None,
+    default: str | None = None,
+    action: str | None = None,
+) -> str:
+    _require_interactive(action or label.lower())
+    value = Prompt.ask(f"[bold]{label}[/bold]", password=password, choices=choices, default=default)
+    return value or ""
+
+
+def _confirm_action(message: str, *, default: bool = False, action: str | None = None) -> bool:
+    _require_interactive(action or message.lower())
+    return Confirm.ask(message, default=default)
+
+
 def _prompt_password_value(label: str, *, allow_empty: bool = False) -> str:
-    _require_interactive(label.lower())
-    value = Prompt.ask(f"[bold]{label}[/bold]", password=True)
-    if not value and not allow_empty:
+    while True:
+        value = _prompt_text(label, password=True)
+        if value or allow_empty:
+            return value
         console.print("[red]Password cannot be empty.[/red]")
-        raise typer.Exit(1)
-    return value
+
+
+def _prompt_new_password(
+    *,
+    prompt_label: str = NEW_MASTER_PASSWORD_LABEL,
+    confirm_label: str = "Confirm New Master Password",
+    allow_empty: bool = False,
+) -> str:
+    while True:
+        pw = _prompt_password_value(prompt_label, allow_empty=allow_empty)
+        if not pw and allow_empty:
+            return pw
+
+        errors = _validate_password_strength(pw)
+        if errors:
+            console.print(_format_password_error(errors))
+            continue
+
+        pw2 = _prompt_password_value(confirm_label)
+        if pw != pw2:
+            console.print("[red]Passwords do not match.[/red]")
+            continue
+        return pw
 
 
 def _get_password(
@@ -195,22 +233,9 @@ def _get_password(
         return pw
     if not prompt_if_missing:
         return None
-    label = (
-        NEW_MASTER_PASSWORD_LABEL
-        if confirm
-        else "Master Password (enter your existing password to unlock)"
-    )
-    pw = _prompt_password_value(label)
     if confirm:
-        errors = _validate_password_strength(pw)
-        if errors:
-            console.print(_format_password_error(errors))
-            raise typer.Exit(1)
-        pw2 = _prompt_password_value("Confirm New Master Password")
-        if pw != pw2:
-            console.print("[red]Passwords do not match.[/red]")
-            raise typer.Exit(1)
-    return pw
+        return _prompt_new_password()
+    return _prompt_password_value("Master Password (enter your existing password to unlock)")
 
 
 def _get_verified_password(
@@ -330,7 +355,7 @@ def _managed_json_files(secrets_path: Path) -> list[Path]:
 async def _sign_transaction_with_provider(
     provider: ConfigWalletProvider,
     wallet_id: str,
-    network: str,
+    network: str | None,
     tx_data: dict,
 ) -> str:
     wallet = await provider.get_wallet(wallet_id, network)
@@ -340,7 +365,7 @@ async def _sign_transaction_with_provider(
 async def _sign_message_with_provider(
     provider: ConfigWalletProvider,
     wallet_id: str,
-    network: str,
+    network: str | None,
     message: bytes,
 ) -> str:
     wallet = await provider.get_wallet(wallet_id, network)
@@ -350,7 +375,7 @@ async def _sign_message_with_provider(
 async def _sign_typed_data_with_provider(
     provider: ConfigWalletProvider,
     wallet_id: str,
-    network: str,
+    network: str | None,
     typed_data: dict,
 ) -> str:
     wallet = await provider.get_wallet(wallet_id, network)
@@ -392,10 +417,11 @@ def _select_wallet_type(explicit: str | None, *, prompt_text: str = "Quick start
     descriptions = {
         "local_secure": "Encrypted key stored locally (recommended)",
         "raw_secret": "Private key/mnemonic saved in plaintext config",
+        "privy": "Privy API-backed wallet",
     }
     selected = _interactive_select(f"{prompt_text}:", choices, descriptions)
     if selected is None:
-        selected = Prompt.ask(f"[bold]{prompt_text}[/bold]", choices=choices)
+        selected = _prompt_text(prompt_text, choices=choices, action=prompt_text.lower())
     return WalletType(selected)
 
 
@@ -435,7 +461,7 @@ def _select_import_source(
     }
     selected = _interactive_select("Import source:", choices, descriptions)
     if selected is None:
-        selected = Prompt.ask("[bold]Import source[/bold]", choices=choices, default=choices[0])
+        selected = _prompt_text("Import source", choices=choices, default=choices[0], action="import source")
     return selected
 
 
@@ -449,7 +475,12 @@ def _prompt_derivation_profile() -> str:
     }
     selected = _interactive_select("Derive mnemonic as:", choices, descriptions)
     if selected is None:
-        selected = Prompt.ask("[bold]Derive mnemonic as[/bold]", choices=choices, default="eip155")
+        selected = _prompt_text(
+            "Derive mnemonic as",
+            choices=choices,
+            default="eip155",
+            action="mnemonic derivation profile",
+        )
     return selected
 
 
@@ -477,27 +508,22 @@ def _resolve_private_key_input(
         return None
 
     if source == "private_key":
-        key_hex = explicit_private_key
-        if key_hex is None:
-            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
         try:
-            return decode_private_key(key_hex)
+            return _prompt_private_key_bytes(explicit_private_key)
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1) from exc
 
-    mnemonic = explicit_mnemonic
-    if mnemonic is None:
-        mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
-        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
-        try:
-            mnemonic_index = int(index_value)
-        except ValueError:
-            console.print("[red]Invalid account index.[/red]")
-            raise typer.Exit(1)
-
     network = parse_network_family(derivation_profile or _prompt_derivation_profile())
-    return derive_key_from_mnemonic(network, mnemonic.strip(), mnemonic_index)
+    while True:
+        mnemonic, resolved_index = _prompt_mnemonic_with_index(explicit_mnemonic, mnemonic_index)
+        try:
+            return derive_key_from_mnemonic(network, mnemonic, resolved_index)
+        except ValueError as exc:
+            if explicit_mnemonic is not None:
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(1) from exc
+            console.print(f"[red]{exc}[/red]")
 
 
 def _build_raw_secret_config(
@@ -516,11 +542,8 @@ def _build_raw_secret_config(
     )
 
     if source == "private_key":
-        key_hex = explicit_private_key
-        if key_hex is None:
-            key_hex = Prompt.ask("[bold]Paste private key (hex)[/bold]", password=True)
         try:
-            normalized = "0x" + decode_private_key(key_hex).hex()
+            normalized = "0x" + _prompt_private_key_bytes(explicit_private_key).hex()
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1) from exc
@@ -532,15 +555,7 @@ def _build_raw_secret_config(
             ),
         )
 
-    source_mnemonic = explicit_mnemonic
-    if source_mnemonic is None:
-        source_mnemonic = Prompt.ask("[bold]Paste mnemonic phrase[/bold]", password=True)
-        index_value = Prompt.ask("[bold]Account index[/bold] (0 = first account)", default=str(mnemonic_index))
-        try:
-            mnemonic_index = int(index_value)
-        except ValueError:
-            console.print("[red]Invalid account index.[/red]")
-            raise typer.Exit(1)
+    source_mnemonic, mnemonic_index = _prompt_mnemonic_with_index(explicit_mnemonic, mnemonic_index)
 
     parse_network_family(derive_as or _prompt_derivation_profile())
 
@@ -554,10 +569,109 @@ def _build_raw_secret_config(
     )
 
 
+def _prompt_required(label: str, *, password: bool = False) -> str:
+    while True:
+        value = _prompt_text(label, password=password).strip()
+        if value:
+            return value
+        console.print(f"[red]{label} is required.[/red]")
+
+
+def _prompt_account_index(default: int) -> int:
+    while True:
+        value = _prompt_text(
+            "Account index (0 = first account)",
+            default=str(default),
+            action="account index",
+        )
+        try:
+            index = int(value)
+        except ValueError:
+            console.print("[red]Invalid account index.[/red]")
+            continue
+        if index < 0:
+            console.print("[red]Invalid account index.[/red]")
+            continue
+        return index
+
+
+def _prompt_private_key_bytes(explicit_private_key: str | None) -> bytes:
+    if explicit_private_key is not None:
+        return decode_private_key(explicit_private_key)
+
+    while True:
+        key_hex = _prompt_text("Paste private key (hex)", password=True, action="private key")
+        try:
+            return decode_private_key(key_hex)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+
+
+def _prompt_mnemonic_with_index(
+    explicit_mnemonic: str | None,
+    mnemonic_index: int,
+) -> tuple[str, int]:
+    if explicit_mnemonic is not None:
+        return explicit_mnemonic.strip(), mnemonic_index
+
+    while True:
+        mnemonic = _prompt_required("Paste mnemonic phrase", password=True)
+        return mnemonic, _prompt_account_index(mnemonic_index)
+
+
+def _build_privy_config(provider: ConfigWalletProvider | None = None) -> WalletConfig:
+    existing = []
+    if provider is not None:
+        existing = [
+            wallet_id
+            for wallet_id, conf, _ in provider.list_wallets()
+            if conf.type == "privy"
+        ]
+    if existing:
+        reuse_choice = "Enter new Privy credentials"
+        choices = [*existing, reuse_choice]
+        selection = _interactive_select(
+            "Select existing Privy wallet or enter new credentials",
+            choices,
+        ) or _prompt_text(
+            "Select existing Privy wallet or enter new credentials",
+            choices=choices,
+            default=choices[0],
+            action="privy wallet selection",
+        )
+        if selection != reuse_choice:
+            conf = provider.get_wallet_config(selection)
+            if conf.type != "privy":
+                raise typer.Exit(1)
+            params = conf.params
+            wallet_id = _prompt_required("Privy wallet id")
+            return WalletConfig(
+                type="privy",
+                params=PrivyWalletParams(
+                    app_id=params.app_id,
+                    app_secret=params.app_secret,
+                    wallet_id=wallet_id,
+                ),
+            )
+
+    app_id = _prompt_required("Privy app id")
+    app_secret = _prompt_required("Privy app secret (input hidden)", password=True)
+    wallet_id = _prompt_required("Privy wallet id")
+
+    return WalletConfig(
+        type="privy",
+        params=PrivyWalletParams(
+            app_id=app_id,
+            app_secret=app_secret,
+            wallet_id=wallet_id,
+        ),
+    )
+
+
 def _prompt_wallet_id(default: str, provider: ConfigWalletProvider | None = None) -> str:
     """Prompt for a wallet id with an interactive default. Re-prompts on duplicates."""
     while True:
-        name = Prompt.ask("[bold]Wallet ID[/bold] (e.g. my_wallet_1)", default=default)
+        name = _prompt_text("Wallet ID (e.g. my_wallet_1)", default=default, action="wallet id")
         if provider is not None:
             try:
                 provider.get_wallet_config(name)
@@ -573,7 +687,9 @@ def _prompt_wallet_id(default: str, provider: ConfigWalletProvider | None = None
 
 @app.command()
 def start(
-    wallet_type: str | None = typer.Argument(None, help="Quick-start type: local_secure or raw_secret"),
+    wallet_type: str | None = typer.Argument(
+        None, help="Quick-start type: local_secure, raw_secret, or privy"
+    ),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
     generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
     private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
@@ -600,7 +716,12 @@ def start(
                 }
                 selected = _interactive_select("What would you like to do?", ["add", "exit"], descriptions)
                 if selected is None:
-                    selected = Prompt.ask("[bold]Add a new wallet?[/bold]", choices=["add", "exit"], default="exit")
+                    selected = _prompt_text(
+                        "Add a new wallet?",
+                        choices=["add", "exit"],
+                        default="exit",
+                        action="existing wallet action",
+                    )
                 if selected == "exit":
                     raise typer.Exit(0)
         except (SystemExit, typer.Exit):
@@ -641,20 +762,11 @@ def start(
                 pw = explicit_pw
             else:
                 console.print(PASSWORD_REQUIREMENTS_HINT)
-                pw = _prompt_password_value(
-                    "New Master Password (press Enter to auto-generate a strong password)",
+                pw = _prompt_new_password(
+                    prompt_label="New Master Password (press Enter to auto-generate a strong password)",
                     allow_empty=True,
                 )
-                if pw:
-                    errors = _validate_password_strength(pw)
-                    if errors:
-                        console.print(_format_password_error(errors))
-                        raise typer.Exit(1)
-                    pw2 = _prompt_password_value("Confirm New Master Password")
-                    if pw != pw2:
-                        console.print("[red]Passwords do not match.[/red]")
-                        raise typer.Exit(1)
-                else:
+                if not pw:
                     pw = _generate_password()
                     auto_generated = True
 
@@ -729,6 +841,30 @@ def start(
 
         console.print(f"\nWallet '{target_name}' created:")
         _print_wallet_table([(target_name, "raw_secret")])
+    elif wtype == WalletType.PRIVY:
+        if password:
+            console.print("[red]--password is only valid for local_secure quick start.[/red]")
+            raise typer.Exit(1)
+        provider = _get_provider(dir)
+        if wallet_id:
+            try:
+                provider.get_wallet_config(wallet_id)
+                console.print(f"[red]Wallet '{wallet_id}' already exists.[/red]")
+                raise typer.Exit(1)
+            except WalletNotFoundError:
+                pass
+        target_name = wallet_id or _prompt_wallet_id("default_privy", provider)
+        privy_config = _build_privy_config(provider)
+
+        try:
+            provider.add_wallet(target_name, privy_config)
+            provider.set_active(target_name)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1) from exc
+
+        console.print(f"\nWallet '{target_name}' created:")
+        _print_wallet_table([(target_name, "privy")])
     else:
         console.print(f"[red]Unsupported quick-start type: {wtype.value}[/red]")
         raise typer.Exit(1)
@@ -774,7 +910,9 @@ def init(
 
 @app.command()
 def add(
-    wallet_type: str | None = typer.Argument(None, help="Wallet type: local_secure or raw_secret"),
+    wallet_type: str | None = typer.Argument(
+        None, help="Wallet type: local_secure, raw_secret, or privy"
+    ),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
     generate: bool = typer.Option(False, "--generate", "-g", help="Generate a new private key"),
     private_key: str | None = typer.Option(None, "--private-key", "-k", help="Import from private key"),
@@ -853,6 +991,12 @@ def add(
                 mnemonic_index=mnemonic_index,
             ),
         )
+    elif wtype == WalletType.PRIVY:
+        if password:
+            console.print("[red]--password is only valid for local_secure wallets.[/red]")
+            raise typer.Exit(1)
+        target_name = wallet_id or _prompt_wallet_id("default_privy", provider)
+        provider.add_wallet(target_name, _build_privy_config(provider))
     console.print(f"[green]Wallet '{target_name}' added.[/green] Config updated.")
     if provider.get_active_id() == target_name:
         console.print(f"  Active wallet set to '{target_name}'.")
@@ -913,6 +1057,10 @@ def inspect(
         elif isinstance(params, RawSecretMnemonicParams):
             table.add_row("Mnemonic", "[redacted]")
             table.add_row("Account Index", str(params.account_index))
+    elif conf.type == "privy":
+        table.add_row("Privy App ID", "[redacted]")
+        table.add_row("Privy App Secret", "[redacted]")
+        table.add_row("Privy Wallet ID", "[redacted]")
 
     console.print(table)
 
@@ -931,7 +1079,11 @@ def remove(
         console.print(f"[red]Wallet '{wallet_id}' not found.[/red]")
         raise typer.Exit(1)
 
-    if not yes and not Confirm.ask(f"Remove wallet '{wallet_id}'?", default=False):
+    if not yes and not _confirm_action(
+        f"Remove wallet '{wallet_id}'?",
+        default=False,
+        action="wallet removal confirmation",
+    ):
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(0)
 
@@ -961,7 +1113,7 @@ def use(
         }
         selected = _interactive_select("Select wallet:", choices, descriptions)
         if selected is None:
-            selected = Prompt.ask("[bold]Select wallet[/bold]", choices=choices, default=choices[0])
+            selected = _prompt_text("Select wallet", choices=choices, default=choices[0], action="wallet selection")
         target_id = selected
     try:
         conf = provider.set_active(target_id)
@@ -1005,7 +1157,7 @@ def _resolve_wallet_id(explicit: str | None, dir: str) -> str:
 def sign_tx(
     payload: str = typer.Argument(help="Transaction payload (JSON)"),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
-    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
+    network: str | None = typer.Option(None, "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
     save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
@@ -1023,7 +1175,12 @@ def sign_tx(
     try:
         tx_data = json.loads(payload)
         signed = asyncio.run(
-            _sign_transaction_with_provider(provider, wallet_id, network, tx_data)
+            _sign_transaction_with_provider(
+                provider,
+                wallet_id,
+                network,
+                tx_data,
+            )
         )
         try:
             parsed = json.loads(signed)
@@ -1046,7 +1203,7 @@ def sign_tx(
 def sign_msg(
     message: str = typer.Argument(help="Message to sign"),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
-    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
+    network: str | None = typer.Option(None, "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
     save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
@@ -1063,7 +1220,12 @@ def sign_msg(
 
     try:
         signature = asyncio.run(
-            _sign_message_with_provider(provider, wallet_id, network, message.encode())
+            _sign_message_with_provider(
+                provider,
+                wallet_id,
+                network,
+                message.encode(),
+            )
         )
         console.print(f"[green]Signature:[/green] {signature}")
     except DecryptionError:
@@ -1081,7 +1243,7 @@ def sign_msg(
 def sign_typed_data(
     data: str = typer.Argument(help="EIP-712 typed data (JSON)"),
     wallet_id: str | None = typer.Option(None, "--wallet-id", "-w", help="Wallet ID"),
-    network: str = typer.Option(..., "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
+    network: str | None = typer.Option(None, "--network", "-n", help="Target network, e.g. eip155:1 or tron:nile"),
     password: str | None = _password_option(),
     save_runtime_secrets: bool = _save_runtime_secrets_option(),
     dir: str = _dir_option(),
@@ -1099,7 +1261,12 @@ def sign_typed_data(
     try:
         typed_data = json.loads(data)
         signature = asyncio.run(
-            _sign_typed_data_with_provider(provider, wallet_id, network, typed_data)
+            _sign_typed_data_with_provider(
+                provider,
+                wallet_id,
+                network,
+                typed_data,
+            )
         )
         console.print(f"[green]Signature:[/green] {signature}")
     except DecryptionError:
@@ -1128,18 +1295,7 @@ def change_password(
         raise typer.Exit(1)
 
     console.print(PASSWORD_REQUIREMENTS_HINT)
-    new_pw = Prompt.ask(
-        f"[bold]{NEW_MASTER_PASSWORD_LABEL}[/bold]",
-        password=True,
-    )
-    errors = _validate_password_strength(new_pw)
-    if errors:
-        console.print(_format_password_error(errors))
-        raise typer.Exit(1)
-    new_pw2 = Prompt.ask("[bold]Confirm New Master Password[/bold]", password=True)
-    if new_pw != new_pw2:
-        console.print("[red]Passwords do not match.[/red]")
-        raise typer.Exit(1)
+    new_pw = _prompt_new_password()
 
     secrets_path = Path(dir)
     kv_store_new = SecureKVStore(dir, new_pw)
@@ -1183,10 +1339,18 @@ def reset(
     console.print()
 
     if not yes:
-        if not Confirm.ask("Are you sure you want to reset? This cannot be undone", default=False):
+        if not _confirm_action(
+            "Are you sure you want to reset? This cannot be undone",
+            default=False,
+            action="wallet reset confirmation",
+        ):
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(0)
-        if not Confirm.ask("Really delete everything? Last chance!", default=False):
+        if not _confirm_action(
+            "Really delete everything? Last chance!",
+            default=False,
+            action="wallet reset confirmation",
+        ):
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(0)
 

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   LocalSecureWalletParamsSchema,
+  type PrivyWalletParams,
   RawSecretPrivateKeyParamsSchema,
   RawSecretMnemonicParamsSchema,
   WalletConfigSchema,
@@ -94,6 +95,20 @@ describe('config schemas', () => {
       account_index: 2,
     })
     expect(mp.account_index).toBe(2)
+  })
+
+  it('accepts privy wallet config', () => {
+    const parsed = WalletConfigSchema.parse({
+      type: 'privy',
+      params: {
+        app_id: 'app',
+        app_secret: 'secret',
+        wallet_id: 'wallet',
+      } satisfies PrivyWalletParams,
+    })
+
+    expect(parsed.type).toBe('privy')
+    expect((parsed.params as PrivyWalletParams).app_id).toBe('app')
   })
 })
 

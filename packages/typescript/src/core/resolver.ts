@@ -6,6 +6,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import type { Wallet } from './base.js'
+import { ENV_AGENT_WALLET_DIR, ENV_AGENT_WALLET_PASSWORD } from './base.js'
 import {
   ConfigNotFoundError,
   loadConfig,
@@ -14,17 +15,10 @@ import {
 } from './config.js'
 import { ConfigWalletProvider } from './providers/config-provider.js'
 import { EnvWalletProvider } from './providers/env-provider.js'
+import { cleanEnvValue } from './utils/env.js'
 import { loadLocalSecret } from '../local/secret-loader.js'
 
 const DEFAULT_SECRETS_DIR = join(homedir(), '.agent-wallet')
-const ENV_AGENT_WALLET_PASSWORD = 'AGENT_WALLET_PASSWORD'
-const ENV_AGENT_WALLET_DIR = 'AGENT_WALLET_DIR'
-const ENV_PRIVATE_KEY_KEYS = ['AGENT_WALLET_PRIVATE_KEY', 'TRON_PRIVATE_KEY'] as const
-const ENV_MNEMONIC_KEYS = ['AGENT_WALLET_MNEMONIC', 'TRON_MNEMONIC'] as const
-const ENV_ACCOUNT_INDEX_KEYS = [
-  'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
-  'TRON_ACCOUNT_INDEX',
-] as const
 
 export type ResolvedWalletProvider = ConfigWalletProvider | EnvWalletProvider
 
@@ -52,9 +46,6 @@ export function resolveWalletProvider(options?: {
 
   return new EnvWalletProvider({
     network: options?.network,
-    privateKey: firstEnv(ENV_PRIVATE_KEY_KEYS),
-    mnemonic: firstEnv(ENV_MNEMONIC_KEYS),
-    accountIndex: parseAccountIndex(firstEnv(ENV_ACCOUNT_INDEX_KEYS)),
   })
 }
 
@@ -72,7 +63,7 @@ export async function resolveWallet(options?: {
   }
 
   if (provider instanceof EnvWalletProvider) {
-    return provider.getWallet()
+    return provider.getActiveWallet(options?.network)
   }
 
   throw new Error(`Unsupported provider resolved: ${(provider as object).constructor.name}`)
@@ -113,26 +104,4 @@ function loadConfigSafe(secretsDir: string): WalletsTopology | null {
 
 function hasAvailableConfigWallet(config: WalletsTopology | null): boolean {
   return Boolean(config && Object.keys(config.wallets).length > 0)
-}
-
-function firstEnv(keys: readonly string[]): string | undefined {
-  for (const key of keys) {
-    const value = cleanEnvValue(process.env[key])
-    if (value !== undefined) return value
-  }
-  return undefined
-}
-
-function cleanEnvValue(value: string | undefined): string | undefined {
-  const trimmed = value?.trim()
-  return trimmed || undefined
-}
-
-function parseAccountIndex(value: string | undefined): number {
-  const normalized = value?.trim()
-  if (!normalized) return 0
-  if (!/^\d+$/.test(normalized)) {
-    throw new Error('AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer')
-  }
-  return Number(normalized)
 }

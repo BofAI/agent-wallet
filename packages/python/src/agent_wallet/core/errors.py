@@ -27,3 +27,19 @@ class NetworkError(WalletError):
 
 class UnsupportedOperationError(WalletError):
     """This wallet does not support the requested operation."""
+
+
+class PrivyConfigError(WalletError):
+    """Privy configuration is missing or invalid."""
+
+
+class PrivyRequestError(WalletError):
+    """Privy request failed."""
+
+
+class PrivyRateLimitError(WalletError):
+    """Privy rate limit exceeded."""
+
+
+class PrivyAuthError(WalletError):
+    """Privy authorization failed."""

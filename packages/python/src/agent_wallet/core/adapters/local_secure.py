@@ -17,7 +17,7 @@ class LocalSecureSigner(LocalSigner):
         params: LocalSecureWalletParams,
         config_dir: str | Path,
         password: str | None,
-        network: str,
+        network: str | None,
         secret_loader: Callable[[str | Path, str, str], bytes] | None,
     ) -> None:
         if not password:

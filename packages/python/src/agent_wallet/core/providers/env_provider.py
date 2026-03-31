@@ -1,77 +1,73 @@
-"""Provider for directly supplied secret material."""
+"""Provider for env-sourced wallet material."""
 
 from __future__ import annotations
 
-from agent_wallet.core.adapters.raw_secret import RawSecretSigner
-from agent_wallet.core.base import Wallet, WalletProvider
+import os
+from collections.abc import Mapping
+
+from agent_wallet.core.base import (
+    ENV_ACCOUNT_INDEX_KEYS,
+    ENV_MNEMONIC_KEYS,
+    ENV_PRIVATE_KEY_KEYS,
+    Wallet,
+    WalletProvider,
+)
 from agent_wallet.core.config import RawSecretMnemonicParams, RawSecretPrivateKeyParams
+from agent_wallet.core.providers.wallet_builder import create_env_adapter
+from agent_wallet.core.utils.env import first_env, parse_account_index
+from agent_wallet.core.utils.network import resolve_network
 
 
 class EnvWalletProvider(WalletProvider):
-    """Create a wallet from direct secret inputs."""
+    """Create a wallet from env vars."""
 
     def __init__(
         self,
         *,
         network: str | None = None,
-        private_key: str | None = None,
-        mnemonic: str | None = None,
-        account_index: int = 0,
+        env: Mapping[str, str] | None = None,
     ) -> None:
-        _assert_single_wallet_source(
-            private_key=private_key,
-            mnemonic=mnemonic,
-        )
         self._network = network
-        self._private_key = private_key
-        self._mnemonic = mnemonic
-        self._account_index = account_index
+        self._env = env or os.environ
 
     async def get_wallet(self, network: str | None = None) -> Wallet:
-        resolved = _resolve_network(network, self._network)
-        params = _build_params(
-            private_key=self._private_key,
-            mnemonic=self._mnemonic,
-            account_index=self._account_index,
-        )
-        return RawSecretSigner(params=params, network=resolved)
+        return await self.get_active_wallet(network)
 
     async def get_active_wallet(self, network: str | None = None) -> Wallet:
-        return await self.get_wallet(network)
+        wallet = _resolve_env_wallet(self._env, network, self._network)
+        if not wallet:
+            raise ValueError(
+                "resolve_wallet could not find a wallet source in config or env"
+            )
+        return create_env_adapter(wallet)
 
 
-def _build_params(
-    *,
-    private_key: str | None,
-    mnemonic: str | None,
-    account_index: int,
-) -> RawSecretPrivateKeyParams | RawSecretMnemonicParams:
-    if private_key:
-        return RawSecretPrivateKeyParams(source="private_key", private_key=private_key)
-    if mnemonic:
-        return RawSecretMnemonicParams(
-            source="mnemonic", mnemonic=mnemonic, account_index=account_index,
-        )
-    raise ValueError(
-        "resolve_wallet could not find a wallet source in config or env"
-    )
+def _resolve_env_wallet(
+    env: Mapping[str, str],
+    explicit_network: str | None,
+    provider_default: str | None,
+) -> tuple[RawSecretPrivateKeyParams | RawSecretMnemonicParams, str | None] | None:
+    raw = _parse_raw_secret_env(env)
+    if raw:
+        return (raw, resolve_network(explicit_network, provider_default))
+    return None
 
 
-def _assert_single_wallet_source(
-    *,
-    private_key: str | None,
-    mnemonic: str | None,
-) -> None:
+def _parse_raw_secret_env(
+    env: Mapping[str, str],
+) -> RawSecretPrivateKeyParams | RawSecretMnemonicParams | None:
+    private_key = first_env(env, ENV_PRIVATE_KEY_KEYS)
+    mnemonic = first_env(env, ENV_MNEMONIC_KEYS)
     if private_key and mnemonic:
         raise ValueError(
             "Provide only one of AGENT_WALLET_PRIVATE_KEY or "
             "AGENT_WALLET_MNEMONIC"
         )
-
-
-def _resolve_network(explicit: str | None, provider_default: str | None) -> str:
-    if explicit:
-        return explicit
-    if provider_default:
-        return provider_default
-    raise ValueError("network is required")
+    if private_key:
+        return RawSecretPrivateKeyParams(source="private_key", private_key=private_key)
+    if mnemonic:
+        account_index = parse_account_index(first_env(env, ENV_ACCOUNT_INDEX_KEYS))
+        return RawSecretMnemonicParams(
+            source="mnemonic", mnemonic=mnemonic, account_index=account_index
+        )
+    return None

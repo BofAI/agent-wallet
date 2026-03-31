@@ -1,6 +1,6 @@
 """AgentWallet — Universal multi-chain secure signing SDK."""
 
-from agent_wallet.core.base import Eip712Capable, Network, Wallet, WalletType
+from agent_wallet.core.base import Eip712Capable, Network, SignOptions, Wallet, WalletType
 from agent_wallet.core.errors import (
     DecryptionError,
     NetworkError,
@@ -26,6 +26,7 @@ __all__ = [
     "Network",
     "NetworkError",
     "RawSecretSigner",
+    "SignOptions",
     "SigningError",
     "TronSigner",
     "UnsupportedOperationError",

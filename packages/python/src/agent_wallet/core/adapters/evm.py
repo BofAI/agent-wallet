@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_wallet.core.base import Eip712Capable, Wallet
+from agent_wallet.core.base import Eip712Capable, SignOptions, Wallet
 from agent_wallet.core.errors import SigningError
 
 
@@ -18,21 +18,21 @@ class EvmSigner(Wallet, Eip712Capable):
     async def get_address(self) -> str:
         return self._account.address
 
-    async def sign_raw(self, raw_tx: bytes) -> str:
+    async def sign_raw(self, raw_tx: bytes, options: SignOptions | None = None) -> str:
         try:
             signed = self._account.sign_transaction(raw_tx)
             return signed.raw_transaction.hex()
         except Exception as e:
             raise SigningError(f"EVM sign_raw failed: {e}") from e
 
-    async def sign_transaction(self, payload: dict) -> str:
+    async def sign_transaction(self, payload: dict, options: SignOptions | None = None) -> str:
         try:
             signed = self._account.sign_transaction(payload)
             return signed.raw_transaction.hex()
         except Exception as e:
             raise SigningError(f"EVM sign_transaction failed: {e}") from e
 
-    async def sign_message(self, msg: bytes) -> str:
+    async def sign_message(self, msg: bytes, options: SignOptions | None = None) -> str:
         try:
             from eth_account.messages import encode_defunct
 
@@ -42,7 +42,7 @@ class EvmSigner(Wallet, Eip712Capable):
         except Exception as e:
             raise SigningError(f"EVM sign_message failed: {e}") from e
 
-    async def sign_typed_data(self, data: dict) -> str:
+    async def sign_typed_data(self, data: dict, options: SignOptions | None = None) -> str:
         """Sign EIP-712 typed data.
 
         Expects data in full EIP-712 format:

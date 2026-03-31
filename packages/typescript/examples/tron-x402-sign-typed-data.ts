@@ -131,12 +131,15 @@ async function main() {
   console.log("=== Verify Signature ===");
 
   // Use viem to recover the signer from the EIP-712 signature
-  const { EIP712Domain, ...msgTypes } = PAYMENT_PERMIT.types;
+  if (!PAYMENT_PERMIT.domain || !PAYMENT_PERMIT.message) {
+    throw new Error("Missing EIP-712 domain or message for PAYMENT_PERMIT");
+  }
+  const { EIP712Domain: _EIP712Domain, ...msgTypes } = PAYMENT_PERMIT.types;
   const recovered = await recoverTypedDataAddress({
-    domain: PAYMENT_PERMIT.domain as any,
-    types: msgTypes as any,
+    domain: PAYMENT_PERMIT.domain as Record<string, unknown>,
+    types: msgTypes as Record<string, Array<{ name: string; type: string }>>,
     primaryType: PAYMENT_PERMIT.primaryType,
-    message: PAYMENT_PERMIT.message as any,
+    message: PAYMENT_PERMIT.message as Record<string, unknown>,
     signature: `0x${sig1}`,
   });
 

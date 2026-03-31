@@ -30,7 +30,7 @@ from agent_wallet import resolve_wallet
 # --- Configuration ---
 
 # Transfer parameters
-TO_ADDRESS = "TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr"
+TO_ADDRESS = "TUJ1C4ybdcueXbi8Wmrqscteux5eGvrCh6"
 AMOUNT_SUN = 1_000_000  # 1 TRX = 1,000,000 SUN
 
 # TronGrid endpoints by network
@@ -45,7 +45,7 @@ async def main():
     # ----------------------------------------------------------------
     # Step 1: Resolve the active wallet
     # ----------------------------------------------------------------
-    wallet = await resolve_wallet(network="tron")
+    wallet = await resolve_wallet(network="tron", dir="/tmp/test-wallet")
     address = await wallet.get_address()
     print(f"Address:      {address}")
     print()

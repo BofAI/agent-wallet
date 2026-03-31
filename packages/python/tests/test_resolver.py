@@ -24,6 +24,12 @@ def clear_wallet_env(monkeypatch):
         "TRON_MNEMONIC",
         "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX",
         "TRON_ACCOUNT_INDEX",
+        "PRIVY_APP_ID",
+        "PRIVY_APP_SECRET",
+        "PRIVY_WALLET_ID",
+        "AGENT_WALLET_PRIVY_APP_ID",
+        "AGENT_WALLET_PRIVY_APP_SECRET",
+        "AGENT_WALLET_PRIVY_WALLET_ID",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -74,27 +80,35 @@ class TestEnvWalletProviderGetActiveWallet:
             await provider.get_active_wallet()
 
     @pytest.mark.asyncio
-    async def test_throws_without_network_with_private_key(self):
-        provider = EnvWalletProvider(
-            private_key="4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b",
+    async def test_throws_without_network_with_private_key(self, monkeypatch):
+        monkeypatch.setenv(
+            "AGENT_WALLET_PRIVATE_KEY",
+            "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b",
         )
+        provider = EnvWalletProvider()
         with pytest.raises(ValueError, match="network is required"):
             await provider.get_active_wallet()
 
     @pytest.mark.asyncio
-    async def test_throws_without_network_with_mnemonic(self):
-        provider = EnvWalletProvider(
-            mnemonic="test test test test test test test test test test test junk",
+    async def test_throws_without_network_with_mnemonic(self, monkeypatch):
+        monkeypatch.setenv(
+            "AGENT_WALLET_MNEMONIC",
+            "test test test test test test test test test test test junk",
         )
+        provider = EnvWalletProvider()
         with pytest.raises(ValueError, match="network is required"):
             await provider.get_active_wallet()
 
-    def test_constructor_throws_when_both_sources_provided(self):
+    @pytest.mark.asyncio
+    async def test_throws_when_both_sources_provided(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WALLET_PRIVATE_KEY", "deadbeef")
+        monkeypatch.setenv(
+            "AGENT_WALLET_MNEMONIC",
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        provider = EnvWalletProvider(network="eip155")
         with pytest.raises(ValueError, match="Provide only one of"):
-            EnvWalletProvider(
-                private_key="deadbeef",
-                mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            )
+            await provider.get_active_wallet()
 
 
 # ---------------------------------------------------------------------------

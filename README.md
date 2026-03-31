@@ -27,8 +27,17 @@ With **agent-wallet** you can:
 - **Create or import** a wallet (encrypted “secure” mode, or plaintext-in-config for dev only).
 - **Switch** which wallet is “active” when you have more than one.
 - **Sign** from the CLI or from Python / TypeScript code.
+- **Integrate WaaS adapters** (e.g. Privy) for hosted signing without local keys.
 
 It fits workflows where an **MCP server** or **agent** needs a consistent way to sign without putting private keys in chat logs — similar to how [SUN MCP Server](https://github.com/BofAI/sun-mcp-server) documents **Agent Wallet** as the recommended wallet option.
+
+### Wallet Types
+
+| Wallet Type | Source | Networks | Password Required | Notes |
+|-------------|--------|----------|-------------------|-------|
+| `local_secure` | CLI config | EVM + TRON | Yes | Encrypted on disk; recommended for local use. |
+| `raw_secret` | CLI config / env | EVM + TRON | No | Plaintext in config or env (dev only). |
+| `privy` | CLI config | EVM + TRON | No | Uses Privy app credentials + wallet ID. See [doc/how-to-add-privy-wallet.md](./doc/how-to-add-privy-wallet.md). |
 
 ## Quick Start
 
@@ -149,12 +158,15 @@ TypeScript samples under [`packages/typescript/examples/`](./packages/typescript
 | Switch active wallet | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts) |
 | x402 typed data (TRON / BSC) | [tron-x402-sign-typed-data.ts](./packages/typescript/examples/tron-x402-sign-typed-data.ts), [bsc-x402-sign-typed-data.ts](./packages/typescript/examples/bsc-x402-sign-typed-data.ts) |
 | One env key → TRON + EVM typed data | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts) |
+| Privy sign consistency (EVM / TRON) | [compare-sign-consistency.ts](./packages/typescript/examples/compare-sign-consistency.ts) |
+| Privy TRON typed-data verification | [verify-tron-privy-typed-data.ts](./packages/typescript/examples/verify-tron-privy-typed-data.ts) |
 
 ## Documentation
 
 | Doc | Audience |
 |-----|----------|
 | [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI (npm-focused intro; deeper detail also covers Python Typer) |
+| [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md) | Use existing Privy App + Wallet ID in the CLI |
 | [Python package](./packages/python/README.md) | `pip` install, SDK usage |
 | [TypeScript package](./packages/typescript/README.md) | `npm` / SDK usage |
 

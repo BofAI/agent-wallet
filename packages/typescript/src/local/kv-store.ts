@@ -4,10 +4,11 @@ import { join } from 'node:path'
 import { keccak256 } from 'viem'
 import { DecryptionError } from '../core/errors.js'
 
-const SCRYPT_N = 262144
-const SCRYPT_R = 8
-const SCRYPT_P = 1
-const SCRYPT_DKLEN = 32
+const DEFAULT_SCRYPT_N = 262144
+const DEFAULT_SCRYPT_R = 8
+const DEFAULT_SCRYPT_P = 1
+const DEFAULT_SCRYPT_DKLEN = 32
+const TEST_SCRYPT_N = 16384
 
 const MASTER_SENTINEL = Buffer.from('agent-wallet', 'utf-8')
 
@@ -29,19 +30,52 @@ interface KeystoreV3 {
   }
 }
 
-function deriveKey(password: string, salt: Uint8Array): Buffer {
-  return scryptSync(Buffer.from(password, 'utf-8'), salt, SCRYPT_DKLEN, {
-    N: SCRYPT_N,
-    r: SCRYPT_R,
-    p: SCRYPT_P,
-    maxmem: 256 * SCRYPT_N * SCRYPT_R,
+function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  params: { N: number; r: number; p: number; dklen: number } = getScryptParams(),
+): Buffer {
+  const { N, r, p, dklen } = params
+  return scryptSync(Buffer.from(password, 'utf-8'), salt, dklen, {
+    N,
+    r,
+    p,
+    maxmem: 256 * N * r,
   }) as Buffer
 }
 
+function getScryptParams(): { N: number; r: number; p: number; dklen: number } {
+  const N = parsePositiveInt(process.env.AGENT_WALLET_TEST_SCRYPT_N)
+  if (N) {
+    return { N, r: DEFAULT_SCRYPT_R, p: DEFAULT_SCRYPT_P, dklen: DEFAULT_SCRYPT_DKLEN }
+  }
+  if (process.env.VITEST) {
+    return {
+      N: TEST_SCRYPT_N,
+      r: DEFAULT_SCRYPT_R,
+      p: DEFAULT_SCRYPT_P,
+      dklen: DEFAULT_SCRYPT_DKLEN,
+    }
+  }
+  return {
+    N: DEFAULT_SCRYPT_N,
+    r: DEFAULT_SCRYPT_R,
+    p: DEFAULT_SCRYPT_P,
+    dklen: DEFAULT_SCRYPT_DKLEN,
+  }
+}
+
+function parsePositiveInt(value: string | undefined): number | null {
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 1 ? parsed : null
+}
+
 export function encryptBytes(plaintext: Uint8Array, password: string): KeystoreV3 {
+  const params = getScryptParams()
   const salt = randomBytes(32)
   const iv = randomBytes(16)
-  const derivedKey = deriveKey(password, salt)
+  const derivedKey = deriveKey(password, salt, params)
 
   const encryptionKey = derivedKey.subarray(0, 16)
   const cipher = createCipheriv('aes-128-ctr', encryptionKey, iv)
@@ -59,10 +93,10 @@ export function encryptBytes(plaintext: Uint8Array, password: string): KeystoreV
       ciphertext: ciphertext.toString('hex'),
       kdf: 'scrypt',
       kdfparams: {
-        dklen: SCRYPT_DKLEN,
-        n: SCRYPT_N,
-        r: SCRYPT_R,
-        p: SCRYPT_P,
+        dklen: params.dklen,
+        n: params.N,
+        r: params.r,
+        p: params.p,
         salt: salt.toString('hex'),
       },
       mac,
@@ -79,7 +113,12 @@ export function decryptBytes(keystore: KeystoreV3, password: string): Uint8Array
   const ciphertext = Buffer.from(crypto.ciphertext, 'hex')
   const storedMac = crypto.mac
 
-  const derivedKey = deriveKey(password, salt)
+  const derivedKey = deriveKey(password, salt, {
+    N: Number(kdfparams.n),
+    r: Number(kdfparams.r),
+    p: Number(kdfparams.p),
+    dklen: Number(kdfparams.dklen),
+  })
 
   const macKey = derivedKey.subarray(16)
   const macInput = Buffer.concat([macKey, ciphertext])
