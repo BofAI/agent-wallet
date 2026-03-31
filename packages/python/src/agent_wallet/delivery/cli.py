@@ -1696,6 +1696,7 @@ def sign_typed_data(
 def change_password(
     dir: str = _dir_option(),
     password: str | None = _password_option(),
+    new_password: str | None = typer.Option(None, "--new-password", help="New master password (skip prompt)"),
     save_runtime_secrets: bool = _save_runtime_secrets_option(),
 ) -> None:
     """Change master password and re-encrypt all files."""
@@ -1706,8 +1707,15 @@ def change_password(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    console.print(PASSWORD_REQUIREMENTS_HINT)
-    new_pw = _prompt_new_password()
+    if new_password is not None:
+        errors = _validate_password_strength(new_password)
+        if errors:
+            console.print(_format_password_error(errors))
+            raise typer.Exit(1)
+        new_pw = new_password
+    else:
+        console.print(PASSWORD_REQUIREMENTS_HINT)
+        new_pw = _prompt_new_password()
 
     secrets_path = Path(dir)
     kv_store_new = SecureKVStore(dir, new_pw)

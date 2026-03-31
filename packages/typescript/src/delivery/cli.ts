@@ -1516,7 +1516,7 @@ export async function cmdSignTypedData(
 export async function cmdChangePassword(
   dir: string,
   io: CliIO,
-  opts?: { password?: string; saveRuntimeSecrets?: boolean },
+  opts?: { password?: string; newPassword?: string; saveRuntimeSecrets?: boolean },
 ): Promise<void> {
   const baseProvider = getProvider(dir)
   const { kvStore: kvStoreOld } = await getVerifiedPassword(dir, io, {
@@ -1524,8 +1524,18 @@ export async function cmdChangePassword(
     provider: baseProvider,
   })
 
-  io.print(PASSWORD_REQUIREMENTS_HINT)
-  const newPw = await promptNewPassword(io)
+  let newPw: string
+  if (opts?.newPassword) {
+    const errors = validatePasswordStrength(opts.newPassword)
+    if (errors.length > 0) {
+      io.print(formatPasswordError(errors))
+      throw new CliExit(1)
+    }
+    newPw = opts.newPassword
+  } else {
+    io.print(PASSWORD_REQUIREMENTS_HINT)
+    newPw = await promptNewPassword(io)
+  }
 
   const kvStoreNew = new SecureKVStore(dir, newPw)
   let reEncrypted = 0
@@ -1931,6 +1941,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('')
         io.print('Options:')
         io.print('  --password, -p <pw>   Current master password (skip prompt)')
+        io.print('  --new-password <pw>   New master password (skip prompt)')
         io.print(SAVE_RS_OPT)
         io.print(DIR_OPT)
         io.print(HELP_OPT)
@@ -2103,7 +2114,11 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         }
         break
       case 'change-password':
-        await cmdChangePassword(dir, cliIO, { password, saveRuntimeSecrets })
+        await cmdChangePassword(dir, cliIO, {
+          password,
+          newPassword: options['new-password'] as string | undefined,
+          saveRuntimeSecrets,
+        })
         break
       case 'reset':
         await cmdReset(dir, options.yes === true || options.y === true, cliIO)
