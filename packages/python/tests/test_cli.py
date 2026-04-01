@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -14,7 +15,12 @@ from typer.testing import CliRunner
 import agent_wallet.delivery.cli as cli_module
 from agent_wallet.delivery.cli import app
 
-runner = CliRunner(env={"NO_COLOR": "1"})
+runner = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": "0"})
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    return re.sub(r'\x1b\[[0-9;]*[mGKH]', '', text)
 
 TEST_PASSWORD = "Test-password-123!"
 TEST_PRIVATE_KEY = (
@@ -185,18 +191,20 @@ class TestInit:
 class TestAdd:
     def test_add_help_shows_subcommands(self, initialized_dir):
         result = runner.invoke(app, ["add", "--help"])
+        out = _plain(result.output)
         assert result.exit_code == 0
-        assert "local_secure" in result.output
-        assert "raw_secret" in result.output
-        assert "privy" in result.output
-        assert "--save-runtime-secrets" in result.output
+        assert "local_secure" in out
+        assert "raw_secret" in out
+        assert "privy" in out
+        assert "--save-runtime-secrets" in out
 
     def test_add_privy_help_is_mode_specific(self, initialized_dir):
         result = runner.invoke(app, ["add", "privy", "--help"])
+        out = _plain(result.output)
         assert result.exit_code == 0
-        assert "--app-id" in result.output
-        assert "--privy-wallet-id" in result.output
-        assert "--password" not in result.output
+        assert "--app-id" in out
+        assert "--privy-wallet-id" in out
+        assert "--password" not in out
 
     def test_add_prompts_for_wallet_type_when_missing(self, initialized_dir):
         result = runner.invoke(
@@ -954,18 +962,20 @@ class TestStart:
 
     def test_start_help_shows_subcommands(self):
         result = runner.invoke(app, ["start", "--help"])
+        out = _plain(result.output)
         assert result.exit_code == 0
-        assert "local_secure" in result.output
-        assert "raw_secret" in result.output
-        assert "privy" in result.output
-        assert "--save-runtime-secrets" in result.output
+        assert "local_secure" in out
+        assert "raw_secret" in out
+        assert "privy" in out
+        assert "--save-runtime-secrets" in out
 
     def test_start_local_secure_help_is_mode_specific(self):
         result = runner.invoke(app, ["start", "local_secure", "--help"])
+        out = _plain(result.output)
         assert result.exit_code == 0
-        assert "--password" in result.output
-        assert "--generate" in result.output
-        assert "--app-id" not in result.output
+        assert "--password" in out
+        assert "--generate" in out
+        assert "--app-id" not in out
 
     def test_start_conflicting_generate_and_private_key(self, secrets_dir):
         result = runner.invoke(
