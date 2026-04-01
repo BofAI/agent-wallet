@@ -99,7 +99,7 @@ class ConfigWalletProvider(WalletProvider):
         self._wallets = {
             cache_key: wallet
             for cache_key, wallet in self._wallets.items()
-            if not cache_key.startswith(f"{wallet_id}:")
+            if cache_key[0] != wallet_id
         }
         self._persist()
         return conf

@@ -149,7 +149,7 @@ class PrivyAdapter(Wallet, Eip712Capable):
         if len(sig_bytes) != 64:
             raise SigningError("Privy raw_sign response must be 64-byte r||s for TRON")
         v = _recover_tron_v(sig_bytes, digest, await self.get_address())
-        return (sig_hex + f"{v:02x}").lower()
+        return (sig_hex + f"{v + 27:02x}").lower()
 
 
 def _normalize_transaction_payload(payload: dict) -> dict:

@@ -186,7 +186,10 @@ async def test_tron_sign_message_uses_raw_sign_and_appends_v():
     )
 
     signature = await adapter.sign_message(b"\x01\x02\x03")
-    assert signature == sig.hex()
+    # v-byte must be +27 (TronWeb verifyMessage convention): 00→1b, 01→1c
+    tronpy_v = int(sig.hex()[-2:], 16)
+    expected = raw_sig + f"{tronpy_v + 27:02x}"
+    assert signature == expected
     assert len(client.raw_calls) == 1
 
 
