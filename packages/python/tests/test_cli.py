@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 import agent_wallet.delivery.cli as cli_module
 from agent_wallet.delivery.cli import app
 
-runner = CliRunner()
+runner = CliRunner(env={"NO_COLOR": "1"})
 
 TEST_PASSWORD = "Test-password-123!"
 TEST_PRIVATE_KEY = (
