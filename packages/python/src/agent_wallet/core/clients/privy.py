@@ -6,6 +6,7 @@ import base64
 import json
 import time
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from agent_wallet.core.errors import PrivyAuthError, PrivyRateLimitError, PrivyRequestError
@@ -69,9 +70,18 @@ class PrivyClient:
                 headers=self._headers(authorization_signature),
                 data=json.dumps(body).encode("utf-8") if body else None,
             )
-            with urlopen(req) as response:
-                status = getattr(response, "status", 0)
-                payload = _read_json(response)
+            try:
+                with urlopen(req) as response:
+                    status = response.status
+                    payload = _read_json(response)
+            except HTTPError as exc:
+                status = exc.code
+                try:
+                    payload = json.loads(exc.read().decode("utf-8"))
+                except Exception:
+                    payload = {}
+            except URLError as exc:
+                raise PrivyRequestError(f"Privy request network error: {exc}") from exc
 
             if status == 429:
                 if attempt >= self._retries:
