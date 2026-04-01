@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CliExit,
@@ -13,6 +13,7 @@ import {
   cmdInspect,
   cmdList,
   cmdRemove,
+  cmdResolveAddress,
   cmdReset,
   cmdSignMsg,
   cmdStart,
@@ -28,10 +29,11 @@ const TEST_PASSWORD = 'Test-password-123!'
 const TEST_PRIVATE_KEY = '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
 const TEST_MNEMONIC = 'test test test test test test test test test test test junk'
 
-function mockIO(answers: string[] = []): CliIO & { output: string[] } {
+function mockIO(answers: string[] = [], interactive = true): CliIO & { output: string[] } {
   const queue = [...answers]
   const output: string[] = []
   return {
+    interactive,
     output,
     print(msg: string) {
       output.push(msg)
@@ -62,6 +64,9 @@ function readConfig(dir: string): Record<string, any> {
 }
 
 let secretsDir: string
+let initializedTemplateDir: string
+let listTemplateDir: string
+let signerTemplateDir: string
 
 beforeEach(() => {
   secretsDir = mkdtempSync(join(tmpdir(), 'agent-wallet-cli-test-'))
@@ -71,15 +76,79 @@ beforeEach(() => {
   delete process.env.AGENT_WALLET_MNEMONIC
   delete process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 afterEach(() => {
   rmSync(secretsDir, { recursive: true, force: true })
 })
 
+async function createTemplateDir(
+  prefix: string,
+  setup: (dir: string) => Promise<void>,
+): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  await setup(dir)
+  return dir
+}
+
+function cloneDir(src: string, prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  cpSync(src, dir, { recursive: true })
+  return dir
+}
+
+beforeAll(async () => {
+  initializedTemplateDir = await createTemplateDir('agent-wallet-cli-init-template-', async (dir) => {
+    const io = mockIO([TEST_PASSWORD, TEST_PASSWORD])
+    await cmdInit(dir, io)
+  })
+
+  listTemplateDir = await createTemplateDir('agent-wallet-cli-list-template-', async (dir) => {
+    await cloneInitializedDirInto(dir)
+    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
+    await cmdAdd(dir, mockIO(), {
+      walletType: 'local_secure',
+      walletId: 'local-one',
+      generate: true,
+    })
+    await cmdAdd(dir, mockIO(), {
+      walletType: 'raw_secret',
+      walletId: 'hot',
+      privateKey: TEST_PRIVATE_KEY,
+    })
+  })
+
+  signerTemplateDir = await createTemplateDir('agent-wallet-cli-signer-template-', async (dir) => {
+    await cloneInitializedDirInto(dir)
+    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
+    await cmdAdd(dir, mockIO(), {
+      walletType: 'local_secure',
+      walletId: 'signer',
+      generate: true,
+    })
+  })
+
+  delete process.env.AGENT_WALLET_PASSWORD
+})
+
+afterAll(() => {
+  for (const dir of [initializedTemplateDir, listTemplateDir, signerTemplateDir]) {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+async function cloneInitializedDirInto(dir: string): Promise<void> {
+  if (!initializedTemplateDir) {
+    const io = mockIO([TEST_PASSWORD, TEST_PASSWORD])
+    await cmdInit(dir, io)
+    return
+  }
+  cpSync(initializedTemplateDir, dir, { recursive: true })
+}
+
 async function initDir(dir: string): Promise<void> {
-  const io = mockIO([TEST_PASSWORD, TEST_PASSWORD])
-  await cmdInit(dir, io)
+  await cloneInitializedDirInto(dir)
 }
 
 describe('cmdInit', () => {
@@ -107,9 +176,32 @@ describe('cmdInit', () => {
     expect(out(io)).toContain('Password too weak.')
     expect(existsSync(join(secretsDir, 'master.json'))).toBe(true)
   })
+
+  it('fails immediately when required input is missing in non-interactive mode', async () => {
+    const io = mockIO([], false)
+    await expect(cmdInit(secretsDir, io)).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('Cannot prompt for new master password')
+  })
 })
 
 describe('cmdStart', () => {
+  it('shows grouped help for start and mode-specific help for start local_secure', async () => {
+    const io1 = mockIO()
+    const code1 = await main(['start', '--help'], io1)
+    expect(code1).toBe(0)
+    expect(out(io1)).toContain('Usage: agent-wallet start [options]')
+    expect(out(io1)).toContain('local_secure')
+    expect(out(io1)).toContain('--save-runtime-secrets')
+
+    const io2 = mockIO()
+    const code2 = await main(['start', 'local_secure', '--help'], io2)
+    expect(code2).toBe(0)
+    expect(out(io2)).toContain('Usage: agent-wallet start local_secure [options]')
+    expect(out(io2)).toContain('--password, -p <pw>')
+    expect(out(io2)).toContain('--generate, -g')
+    expect(out(io2)).not.toContain('--app-id')
+  })
+
   it('starts local_secure with generate shortcut', async () => {
     const io = mockIO()
     await cmdStart(secretsDir, io, {
@@ -138,6 +230,18 @@ describe('cmdStart', () => {
     expect(config.wallets.hot.type).toBe('raw_secret')
     expect(config.wallets.hot.params.source).toBe('private_key')
     expect(config.active_wallet).toBe('hot')
+  })
+
+  it('re-prompts for invalid interactive private key input', async () => {
+    const io = mockIO(['private_key', 'not-hex', TEST_PRIVATE_KEY])
+    await cmdStart(secretsDir, io, {
+      walletType: 'raw_secret',
+      walletId: 'hot',
+    })
+
+    expect(out(io)).toContain('Private key must be 32 bytes')
+    const config = readConfig(secretsDir)
+    expect(config.wallets.hot.params.source).toBe('private_key')
   })
 
   it('starts local_secure with mnemonic deriveAs', async () => {
@@ -261,6 +365,59 @@ describe('cmdStart', () => {
     })
 
     expect(existsSync(join(secretsDir, 'secret_hot.json'))).toBe(true)
+  })
+
+  it('re-prompts for invalid mnemonic account index', async () => {
+    const io = mockIO(['mnemonic', TEST_MNEMONIC, 'nope', TEST_MNEMONIC, '2', 'tron'])
+    await cmdStart(secretsDir, io, {
+      walletType: 'raw_secret',
+      walletId: 'seed',
+    })
+
+    expect(out(io)).toContain('Invalid account index.')
+    const config = readConfig(secretsDir)
+    expect(config.wallets.seed.params.account_index).toBe(2)
+  })
+
+  it('re-prompts for empty Privy required fields', async () => {
+    const io = mockIO(['', 'app-id', '', 'app-secret', '', 'wallet-id'])
+    await cmdStart(secretsDir, io, {
+      walletType: 'privy',
+      walletId: 'privy1',
+    })
+
+    expect(out(io)).toContain('Privy app id is required.')
+    expect(out(io)).toContain('Privy app secret (input hidden) is required.')
+    expect(out(io)).toContain('Privy wallet id is required.')
+    const config = readConfig(secretsDir)
+    expect(config.wallets.privy1.type).toBe('privy')
+  })
+
+  it('accepts explicit Privy flags in start privy', async () => {
+    const io = mockIO()
+    const code = await main(
+      [
+        'start',
+        'privy',
+        '--wallet-id',
+        'privy1',
+        '--app-id',
+        'app-id',
+        '--app-secret',
+        'app-secret',
+        '--privy-wallet-id',
+        'wallet-1',
+        '-d',
+        secretsDir,
+      ],
+      io,
+    )
+
+    expect(code).toBe(0)
+    const config = readConfig(secretsDir)
+    expect(config.wallets.privy1.params.app_id).toBe('app-id')
+    expect(config.wallets.privy1.params.app_secret).toBe('app-secret')
+    expect(config.wallets.privy1.params.wallet_id).toBe('wallet-1')
   })
 
   it('uses manually entered password when local_secure start does not receive -p', async () => {
@@ -423,11 +580,62 @@ describe('password retry behavior', () => {
     ).rejects.toThrow(CliExit)
     expect(io2.output.some((l) => l.includes('Wrong password'))).toBe(true)
   })
+
+  it('fails after three wrong interactive password attempts', async () => {
+    const io1 = mockIO()
+    await cmdStart(secretsDir, io1, {
+      walletType: 'local_secure',
+      walletId: 'default',
+      password: TEST_PASSWORD,
+      generate: true,
+    })
+
+    const io2 = mockIO(['wrong-one', 'wrong-two', 'wrong-three'])
+    await expect(
+      cmdStart(secretsDir, io2, {
+        walletType: 'local_secure',
+        walletId: 'w2',
+        generate: true,
+        override: true,
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(out(io2)).toContain('3 attempts failed')
+  })
+})
+
+describe('non-interactive prompt guards', () => {
+  it('fails immediately for missing Privy required fields in non-interactive mode', async () => {
+    const io = mockIO([], false)
+    await expect(
+      cmdStart(secretsDir, io, {
+        walletType: 'privy',
+        walletId: 'privy1',
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('Cannot prompt for privy app id')
+  })
 })
 
 describe('cmdAdd / active wallet', () => {
   beforeEach(async () => {
     await initDir(secretsDir)
+  })
+
+  it('shows grouped help for add and mode-specific help for add privy', async () => {
+    const io1 = mockIO()
+    const code1 = await main(['add', '--help'], io1)
+    expect(code1).toBe(0)
+    expect(out(io1)).toContain('Usage: agent-wallet add [options]')
+    expect(out(io1)).toContain('privy')
+    expect(out(io1)).toContain('--save-runtime-secrets')
+
+    const io2 = mockIO()
+    const code2 = await main(['add', 'privy', '--help'], io2)
+    expect(code2).toBe(0)
+    expect(out(io2)).toContain('Usage: agent-wallet add privy [options]')
+    expect(out(io2)).toContain('--app-id')
+    expect(out(io2)).toContain('--privy-wallet-id')
+    expect(out(io2)).not.toContain('--password, -p <pw>')
   })
 
   it('adds local_secure wallet from generate shortcut', async () => {
@@ -521,6 +729,50 @@ describe('cmdAdd / active wallet', () => {
     expect(config.wallets['interactive-raw'].params.account_index).toBe(3)
   })
 
+  it('reuses existing privy app credentials when requested', async () => {
+    const io1 = mockIO(['', 'app-id', 'app-secret', 'wallet-1'])
+    await cmdAdd(secretsDir, io1, {
+      walletType: 'privy',
+    })
+
+    const io2 = mockIO(['privy_2', 'default_privy', 'wallet-2'])
+    await cmdAdd(secretsDir, io2, {
+      walletType: 'privy',
+    })
+
+    const config = readConfig(secretsDir)
+    expect(config.wallets.privy_2.params.app_id).toBe('app-id')
+    expect(config.wallets.privy_2.params.app_secret).toBe('app-secret')
+    expect(config.wallets.privy_2.params.wallet_id).toBe('wallet-2')
+  })
+
+  it('accepts explicit Privy flags in add privy', async () => {
+    const io = mockIO()
+    const code = await main(
+      [
+        'add',
+        'privy',
+        '--wallet-id',
+        'privy_a',
+        '--app-id',
+        'app-id',
+        '--app-secret',
+        'app-secret',
+        '--privy-wallet-id',
+        'wallet-1',
+        '-d',
+        secretsDir,
+      ],
+      io,
+    )
+
+    expect(code).toBe(0)
+    const config = readConfig(secretsDir)
+    expect(config.wallets.privy_a.params.app_id).toBe('app-id')
+    expect(config.wallets.privy_a.params.app_secret).toBe('app-secret')
+    expect(config.wallets.privy_a.params.wallet_id).toBe('wallet-1')
+  })
+
   it('use command sets active wallet', async () => {
     process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
     await cmdAdd(secretsDir, mockIO(), {
@@ -559,19 +811,9 @@ describe('cmdAdd / active wallet', () => {
 })
 
 describe('cmdList / cmdInspect / cmdRemove', () => {
-  beforeEach(async () => {
-    await initDir(secretsDir)
-    process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
-    await cmdAdd(secretsDir, mockIO(), {
-      walletType: 'local_secure',
-      walletId: 'local-one',
-      generate: true,
-    })
-    await cmdAdd(secretsDir, mockIO(), {
-      walletType: 'raw_secret',
-      walletId: 'hot',
-      privateKey: TEST_PRIVATE_KEY,
-    })
+  beforeEach(() => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(listTemplateDir, 'agent-wallet-cli-test-')
   })
 
   it('list shows wallet id and type', async () => {
@@ -584,15 +826,72 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
   it('inspect shows local_secure details', async () => {
     const io = mockIO()
     await cmdInspect('local-one', secretsDir, io)
-    expect(out(io)).toContain('Type        local_secure')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('local_secure')
     expect(out(io)).toContain('secret_local-one.json')
   })
 
   it('inspect shows raw_secret details', async () => {
     const io = mockIO()
     await cmdInspect('hot', secretsDir, io)
-    expect(out(io)).toContain('Type        raw_secret')
-    expect(out(io)).toContain('Source Type private_key')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('raw_secret')
+    expect(out(io)).toContain('Source Type')
+    expect(out(io)).toContain('private_key')
+  })
+
+  it('resolve-address shows whitelist output for local_secure wallets', async () => {
+    const io = mockIO([TEST_PASSWORD])
+    await cmdResolveAddress('local-one', secretsDir, io)
+    expect(out(io)).toContain('Wallet')
+    expect(out(io)).toContain('Type')
+    expect(out(io)).toContain('Addresses')
+    expect(out(io)).toMatch(/EVM\s+0x/i)
+    expect(out(io)).toMatch(/TRON\s+T/i)
+  })
+
+  it('resolve-address shows whitelist output for raw_secret wallets', async () => {
+    const io = mockIO()
+    await cmdResolveAddress('hot', secretsDir, io)
+    expect(out(io)).toContain('Addresses')
+    expect(out(io)).toMatch(/EVM\s+0x/i)
+    expect(out(io)).toMatch(/TRON\s+T/i)
+  })
+
+  it('resolve-address prompts to select wallet when id is omitted', async () => {
+    const io = mockIO(['hot'])
+    await cmdResolveAddress(undefined, secretsDir, io)
+    expect(out(io)).toContain('Wallet')
+    expect(out(io)).toContain('hot')
+  })
+
+  it('resolve-address without wallets fails cleanly', async () => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(initializedTemplateDir, 'agent-wallet-cli-test-')
+    const io = mockIO()
+    await expect(cmdResolveAddress(undefined, secretsDir, io)).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('No wallets configured.')
+  })
+
+  it('resolve-address shows a single address for privy wallets', async () => {
+    await cmdAdd(secretsDir, mockIO(['app-id', 'app-secret', 'wallet-1']), {
+      walletType: 'privy',
+      walletId: 'privy-one',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { address: '0xabc', chain_type: 'ethereum' } }),
+      })) as typeof fetch,
+    )
+
+    const io = mockIO()
+    await cmdResolveAddress('privy-one', secretsDir, io)
+    expect(out(io)).toContain('Address')
+    expect(out(io)).toContain('0xabc')
+    expect(out(io)).not.toContain('Addresses')
   })
 
   it('remove deletes local secure secret file', async () => {
@@ -602,23 +901,49 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
     expect(readConfig(secretsDir).wallets['local-one']).toBeUndefined()
   })
 
+  it('remove prompts to select wallet when id is omitted', async () => {
+    const io = mockIO(['hot', 'y'])
+    await cmdRemove(undefined, secretsDir, false, io)
+    expect(readConfig(secretsDir).wallets.hot).toBeUndefined()
+    expect(out(io)).toContain("Wallet 'hot' removed.")
+  })
+
   it('remove prompts for confirmation and cancels when declined', async () => {
     const io = mockIO(['n'])
     await expect(cmdRemove('local-one', secretsDir, false, io)).rejects.toThrow(CliExit)
     expect(existsSync(join(secretsDir, 'secret_local-one.json'))).toBe(true)
     expect(out(io)).toContain('Cancelled.')
   })
+
+  it('remove can prompt for a new active wallet after deleting the active wallet', async () => {
+    await cmdUse('local-one', secretsDir, mockIO())
+    const io = mockIO(['y', 'hot'])
+    await cmdRemove('local-one', secretsDir, false, io)
+    expect(readConfig(secretsDir).active_wallet).toBe('hot')
+    expect(out(io)).toContain('Active wallet: hot')
+  })
+
+  it('remove can leave active wallet unset after deleting the active wallet', async () => {
+    await cmdUse('local-one', secretsDir, mockIO())
+    const io = mockIO(['y', 'no'])
+    await cmdRemove('local-one', secretsDir, false, io)
+    expect(readConfig(secretsDir).active_wallet).toBeUndefined()
+  })
+
+  it('remove without wallets fails cleanly', async () => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(initializedTemplateDir, 'agent-wallet-cli-test-')
+    const io = mockIO()
+    await expect(cmdRemove(undefined, secretsDir, true, io)).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('No wallets configured.')
+  })
 })
 
 describe('sign commands', () => {
-  beforeEach(async () => {
-    await initDir(secretsDir)
+  beforeEach(() => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(signerTemplateDir, 'agent-wallet-cli-test-')
     process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
-    await cmdAdd(secretsDir, mockIO(), {
-      walletType: 'local_secure',
-      walletId: 'signer',
-      generate: true,
-    })
   })
 
   it('signs a message', async () => {
@@ -630,7 +955,42 @@ describe('sign commands', () => {
   it('requires network', async () => {
     const io = mockIO()
     await expect(cmdSignMsg('signer', 'hello', undefined, secretsDir, io)).rejects.toThrow(CliExit)
-    expect(out(io)).toContain('--network is required')
+    expect(out(io)).toContain('Error: network is required')
+  })
+
+  it('allows privy signing without network', async () => {
+    const originalFetch = globalThis.fetch
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/v1/wallets/wallet-1') && !url.includes('/rpc')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { address: '0xabc', chain_type: 'ethereum' } }),
+            { status: 200 },
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { signature: '0xabc' } }), { status: 200 }),
+      )
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new ConfigWalletProvider(secretsDir)
+    provider.addWallet('privy_wallet', {
+      type: 'privy',
+      params: {
+        app_id: 'app',
+        app_secret: 'secret',
+        wallet_id: 'wallet-1',
+      },
+    })
+    provider.setActive('privy_wallet')
+
+    const io = mockIO()
+    await cmdSignMsg('privy_wallet', 'hello', undefined, secretsDir, io)
+    expect(out(io)).toContain('Signature:')
+
+    globalThis.fetch = originalFetch
   })
 
   it('uses active wallet when wallet id omitted', async () => {
@@ -705,14 +1065,10 @@ describe('invalid config handling', () => {
 })
 
 describe('change-password / reset', () => {
-  beforeEach(async () => {
-    await initDir(secretsDir)
+  beforeEach(() => {
+    rmSync(secretsDir, { recursive: true, force: true })
+    secretsDir = cloneDir(signerTemplateDir, 'agent-wallet-cli-test-')
     process.env.AGENT_WALLET_PASSWORD = TEST_PASSWORD
-    await cmdAdd(secretsDir, mockIO(), {
-      walletType: 'local_secure',
-      walletId: 'signer',
-      generate: true,
-    })
   })
 
   it('change-password updates existing runtime secrets', async () => {

@@ -39,11 +39,19 @@ class RawSecretMnemonicParams(BaseModel):
 RawSecretParams = RawSecretPrivateKeyParams | RawSecretMnemonicParams
 
 
+class PrivyWalletParams(BaseModel):
+    """Privy wallet params for API-backed signing."""
+
+    app_id: str
+    app_secret: str
+    wallet_id: str
+
+
 class WalletConfig(BaseModel):
     """Single wallet entry in wallets_config.json."""
 
     type: WalletType
-    params: LocalSecureWalletParams | RawSecretParams
+    params: LocalSecureWalletParams | RawSecretParams | PrivyWalletParams
 
     @model_validator(mode="after")
     def _validate_params(self) -> WalletConfig:
@@ -56,6 +64,11 @@ class WalletConfig(BaseModel):
             if isinstance(self.params, (RawSecretPrivateKeyParams, RawSecretMnemonicParams)):
                 return self
             raise ValueError("raw_secret wallets require raw secret params")
+
+        if self.type == WalletType.PRIVY:
+            if isinstance(self.params, PrivyWalletParams):
+                return self
+            raise ValueError("privy wallets require PrivyWalletParams")
 
         raise ValueError(f"Unknown wallet config type: {self.type}")
 

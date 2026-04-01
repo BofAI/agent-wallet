@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import { privateKeyToAccount } from 'viem/accounts'
 import { keccak256 } from 'viem'
@@ -168,6 +168,15 @@ describe('signRaw', () => {
 })
 
 describe('signTransaction validation', () => {
+  it('computes txID when missing', async () => {
+    const wallet = makeWallet()
+    const rawDataHex = 'deadbeef'
+    const signed = await wallet.signTransaction({ raw_data_hex: rawDataHex })
+    const parsed = JSON.parse(signed)
+    const expected = createHash('sha256').update(Buffer.from(rawDataHex, 'hex')).digest('hex')
+    expect(parsed.txID).toBe(expected)
+  })
+
   it('rejects non-hex txID', async () => {
     const wallet = makeWallet()
     await expect(wallet.signTransaction({ txID: 'not-hex', raw_data_hex: 'abcd' })).rejects.toThrow(

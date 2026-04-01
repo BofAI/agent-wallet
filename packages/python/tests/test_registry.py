@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import tempfile
+import shutil
 from pathlib import Path
 
 import pytest
@@ -56,24 +56,31 @@ def _write_raw_private_key_config(tmp_path: Path, *, active_wallet: str = "hot")
     )
 
 
-@pytest.fixture
-def setup_local_secure_dir():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        kv = SecureKVStore(tmpdir, TEST_PASSWORD)
-        kv.init_master()
-        kv.save_secret("eth_test", bytes.fromhex(TEST_PRIVATE_KEY.removeprefix("0x")))
+@pytest.fixture(scope="session")
+def local_secure_template_dir(tmp_path_factory):
+    template_dir = tmp_path_factory.mktemp("agent-wallet-registry-template")
+    kv = SecureKVStore(str(template_dir), TEST_PASSWORD)
+    kv.init_master()
+    kv.save_secret("eth_test", bytes.fromhex(TEST_PRIVATE_KEY.removeprefix("0x")))
 
-        config = WalletsTopology(
-            active_wallet="eth_test",
-            wallets={
-                "eth_test": WalletConfig(
-                    type="local_secure",
-                    params=LocalSecureWalletParams(secret_ref="eth_test"),
-                ),
-            },
-        )
-        save_config(tmpdir, config)
-        yield tmpdir
+    config = WalletsTopology(
+        active_wallet="eth_test",
+        wallets={
+            "eth_test": WalletConfig(
+                type="local_secure",
+                params=LocalSecureWalletParams(secret_ref="eth_test"),
+            ),
+        },
+    )
+    save_config(str(template_dir), config)
+    return template_dir
+
+
+@pytest.fixture
+def setup_local_secure_dir(tmp_path, local_secure_template_dir):
+    target_dir = tmp_path / "secrets"
+    shutil.copytree(local_secure_template_dir, target_dir)
+    return str(target_dir)
 
 
 @pytest.fixture(autouse=True)
@@ -84,6 +91,12 @@ def clear_wallet_env(monkeypatch):
         "AGENT_WALLET_PRIVATE_KEY",
         "AGENT_WALLET_MNEMONIC",
         "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX",
+        "PRIVY_APP_ID",
+        "PRIVY_APP_SECRET",
+        "PRIVY_WALLET_ID",
+        "AGENT_WALLET_PRIVY_APP_ID",
+        "AGENT_WALLET_PRIVY_APP_SECRET",
+        "AGENT_WALLET_PRIVY_WALLET_ID",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -280,7 +293,7 @@ class TestEnvWalletProvider:
     async def test_private_key_evm(self):
         provider = EnvWalletProvider(
             network="eip155",
-            private_key=TEST_PRIVATE_KEY,
+            env={"AGENT_WALLET_PRIVATE_KEY": TEST_PRIVATE_KEY},
         )
         wallet = await provider.get_wallet()
         assert await wallet.get_address() == TEST_ENV_PRIVATE_KEY_ADDRESS
@@ -289,7 +302,7 @@ class TestEnvWalletProvider:
     async def test_mnemonic_tron(self):
         provider = EnvWalletProvider(
             network="tron:nile",
-            mnemonic=TEST_MNEMONIC,
+            env={"AGENT_WALLET_MNEMONIC": TEST_MNEMONIC},
         )
         wallet = await provider.get_wallet()
         assert (await wallet.get_address()).startswith("T")
@@ -298,23 +311,29 @@ class TestEnvWalletProvider:
     async def test_mnemonic_account_index(self):
         provider = EnvWalletProvider(
             network="eip155:1",
-            mnemonic=TEST_MNEMONIC,
-            account_index=1,
+            env={
+                "AGENT_WALLET_MNEMONIC": TEST_MNEMONIC,
+                "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX": "1",
+            },
         )
         wallet = await provider.get_wallet()
         assert await wallet.get_address() == TEST_EVM_ADDRESS_INDEX_1
 
-    def test_conflicting_sources(self):
+    @pytest.mark.asyncio
+    async def test_conflicting_sources(self):
+        provider = EnvWalletProvider(
+            network="eip155",
+            env={
+                "AGENT_WALLET_PRIVATE_KEY": TEST_PRIVATE_KEY,
+                "AGENT_WALLET_MNEMONIC": TEST_MNEMONIC,
+            },
+        )
         with pytest.raises(ValueError, match="Provide only one of"):
-            EnvWalletProvider(
-                network="eip155",
-                private_key=TEST_PRIVATE_KEY,
-                mnemonic=TEST_MNEMONIC,
-            )
+            await provider.get_wallet()
 
     @pytest.mark.asyncio
     async def test_missing_sources(self):
-        provider = EnvWalletProvider(network="eip155")
+        provider = EnvWalletProvider(network="eip155", env={})
         with pytest.raises(ValueError, match="could not find a wallet source"):
             await provider.get_wallet()
 
@@ -322,7 +341,7 @@ class TestEnvWalletProvider:
     async def test_get_wallet_alias(self):
         provider = EnvWalletProvider(
             network="eip155",
-            private_key=TEST_PRIVATE_KEY,
+            env={"AGENT_WALLET_PRIVATE_KEY": TEST_PRIVATE_KEY},
         )
         wallet = await provider.get_wallet()
         assert await wallet.get_address() == TEST_ENV_PRIVATE_KEY_ADDRESS
@@ -331,15 +350,28 @@ class TestEnvWalletProvider:
     async def test_get_active_wallet_uses_provider_default_network(self):
         provider = EnvWalletProvider(
             network="eip155",
-            private_key=TEST_PRIVATE_KEY,
+            env={"AGENT_WALLET_PRIVATE_KEY": TEST_PRIVATE_KEY},
         )
         wallet = await provider.get_active_wallet()
         assert await wallet.get_address() == TEST_ENV_PRIVATE_KEY_ADDRESS
 
     @pytest.mark.asyncio
     async def test_constructor_allows_missing_network_until_access(self):
-        provider = EnvWalletProvider(private_key=TEST_PRIVATE_KEY)
+        provider = EnvWalletProvider(env={"AGENT_WALLET_PRIVATE_KEY": TEST_PRIVATE_KEY})
         with pytest.raises(ValueError, match="network is required"):
+            await provider.get_wallet()
+
+    @pytest.mark.asyncio
+    async def test_ignores_privy_env_vars(self):
+        provider = EnvWalletProvider(
+            network="eip155",
+            env={
+                "PRIVY_APP_ID": "app-id",
+                "PRIVY_APP_SECRET": "app-secret",
+                "PRIVY_WALLET_ID": "wallet-id",
+            },
+        )
+        with pytest.raises(ValueError, match="resolve_wallet could not find a wallet source"):
             await provider.get_wallet()
 
 
@@ -431,7 +463,10 @@ class TestResolveWallet:
             await resolve_wallet(dir=str(tmp_path), network="eip155")
 
     @pytest.mark.asyncio
-    async def test_missing_network_for_config_resolution(self, setup_local_secure_dir):
+    async def test_missing_network_for_config_resolution(
+        self, setup_local_secure_dir, monkeypatch
+    ):
+        monkeypatch.setenv("AGENT_WALLET_PASSWORD", TEST_PASSWORD)
         with pytest.raises(ValueError, match="network is required"):
             await resolve_wallet(dir=setup_local_secure_dir)
 

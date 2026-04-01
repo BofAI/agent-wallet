@@ -12,8 +12,8 @@ export class LocalSecureSigner extends LocalSigner {
     params: LocalSecureWalletParams,
     configDir: string,
     password: string | undefined,
-    network: string,
-    secretLoader: SecretLoaderFn | undefined,
+    network?: string,
+    secretLoader?: SecretLoaderFn,
   ) {
     if (!password) throw new Error('Password required for local_secure wallets')
     if (!secretLoader) throw new Error('local_secure wallets require a configured secret loader')

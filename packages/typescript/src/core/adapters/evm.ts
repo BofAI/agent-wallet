@@ -1,6 +1,6 @@
 import { parseTransaction } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import type { Wallet, Eip712Capable } from '../base.js'
+import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
 import { SigningError } from '../errors.js'
 
 export class EvmSigner implements Wallet, Eip712Capable {
@@ -17,7 +17,7 @@ export class EvmSigner implements Wallet, Eip712Capable {
     return this.account.address
   }
 
-  async signRaw(rawTx: Uint8Array): Promise<string> {
+  async signRaw(rawTx: Uint8Array, _options?: SignOptions): Promise<string> {
     try {
       const serialized = `0x${Buffer.from(rawTx).toString('hex')}` as `0x${string}`
       const parsed = parseTransaction(serialized)
@@ -37,7 +37,7 @@ export class EvmSigner implements Wallet, Eip712Capable {
     }
   }
 
-  async signTransaction(payload: Record<string, unknown>): Promise<string> {
+  async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
     try {
       const sig = await this.account.signTransaction(
         payload as Parameters<typeof this.account.signTransaction>[0],
@@ -48,7 +48,7 @@ export class EvmSigner implements Wallet, Eip712Capable {
     }
   }
 
-  async signMessage(msg: Uint8Array): Promise<string> {
+  async signMessage(msg: Uint8Array, _options?: SignOptions): Promise<string> {
     try {
       const sig = await this.account.signMessage({
         message: { raw: msg },
@@ -59,7 +59,7 @@ export class EvmSigner implements Wallet, Eip712Capable {
     }
   }
 
-  async signTypedData(data: Record<string, unknown>): Promise<string> {
+  async signTypedData(data: Record<string, unknown>, _options?: SignOptions): Promise<string> {
     try {
       const { domain, types, primaryType, message } = data as {
         domain: Record<string, unknown>

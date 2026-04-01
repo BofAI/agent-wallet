@@ -14,25 +14,51 @@ from agent_wallet.core.errors import DecryptionError
 from agent_wallet.core.utils import safe_chmod
 
 # Keystore V3 scrypt parameters
-SCRYPT_N = 262144
-SCRYPT_R = 8
-SCRYPT_P = 1
-SCRYPT_DKLEN = 32
+DEFAULT_SCRYPT_N = 262144
+DEFAULT_SCRYPT_R = 8
+DEFAULT_SCRYPT_P = 1
+DEFAULT_SCRYPT_DKLEN = 32
+TEST_SCRYPT_N = 16384
 
 # Sentinel value for master.json password verification
 MASTER_SENTINEL = b"agent-wallet"
 
 
-def _derive_key(password: str, salt: bytes) -> bytes:
-    """Derive a 32-byte key from password + salt using scrypt."""
+def _derive_key(
+    password: str,
+    salt: bytes,
+    *,
+    n: int | None = None,
+    r: int | None = None,
+    p: int | None = None,
+    dklen: int | None = None,
+) -> bytes:
+    """Derive a key from password + salt using scrypt."""
+    if n is None or r is None or p is None or dklen is None:
+        n, r, p, dklen = _scrypt_params()
     return scrypt_kdf(
         password.encode("utf-8"),
         salt,
-        key_len=SCRYPT_DKLEN,
-        N=SCRYPT_N,
-        r=SCRYPT_R,
-        p=SCRYPT_P,
+        key_len=dklen,
+        N=n,
+        r=r,
+        p=p,
     )
+
+
+def _scrypt_params() -> tuple[int, int, int, int]:
+    explicit_n = os.environ.get("AGENT_WALLET_TEST_SCRYPT_N")
+    if explicit_n:
+        try:
+            n = int(explicit_n)
+        except ValueError:
+            n = DEFAULT_SCRYPT_N
+        else:
+            if n > 1:
+                return n, DEFAULT_SCRYPT_R, DEFAULT_SCRYPT_P, DEFAULT_SCRYPT_DKLEN
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return TEST_SCRYPT_N, DEFAULT_SCRYPT_R, DEFAULT_SCRYPT_P, DEFAULT_SCRYPT_DKLEN
+    return DEFAULT_SCRYPT_N, DEFAULT_SCRYPT_R, DEFAULT_SCRYPT_P, DEFAULT_SCRYPT_DKLEN
 
 
 def _encrypt_bytes(plaintext: bytes, password: str) -> dict:
@@ -40,9 +66,17 @@ def _encrypt_bytes(plaintext: bytes, password: str) -> dict:
 
     Returns a JSON-serializable dict with Keystore V3 structure.
     """
+    scrypt_n, scrypt_r, scrypt_p, scrypt_dklen = _scrypt_params()
     salt = os.urandom(32)
     iv = os.urandom(16)
-    derived_key = _derive_key(password, salt)
+    derived_key = _derive_key(
+        password,
+        salt,
+        n=scrypt_n,
+        r=scrypt_r,
+        p=scrypt_p,
+        dklen=scrypt_dklen,
+    )
 
     # AES-128-CTR: use first 16 bytes of derived key
     encryption_key = derived_key[:16]
@@ -61,10 +95,10 @@ def _encrypt_bytes(plaintext: bytes, password: str) -> dict:
             "ciphertext": ciphertext.hex(),
             "kdf": "scrypt",
             "kdfparams": {
-                "dklen": SCRYPT_DKLEN,
-                "n": SCRYPT_N,
-                "r": SCRYPT_R,
-                "p": SCRYPT_P,
+                "dklen": scrypt_dklen,
+                "n": scrypt_n,
+                "r": scrypt_r,
+                "p": scrypt_p,
                 "salt": salt.hex(),
             },
             "mac": mac.hex(),
@@ -82,7 +116,14 @@ def _decrypt_bytes(keystore: dict, password: str) -> bytes:
     ciphertext = bytes.fromhex(crypto["ciphertext"])
     stored_mac = crypto["mac"]
 
-    derived_key = _derive_key(password, salt)
+    derived_key = _derive_key(
+        password,
+        salt,
+        n=int(kdfparams["n"]),
+        r=int(kdfparams["r"]),
+        p=int(kdfparams["p"]),
+        dklen=int(kdfparams["dklen"]),
+    )
 
     # Verify MAC before decrypting
     mac_key = derived_key[16:]

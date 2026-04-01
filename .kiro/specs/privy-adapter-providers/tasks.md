@@ -1,0 +1,206 @@
+# Implementation Plan
+
+## Completed Tasks (previous cycle)
+- [x] 1. Configuration model and precedence
+- [x] 1.1 (P) Define Privy configuration inputs and validation in the TypeScript SDK
+  - Capture required and optional configuration values for Privy usage
+  - Enforce deterministic precedence between config-provider and env-provider values
+  - Validate required values and redact secrets in any surfaced errors
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.3_
+- [x] 1.2 (P) Define Privy configuration inputs and validation in the Python SDK
+  - Capture required and optional configuration values for Privy usage
+  - Enforce deterministic precedence between config-provider and env-provider values
+  - Validate required values and redact secrets in any surfaced errors
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.3_
+- [x] 1.3 Wire configuration resolution into provider selection and enablement checks
+  - Surface an explicit enable/disable signal for Privy configuration readiness
+  - Ensure missing required values block adapter initialization with clear errors
+  - _Requirements: 1.2, 1.3, 1.4, 2.4, 3.2, 3.3, 4.1_
+
+- [x] 2. Privy API integration and adapter behavior
+- [x] 2.1 (P) Implement the Privy HTTP client in the TypeScript SDK
+  - Build required authentication headers and request envelope handling
+  - Apply retry/backoff for rate limiting responses
+  - Normalize API errors into typed, non-leaking error messages
+  - _Requirements: 1.3, 4.2, 4.3_
+- [x] 2.2 (P) Implement the Privy HTTP client in the Python SDK
+  - Build required authentication headers and request envelope handling
+  - Apply retry/backoff for rate limiting responses
+  - Normalize API errors into typed, non-leaking error messages
+  - _Requirements: 1.3, 4.2, 4.3_
+- [x] 2.3 Implement the Privy adapter in the TypeScript SDK
+  - Map signing operations to Privy RPC methods and handle responses
+  - Support address lookup via Privy wallet endpoint with caching
+  - Reject unsupported raw transaction signing with clear errors
+  - _Requirements: 1.1, 1.2, 1.3, 4.1_
+- [x] 2.4 (P) Implement the Privy adapter in the Python SDK
+  - Map signing operations to Privy RPC methods and handle responses
+  - Support address lookup via Privy wallet endpoint with caching
+  - Reject unsupported raw transaction signing with clear errors
+  - _Requirements: 1.1, 1.2, 1.3, 4.1_
+
+- [x] 3. Adapter registration and config schema integration
+- [x] 3.1 Add Privy wallet type support to TypeScript config and adapter selection
+  - Allow Privy wallet entries to be recognized as available providers
+  - Ensure adapter creation uses resolved Privy configuration
+  - _Requirements: 1.1, 1.2, 2.1_
+- [x] 3.2 (P) Add Privy wallet type support to Python config and adapter selection
+  - Allow Privy wallet entries to be recognized as available providers
+  - Ensure adapter creation uses resolved Privy configuration
+  - _Requirements: 1.1, 1.2, 2.1_
+- [x] 3.3 Ensure adapter initialization failures surface clearly to callers
+  - Propagate configuration validation failures consistently across SDKs
+  - _Requirements: 1.3, 2.4, 3.2, 3.3_
+
+- [x] 4. CLI support for Privy wallets
+- [x] 4.1 Add CLI flows to create Privy wallet entries
+  - Collect required and optional Privy configuration values securely
+  - Store Privy wallet entries with sensitive values redacted in outputs
+  - _Requirements: 1.1, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 4.3_
+- [x] 4.2 Update CLI inspect and signing flows for Privy wallets
+  - Allow signing without mandatory network flag when using Privy
+  - Report adapter-level errors cleanly and without secret leakage
+  - _Requirements: 1.4, 4.1, 4.2, 4.3_
+
+- [x] 5. Tests for Privy integration
+- [x] 5.1 Unit tests for TypeScript configuration resolution
+  - Validate precedence handling and required-key validation behavior
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3_
+- [x] 5.2 (P) Unit tests for TypeScript Privy adapter and client
+  - Verify signing method mapping and error translation
+  - _Requirements: 1.2, 1.3, 4.2_
+- [x] 5.3 (P) Unit tests for Python Privy adapter and configuration resolution
+  - Verify signing method mapping, validation, and error translation
+  - _Requirements: 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.2_
+- [x] 5.4 Integration tests for provider selection and CLI signing
+  - Confirm Privy adapter selection and sign flows behave as expected
+  - _Requirements: 1.1, 1.4, 4.1, 4.2_
+
+## Updated Tasks (current cycle)
+- [x] 6. Provider source isolation and env-based Privy enablement
+- [x] 6.1 (P) Refactor TypeScript providers to isolate config vs env sources
+  - Ensure config-backed Privy uses only config values and runtime overrides
+  - Add env-backed Privy resolution alongside raw secret env parsing
+  - Support env key aliases for Privy (`PRIVY_*` and `AGENT_WALLET_PRIVY_*`)
+  - Define deterministic selection when multiple env groups are present
+  - Centralize env key constants and parsing helpers without introducing import cycles
+  - Keep enablement checks and errors explicit without leaking secrets
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 4.1, 4.2, 4.3_
+- [x] 6.2 (P) Refactor Python providers to isolate config vs env sources
+  - Ensure config-backed Privy uses only config values and runtime overrides
+  - Add env-backed Privy resolution alongside raw secret env parsing
+  - Support env key aliases for Privy (`PRIVY_*` and `AGENT_WALLET_PRIVY_*`)
+  - Define deterministic selection when multiple env groups are present
+  - Centralize env key constants and parsing helpers without introducing import cycles
+  - Keep enablement checks and errors explicit without leaking secrets
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 4.1, 4.2, 4.3_
+
+- [x] 7. WalletBuilder contract updates for config vs env inputs
+- [x] 7.1 (P) Update TypeScript wallet construction flow to accept resolved env inputs
+  - Keep builder free of config/env IO and accept fully resolved params
+  - Ensure env provider uses the same builder construction path as config provider
+  - Use WalletType for env wallet kinds (no custom enum)
+  - Preserve network requirements for raw secret wallets
+  - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3_
+- [x] 7.2 (P) Update Python wallet construction flow to accept resolved env inputs
+  - Keep builder free of config/env IO and accept fully resolved params
+  - Ensure env provider uses the same builder construction path as config provider
+  - Use WalletType for env wallet kinds (no custom enum)
+  - Preserve network requirements for raw secret wallets
+  - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3_
+
+- [x] 8. Privy config validation changes and base URL removal
+- [x] 8.1 (P) Update TypeScript Privy config validation for single-source resolution
+  - Remove base URL configuration support and default to fixed Privy endpoint
+  - Enforce required keys for the selected provider source
+  - Remove runtime override handling from config resolution
+  - _Requirements: 1.2, 1.3, 2.1, 2.2, 2.4, 3.1, 3.2, 3.3, 4.3_
+- [x] 8.2 (P) Update Python Privy config validation for single-source resolution
+  - Remove base URL configuration support and default to fixed Privy endpoint
+  - Enforce required keys for the selected provider source
+  - Remove runtime override handling from config resolution
+  - _Requirements: 1.2, 1.3, 2.1, 2.2, 2.4, 3.1, 3.2, 3.3, 4.3_
+
+- [x] 9. CLI updates for Privy reuse flow and UX wording
+- [x] 9.1 (P) Update TypeScript CLI to reuse existing Privy wallet entries and remove base URL prompts
+  - Provide a selection list of existing Privy wallets to reuse app_id/app_secret
+  - In reuse mode, prompt only for a new **Privy wallet id** (not a generic wallet id)
+  - Collect new Privy credentials only when reuse is not selected
+  - _Requirements: 1.1, 2.1, 3.1, 3.2, 4.3_
+- [x] 9.2 (P) Update Python CLI to reuse existing Privy wallet entries and remove base URL prompts
+  - Provide a selection list of existing Privy wallets to reuse app_id/app_secret
+  - In reuse mode, prompt only for a new **Privy wallet id** (not a generic wallet id)
+  - Collect new Privy credentials only when reuse is not selected
+  - _Requirements: 1.1, 2.1, 3.1, 3.2, 4.3_
+
+- [x] 10. Signing options for authorization signature
+- [x] 10.1 (P) Add per-request signing options to TypeScript wallet interfaces
+  - Extend signMessage/signTransaction/signRaw/signTypedData to accept optional sign options
+  - Ensure non-Privy adapters ignore options safely
+  - Pass authorizationSignature into Privy requests without persisting it on the client
+  - _Requirements: 1.1, 1.2, 1.3, 4.2, 4.3_
+- [x] 10.2 (P) Add per-request signing options to Python wallet interfaces
+  - Extend signing methods to accept optional sign options
+  - Ensure non-Privy adapters ignore options safely
+  - Pass authorizationSignature into Privy requests without persisting it on the client
+  - _Requirements: 1.1, 1.2, 1.3, 4.2, 4.3_
+
+- [x] 11. Test coverage for provider isolation and env-based Privy
+- [x] 11.1 Add TypeScript tests for env provider Privy selection and conflict handling
+  - Validate env-only Privy resolution without config fallback
+  - Confirm conflicting env groups produce clear errors
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 4.1, 4.2_
+- [x] 11.2 (P) Add Python tests for env provider Privy selection and conflict handling
+  - Validate env-only Privy resolution without config fallback
+  - Confirm conflicting env groups produce clear errors
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 4.1, 4.2_
+- [x] 11.3 Update CLI tests for Privy reuse flow and UX wording
+  - Confirm reuse path does not mutate stored config unexpectedly
+  - Ensure secret redaction and enablement status outputs remain correct
+  - _Requirements: 1.4, 3.2, 4.1, 4.3_
+
+- [x] 12. Core helper consolidation for env/network/key utilities
+- [x] 12.1 (P) Move env key constants into core base (TypeScript + Python)
+  - Relocate env key constants to core base modules
+  - Update resolver/env-provider imports to use the centralized source
+  - _Requirements: 2.1, 2.2, 2.3_
+- [x] 12.2 (P) Move env parsing helpers into core utils (TypeScript + Python)
+  - Relocate firstEnv/cleanEnvValue/account index parsing into core utils
+  - Update resolver/env-provider imports; ensure no import cycles
+  - _Requirements: 2.1, 2.2, 2.3_
+- [x] 12.3 (P) Consolidate network family parsing into core utils (TypeScript + Python)
+  - Move parseNetworkFamily / parse_network_family into core utils
+  - Update adapters and CLI to import the shared helper
+  - _Requirements: 1.1, 1.2_
+- [x] 12.4 (P) Consolidate key derivation helpers into core utils (TypeScript + Python)
+  - Move decodePrivateKey / decode_private_key and deriveKeyFromMnemonic / derive_key_from_mnemonic into core utils
+  - Update adapters and CLI to import the shared helpers
+  - _Requirements: 1.1, 1.2_
+- [x] 12.5 (P) Optional: consolidate shared hex helpers
+  - If still duplicated, move stripHexPrefix into core utils/hex
+  - Update adapters to use shared helper and keep behavior unchanged
+  - _Requirements: 1.1, 4.2_
+
+- [x] 13. CLI retry strategy alignment
+- [x] 13.1 (P) Align Python CLI retry behavior with the shared input-category policy
+  - Preserve bounded retries for security-sensitive verification such as existing master password checks
+  - Keep user-correctable interactive input in retry loops for new password, confirmation, wallet id, private key, mnemonic, account index, and Privy required fields
+  - Add non-interactive prompt guards so missing required values fail immediately instead of falling back to prompts
+  - Consolidate prompt helpers where needed so future CLI flows inherit the same behavior by default
+  - _Requirements: 4.1, 4.2, 4.3_
+- [x] 13.2 (P) Align TypeScript CLI retry behavior with the shared input-category policy
+  - Preserve bounded retries for security-sensitive verification such as existing master password checks
+  - Keep user-correctable interactive input in retry loops for new password, confirmation, wallet id, private key, mnemonic, account index, and Privy required fields
+  - Add non-interactive prompt guards so missing required values fail immediately instead of falling back to prompts
+  - Consolidate prompt helpers where needed so future CLI flows inherit the same behavior by default
+  - _Requirements: 4.1, 4.2, 4.3_
+- [x] 13.3 Add Python CLI coverage for bounded verification retries and non-interactive failures
+  - Verify wrong existing password fails after three interactive attempts
+  - Verify missing required values in non-interactive mode fail immediately with clear errors
+  - Verify explicit invalid values still fail immediately without re-prompting
+  - _Requirements: 4.1, 4.2, 4.3_
+- [x] 13.4 Add TypeScript CLI coverage for bounded verification retries and non-interactive failures
+  - Verify wrong existing password fails after three interactive attempts
+  - Verify missing required values in non-interactive mode fail immediately with clear errors
+  - Verify explicit invalid values still fail immediately without re-prompting
+  - _Requirements: 4.1, 4.2, 4.3_

@@ -26,7 +26,7 @@
 import { resolveWalletProvider } from '../src/index.js'
 
 // Transfer parameters
-const TO_ADDRESS = 'TVDGpn4hCSzJ5nkHPLetk8KQBtwaTppnkr'
+const TO_ADDRESS = 'TUJ1C4ybdcueXbi8Wmrqscteux5eGvrCh6'
 const AMOUNT_SUN = 1_000_000 // 1 TRX = 1,000,000 SUN
 
 // TronGrid endpoints by network
@@ -40,7 +40,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Resolve provider and active wallet
   // ----------------------------------------------------------------
-  const provider = resolveWalletProvider({ network: 'tron' })
+  const provider = resolveWalletProvider({ network: 'tron', dir: '/tmp/test-wallet' })
 
   // ----------------------------------------------------------------
   // Step 2: Get wallet instance
@@ -74,12 +74,13 @@ async function main() {
   // 5a. Caller builds unsigned tx via TronGrid
   const unsignedTx = await buildTrxTransfer(baseUrl, address, TO_ADDRESS, AMOUNT_SUN)
   console.log(`TX ID:     ${unsignedTx.txID}`)
+  console.log(`Unsigned TX: ${JSON.stringify(unsignedTx)}`)
 
   // 5b. SDK signs the unsigned tx
   const signedTxJson = await wallet.signTransaction(unsignedTx)
   const signedTx = JSON.parse(signedTxJson) as Record<string, unknown>
   console.log(`Signature: ${(signedTx.signature as string[])[0]}`)
-  console.log()
+  console.log(`Raw SignedTx: ${JSON.stringify(signedTx)}`)
 
   // ----------------------------------------------------------------
   // Step 5: Caller broadcasts the signed tx
@@ -88,13 +89,19 @@ async function main() {
   const txid = await broadcastTransaction(signedTx, baseUrl)
   console.log(`Broadcasted! txid: ${txid}`)
 
-  const explorerBase = network === 'mainnet' ? 'https://tronscan.org' : `https://${network}.tronscan.org`
+  const explorerBase =
+    network === 'mainnet' ? 'https://tronscan.org' : `https://${network}.tronscan.org`
   console.log(`Explorer:   ${explorerBase}/#/transaction/${txid}`)
 }
 
 // --- Helper functions (caller's responsibility, NOT part of SDK) ---
 
-async function buildTrxTransfer(baseUrl: string, from: string, to: string, amountSun: number): Promise<Record<string, unknown>> {
+async function buildTrxTransfer(
+  baseUrl: string,
+  from: string,
+  to: string,
+  amountSun: number,
+): Promise<Record<string, unknown>> {
   const res = await fetch(`${baseUrl}/wallet/createtransaction`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -112,7 +119,10 @@ async function buildTrxTransfer(baseUrl: string, from: string, to: string, amoun
   return tx
 }
 
-async function broadcastTransaction(signedTx: Record<string, unknown>, baseUrl: string): Promise<string> {
+async function broadcastTransaction(
+  signedTx: Record<string, unknown>,
+  baseUrl: string,
+): Promise<string> {
   const res = await fetch(`${baseUrl}/wallet/broadcasttransaction`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

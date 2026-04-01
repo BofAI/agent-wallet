@@ -46,3 +46,31 @@ export class UnsupportedOperationError extends WalletError {
     this.name = 'UnsupportedOperationError'
   }
 }
+
+export class PrivyConfigError extends WalletError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PrivyConfigError'
+  }
+}
+
+export class PrivyRequestError extends WalletError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PrivyRequestError'
+  }
+}
+
+export class PrivyRateLimitError extends WalletError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PrivyRateLimitError'
+  }
+}
+
+export class PrivyAuthError extends WalletError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PrivyAuthError'
+  }
+}

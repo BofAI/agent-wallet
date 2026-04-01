@@ -1,6 +1,7 @@
 """Wallet abstract interface, capability mixins, and core enums."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -16,6 +17,16 @@ class WalletType(StrEnum):
 
     LOCAL_SECURE = "local_secure"
     RAW_SECRET = "raw_secret"
+    PRIVY = "privy"
+
+ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD"
+ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR"
+ENV_PRIVATE_KEY_KEYS = ("AGENT_WALLET_PRIVATE_KEY", "TRON_PRIVATE_KEY")
+ENV_MNEMONIC_KEYS = ("AGENT_WALLET_MNEMONIC", "TRON_MNEMONIC")
+ENV_ACCOUNT_INDEX_KEYS = (
+    "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX",
+    "TRON_ACCOUNT_INDEX",
+)
 
 
 class Wallet(ABC):
@@ -26,15 +37,15 @@ class Wallet(ABC):
         """Return the wallet's public address."""
 
     @abstractmethod
-    async def sign_raw(self, raw_tx: bytes) -> str:
+    async def sign_raw(self, raw_tx: bytes, options: "SignOptions | None" = None) -> str:
         """Sign pre-serialized transaction bytes, return signature hex."""
 
     @abstractmethod
-    async def sign_transaction(self, payload: dict) -> str:
+    async def sign_transaction(self, payload: dict, options: "SignOptions | None" = None) -> str:
         """Build and sign a transaction from high-level intent."""
 
     @abstractmethod
-    async def sign_message(self, msg: bytes) -> str:
+    async def sign_message(self, msg: bytes, options: "SignOptions | None" = None) -> str:
         """Sign an arbitrary message, return signature hex."""
 
 
@@ -42,8 +53,13 @@ class Eip712Capable(ABC):
     """Mixin for wallets that support EIP-712 typed data signing."""
 
     @abstractmethod
-    async def sign_typed_data(self, data: dict) -> str:
+    async def sign_typed_data(self, data: dict, options: "SignOptions | None" = None) -> str:
         """Sign EIP-712 typed data, return signature hex."""
+
+
+@dataclass(frozen=True)
+class SignOptions:
+    authorization_signature: str | None = None
 
 
 class WalletProvider(ABC):

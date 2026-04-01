@@ -2,6 +2,7 @@ import { keccak256 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58checkModule from 'bs58check'
+import { createHash } from 'node:crypto'
 
 // Normalize CJS/ESM interop: bs58check v4 exports differ between CJS and ESM,
 // and tsup's __toESM() wrapper can add an extra .default layer in CJS bundles.
@@ -16,8 +17,9 @@ const bs58check: typeof bs58checkModule =
     ? bs58checkModule
     : (bs58checkInterop.default ?? bs58checkModule)
 
-import type { Wallet, Eip712Capable } from '../base.js'
+import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
 import { SigningError } from '../errors.js'
+import { stripHexPrefix } from '../utils/hex.js'
 
 export class TronSigner implements Wallet, Eip712Capable {
   private readonly privateKeyBytes: Uint8Array
@@ -40,7 +42,7 @@ export class TronSigner implements Wallet, Eip712Capable {
     return this.address
   }
 
-  async signRaw(rawTx: Uint8Array): Promise<string> {
+  async signRaw(rawTx: Uint8Array, _options?: SignOptions): Promise<string> {
     try {
       return this.ecdsaSign(rawTx)
     } catch (e) {
@@ -51,25 +53,24 @@ export class TronSigner implements Wallet, Eip712Capable {
   /**
    * Sign a pre-built unsigned transaction from TronGrid.
    *
-   * Accepts an unsigned tx object with { txID, raw_data_hex, raw_data }.
-   * The txID is SHA256(raw_data) — we sign the txID directly with secp256k1
-   * and return the signed tx as JSON with the signature attached.
+   * Accepts an unsigned tx object with { raw_data_hex } and optional txID/raw_data.
+   * If txID is missing, compute SHA256(raw_data_hex) locally.
+   * Sign the txID directly with secp256k1 and return the signed tx with signature attached.
    */
-  async signTransaction(payload: Record<string, unknown>): Promise<string> {
+  async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
     try {
-      if (!payload.txID || !payload.raw_data_hex) {
+      if (!payload.raw_data_hex) {
         throw new Error(
-          'Payload must be an unsigned transaction with {txID, raw_data_hex}. ' +
+          'Payload must be an unsigned transaction with {raw_data_hex}. ' +
             'Use TronGrid API to build the transaction first.',
         )
       }
-      const txId = payload.txID as string
-      if (!/^[0-9a-fA-F]{64}$/.test(txId)) {
-        throw new Error('Payload txID must be a 32-byte hex string')
-      }
-      const txIdBytes = Buffer.from(txId, 'hex')
+      const rawDataHex = stripHexPrefix(payload.raw_data_hex as string)
+      const txId = typeof payload.txID === 'string' ? stripHexPrefix(payload.txID) : ''
+      const txIdHex = txId ? validateTxId(txId) : sha256Hex(rawDataHex)
+      const txIdBytes = Buffer.from(txIdHex, 'hex')
       const signature = this.signDigest(txIdBytes)
-      const signedTx = { ...payload, signature: [signature] }
+      const signedTx = { ...payload, txID: txIdHex, signature: [signature] }
       return JSON.stringify(signedTx)
     } catch (e) {
       if (e instanceof SigningError) throw e
@@ -77,7 +78,7 @@ export class TronSigner implements Wallet, Eip712Capable {
     }
   }
 
-  async signMessage(msg: Uint8Array): Promise<string> {
+  async signMessage(msg: Uint8Array, _options?: SignOptions): Promise<string> {
     try {
       return this.ecdsaSign(msg)
     } catch (e) {
@@ -85,7 +86,7 @@ export class TronSigner implements Wallet, Eip712Capable {
     }
   }
 
-  async signTypedData(data: Record<string, unknown>): Promise<string> {
+  async signTypedData(data: Record<string, unknown>, _options?: SignOptions): Promise<string> {
     try {
       // Tron uses same secp256k1 as EVM for EIP-712 signing
       const hex = `0x${Buffer.from(this.privateKeyBytes).toString('hex')}` as `0x${string}`
@@ -134,4 +135,15 @@ export class TronSigner implements Wallet, Eip712Capable {
     const v = (sig.recovery + 27).toString(16).padStart(2, '0')
     return r + s + v
   }
+}
+
+function sha256Hex(hex: string): string {
+  return createHash('sha256').update(Buffer.from(hex, 'hex')).digest('hex')
+}
+
+function validateTxId(txId: string): string {
+  if (!/^[0-9a-fA-F]{64}$/.test(txId)) {
+    throw new Error('Payload txID must be a 32-byte hex string')
+  }
+  return txId
 }

@@ -20,6 +20,7 @@ from agent_wallet.core.providers.wallet_builder import (
     create_adapter,
 )
 from agent_wallet.core.utils import safe_chmod
+from agent_wallet.core.utils.network import resolve_network
 
 
 class ConfigWalletProvider(WalletProvider):
@@ -42,7 +43,7 @@ class ConfigWalletProvider(WalletProvider):
             self._config = load_config(config_dir)
         except FileNotFoundError:
             self._config = WalletsTopology(wallets={})
-        self._wallets: dict[str, Wallet] = {}
+        self._wallets: dict[tuple[str, WalletType, str | None], Wallet] = {}
 
     def is_initialized(self) -> bool:
         return self._config_path.exists()
@@ -125,12 +126,17 @@ class ConfigWalletProvider(WalletProvider):
             encoding="utf-8",
         )
 
-    async def get_wallet(self, wallet_id: str, network: str | None = None) -> Wallet:
-        self.get_wallet_config(wallet_id)
-        resolved_network = _resolve_network(network, self._network)
-        cache_key = f"{wallet_id}:{resolved_network}"
+    async def get_wallet(
+        self,
+        wallet_id: str,
+        network: str | None = None,
+    ) -> Wallet:
+        conf = self.get_wallet_config(wallet_id)
+        resolved_network = None
+        if conf.type != WalletType.PRIVY:
+            resolved_network = resolve_network(network, self._network)
+        cache_key = (wallet_id, conf.type, resolved_network)
         if cache_key not in self._wallets:
-            conf = self._config.wallets[wallet_id]
             self._wallets[cache_key] = create_adapter(
                 conf,
                 self._config_dir,
@@ -141,13 +147,14 @@ class ConfigWalletProvider(WalletProvider):
         return self._wallets[cache_key]
 
     async def get_active_wallet(self, network: str | None = None) -> Wallet:
-        resolved_network = _resolve_network(network, self._network)
         active_id = self._config.active_wallet
         if active_id:
+            resolved_network = resolve_network(network, self._network)
             return await self.get_wallet(active_id, resolved_network)
 
         for wallet_id, conf in self._config.wallets.items():
             if _wallet_is_available_without_password(conf, self._password):
+                resolved_network = resolve_network(network, self._network)
                 return await self.get_wallet(wallet_id, resolved_network)
 
         if self._config.wallets:
@@ -176,10 +183,3 @@ def _wallet_is_available_without_password(
 ) -> bool:
     return conf.type != WalletType.LOCAL_SECURE or bool(password)
 
-
-def _resolve_network(explicit: str | None, provider_default: str | None) -> str:
-    if explicit:
-        return explicit
-    if provider_default:
-        return provider_default
-    raise ValueError("network is required")

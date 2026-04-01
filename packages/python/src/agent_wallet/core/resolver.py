@@ -6,7 +6,12 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-from agent_wallet.core.base import Wallet, WalletProvider
+from agent_wallet.core.base import (
+    ENV_AGENT_WALLET_DIR,
+    ENV_AGENT_WALLET_PASSWORD,
+    Wallet,
+    WalletProvider,
+)
 from agent_wallet.core.config import (
     WalletsTopology,
     load_config,
@@ -14,15 +19,10 @@ from agent_wallet.core.config import (
 )
 from agent_wallet.core.providers.config_provider import ConfigWalletProvider
 from agent_wallet.core.providers.env_provider import EnvWalletProvider
+from agent_wallet.core.utils.env import clean_env_value
 from agent_wallet.local.secret_loader import load_local_secret
 
 _DEFAULT_SECRETS_DIR = os.path.join(Path.home(), ".agent-wallet")
-_ENV_AGENT_WALLET_PASSWORD = "AGENT_WALLET_PASSWORD"
-_ENV_AGENT_WALLET_DIR = "AGENT_WALLET_DIR"
-_ENV_PRIVATE_KEY_KEYS = ("AGENT_WALLET_PRIVATE_KEY", "TRON_PRIVATE_KEY")
-_ENV_MNEMONIC_KEYS = ("AGENT_WALLET_MNEMONIC", "TRON_MNEMONIC")
-_ENV_ACCOUNT_INDEX_KEYS = ("AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX", "TRON_ACCOUNT_INDEX")
-
 def resolve_wallet_provider(
     *,
     network: str | None = None,
@@ -51,11 +51,7 @@ def resolve_wallet_provider(
 
     return EnvWalletProvider(
         network=network,
-        private_key=_first_env(env, _ENV_PRIVATE_KEY_KEYS),
-        mnemonic=_first_env(env, _ENV_MNEMONIC_KEYS),
-        account_index=_parse_account_index(
-            _first_env(env, _ENV_ACCOUNT_INDEX_KEYS)
-        ),
+        env=env,
     )
 
 async def resolve_wallet(
@@ -73,7 +69,7 @@ async def resolve_wallet(
             else await provider.get_active_wallet(network)
         )
     if isinstance(provider, EnvWalletProvider):
-        return await provider.get_wallet()
+        return await provider.get_active_wallet(network)
     raise ValueError(f"Unsupported provider resolved: {type(provider).__name__}")
 
 
@@ -82,7 +78,7 @@ def _resolve_dir(dir: str | None, env: Mapping[str, str]) -> str:
     if dir:
         return os.path.expanduser(dir)
 
-    env_dir = _clean_env_value(env, _ENV_AGENT_WALLET_DIR)
+    env_dir = clean_env_value(env, ENV_AGENT_WALLET_DIR)
     if env_dir:
         return os.path.expanduser(env_dir)
 
@@ -93,7 +89,7 @@ def _resolve_password(secrets_dir: str, env: Mapping[str, str]) -> str | None:
     file_password = load_runtime_secrets_password(secrets_dir)
     if file_password:
         return file_password
-    return _clean_env_value(env, _ENV_AGENT_WALLET_PASSWORD)
+    return clean_env_value(env, ENV_AGENT_WALLET_PASSWORD)
 
 
 def _load_config_safe(secrets_dir: str) -> WalletsTopology | None:
@@ -105,33 +101,3 @@ def _load_config_safe(secrets_dir: str) -> WalletsTopology | None:
 
 def _has_available_config_wallet(config: WalletsTopology | None) -> bool:
     return bool(config and config.wallets)
-
-
-def _first_env(env: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
-    """Return the first non-empty env value from a list of fallback keys."""
-    for key in keys:
-        value = _clean_env_value(env, key)
-        if value is not None:
-            return value
-    return None
-
-
-def _clean_env_value(env: Mapping[str, str], key: str) -> str | None:
-    value = env.get(key)
-    if value is None:
-        return None
-    value = value.strip()
-    return value or None
-
-
-def _parse_account_index(value: str | None) -> int:
-    if value is None:
-        return 0
-    normalized = value.strip()
-    if not normalized:
-        return 0
-    if not normalized.isdigit():
-        raise ValueError(
-            "AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX must be a non-negative integer"
-        )
-    return int(normalized)

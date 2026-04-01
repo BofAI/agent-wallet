@@ -36,3 +36,6 @@ Thumbs.db
 
 # claude
 .claude/
+
+# codex
+.codex/

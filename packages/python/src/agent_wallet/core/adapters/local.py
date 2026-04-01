@@ -2,40 +2,40 @@
 
 from __future__ import annotations
 
-from agent_wallet.core.base import Eip712Capable, Network, Wallet
+from agent_wallet.core.base import Eip712Capable, Network, SignOptions, Wallet
 from agent_wallet.core.errors import UnsupportedOperationError
-from agent_wallet.core.providers.wallet_builder import parse_network_family
+from agent_wallet.core.utils.network import parse_network_family
 
 
 class LocalSigner(Wallet, Eip712Capable):
     """Wallet facade that dispatches to an EVM or TRON signer by network."""
 
-    def __init__(self, private_key: bytes, network: str) -> None:
-        self._network = network
+    def __init__(self, private_key: bytes, network: str | None) -> None:
+        self._network = network or ""
         self._impl = _create_signer(private_key, network)
 
     async def get_address(self) -> str:
         return await self._impl.get_address()
 
-    async def sign_raw(self, raw_tx: bytes) -> str:
-        return await self._impl.sign_raw(raw_tx)
+    async def sign_raw(self, raw_tx: bytes, options: SignOptions | None = None) -> str:
+        return await self._impl.sign_raw(raw_tx, options)
 
-    async def sign_transaction(self, payload: dict) -> str:
-        return await self._impl.sign_transaction(payload)
+    async def sign_transaction(self, payload: dict, options: SignOptions | None = None) -> str:
+        return await self._impl.sign_transaction(payload, options)
 
-    async def sign_message(self, msg: bytes) -> str:
-        return await self._impl.sign_message(msg)
+    async def sign_message(self, msg: bytes, options: SignOptions | None = None) -> str:
+        return await self._impl.sign_message(msg, options)
 
-    async def sign_typed_data(self, data: dict) -> str:
+    async def sign_typed_data(self, data: dict, options: SignOptions | None = None) -> str:
         impl = self._impl
         if not isinstance(impl, Eip712Capable):
             raise UnsupportedOperationError(
                 f"Wallet for network '{self._network}' does not support EIP-712 signing."
             )
-        return await impl.sign_typed_data(data)
+        return await impl.sign_typed_data(data, options)
 
 
-def _create_signer(private_key: bytes, network: str) -> Wallet:
+def _create_signer(private_key: bytes, network: str | None) -> Wallet:
     family = parse_network_family(network)
     if family == Network.EVM:
         from agent_wallet.core.adapters.evm import EvmSigner

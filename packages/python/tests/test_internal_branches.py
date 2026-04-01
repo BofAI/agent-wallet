@@ -15,7 +15,8 @@ from agent_wallet.core.config import (
     load_runtime_secrets_password,
 )
 from agent_wallet.core.errors import SigningError
-from agent_wallet.core.providers import wallet_builder
+from agent_wallet.core.utils import keys as key_utils
+from agent_wallet.core.utils import network as network_utils
 
 TEST_KEY = bytes.fromhex(
     "4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b"
@@ -81,7 +82,7 @@ async def test_tron_sign_raw_wraps_errors(monkeypatch):
 async def test_tron_sign_transaction_invalid_payload_is_wrapped():
     wallet = TronSigner(TEST_KEY)
     with pytest.raises(SigningError, match="Tron sign_transaction failed"):
-        await wallet.sign_transaction({"raw_data_hex": "deadbeef"})
+        await wallet.sign_transaction({})
 
 
 @pytest.mark.asyncio
@@ -105,31 +106,31 @@ async def test_tron_sign_typed_data_wraps_errors():
 
 def test_config_provider_private_key_validation_errors():
     with pytest.raises(ValueError, match="64 hex characters"):
-        wallet_builder.decode_private_key("0x1234")
+        key_utils.decode_private_key("0x1234")
 
     with pytest.raises(ValueError, match="valid hex string"):
-        wallet_builder.decode_private_key("z" * 64)
+        key_utils.decode_private_key("z" * 64)
 
 
 def test_config_provider_network_validation_errors():
     with pytest.raises(ValueError, match="network must start with"):
-        wallet_builder.parse_network_family("solana:devnet")
+        network_utils.parse_network_family("solana:devnet")
 
     with pytest.raises(ValueError, match="network is required"):
-        wallet_builder.parse_network_family(None)
+        network_utils.parse_network_family(None)
 
 
 def test_env_provider_private_key_validation_errors():
     with pytest.raises(ValueError, match="64 hex characters"):
-        wallet_builder.decode_private_key("0x1234")
+        key_utils.decode_private_key("0x1234")
 
     with pytest.raises(ValueError, match="valid hex string"):
-        wallet_builder.decode_private_key("z" * 64)
+        key_utils.decode_private_key("z" * 64)
 
 
 def test_env_provider_invalid_network_hits_error_branch():
     with pytest.raises(ValueError, match="network must start with"):
-        wallet_builder.parse_network_family("solana:devnet")
+        network_utils.parse_network_family("solana:devnet")
 
 
 def test_resolver_load_password_from_runtime_secrets_validation(tmp_path):
