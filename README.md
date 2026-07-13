@@ -29,7 +29,6 @@ With **agent-wallet** you can:
 - **Sign** from the CLI or from Python / TypeScript code.
 - **Integrate WaaS adapters** (e.g. Privy) for hosted signing without local keys.
 
-It fits workflows where an **MCP server** or **agent** needs a consistent way to sign without putting private keys in chat logs — similar to how [SUN MCP Server](https://github.com/sun-protocol/sun-mcp-server) documents **Agent Wallet** as the recommended wallet option.
 
 ### Wallet Types
 
