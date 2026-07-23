@@ -4,6 +4,7 @@ import type {
   PrivyWalletParams,
   RawSecretMnemonicParams,
   RawSecretPrivateKeyParams,
+  WalletCliWalletParams,
   WalletConfig,
 } from './config.js'
 import type { SecretLoaderFn } from './adapters/local-secure.js'
@@ -13,6 +14,9 @@ import { TronSigner } from './adapters/tron.js'
 import { PrivyAdapter } from './adapters/privy.js'
 import { PrivyClient } from './clients/privy.js'
 import { PrivyConfigResolver } from './providers/privy-config.js'
+import { WalletCliSigner } from './adapters/wallet-cli.js'
+import { WalletCliClient } from './clients/wallet-cli.js'
+import { WalletCliConfigResolver } from './providers/wallet-cli-config.js'
 
 export type AddressEntry = {
   format: 'eip155' | 'tron'
@@ -43,6 +47,9 @@ export async function resolveWalletAddresses(
   if (conf.type === WalletType.PRIVY) {
     return resolvePrivyAddress(conf.params as PrivyWalletParams)
   }
+  if (conf.type === WalletType.WALLET_CLI) {
+    return resolveWalletCliAddress(conf.params as WalletCliWalletParams)
+  }
 
   const privateKey =
     conf.type === WalletType.LOCAL_SECURE
@@ -72,6 +79,18 @@ async function resolvePrivyAddress(params: PrivyWalletParams): Promise<AddressRe
       appSecret: resolved.appSecret,
     }),
   )
+  const address = await wallet.getAddress()
+  return {
+    mode: 'single',
+    entries: [{ format: 'canonical', label: 'Address', address }],
+  }
+}
+
+async function resolveWalletCliAddress(
+  params: WalletCliWalletParams,
+): Promise<AddressResolutionResult> {
+  const resolved = new WalletCliConfigResolver({ source: params }).resolve()
+  const wallet = new WalletCliSigner(resolved, new WalletCliClient())
   const address = await wallet.getAddress()
   return {
     mode: 'single',

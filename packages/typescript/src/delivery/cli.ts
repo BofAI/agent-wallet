@@ -14,6 +14,7 @@ import {
   type PrivyWalletParams,
   type RawSecretMnemonicParams,
   type RawSecretPrivateKeyParams,
+  type WalletCliWalletParams,
   type WalletConfig,
 } from '../core/config.js'
 import { RUNTIME_SECRETS_FILENAME, WALLETS_CONFIG_FILENAME } from '../core/constants.js'
@@ -408,7 +409,8 @@ async function selectWalletType(
     if (
       explicit === WalletType.LOCAL_SECURE ||
       explicit === WalletType.RAW_SECRET ||
-      explicit === WalletType.PRIVY
+      explicit === WalletType.PRIVY ||
+      explicit === WalletType.WALLET_CLI
     ) {
       return explicit
     }
@@ -420,13 +422,15 @@ async function selectWalletType(
     local_secure: 'Encrypted key stored locally (recommended)',
     raw_secret: 'Private key/mnemonic saved in plaintext config',
     privy: 'Privy API-backed wallet',
+    wallet_cli: 'TRON wallet managed by wallet-cli (external signer)',
   }
   const selected = await selectInput(io, promptText, choices, descriptions, undefined, promptText.toLowerCase())
 
   if (
     selected === WalletType.LOCAL_SECURE ||
     selected === WalletType.RAW_SECRET ||
-    selected === WalletType.PRIVY
+    selected === WalletType.PRIVY ||
+    selected === WalletType.WALLET_CLI
   ) {
     return selected
   }
@@ -719,6 +723,38 @@ async function buildPrivyConfigWithFlags(
   }
 }
 
+async function buildWalletCliConfigWithFlags(
+  io: CliIO,
+  opts?: {
+    account?: string
+    cliPassword?: string
+  },
+): Promise<WalletConfig> {
+  const account =
+    opts?.account ??
+    (
+      await promptInput(
+        io,
+        'wallet-cli account label (optional, press Enter to use active)',
+        {},
+        'wallet-cli account',
+      )
+    ).trim()
+  const cliPassword =
+    opts?.cliPassword ??
+    (await promptRequired(io, 'wallet-cli keystore password (input hidden)', {
+      password: true,
+    }))
+
+  return {
+    type: 'wallet_cli',
+    params: {
+      ...(account ? { account } : {}),
+      password: cliPassword,
+    } as WalletCliWalletParams,
+  }
+}
+
 // --- Commands ---
 
 export async function cmdInit(
@@ -768,6 +804,8 @@ export async function cmdStart(
     appId?: string
     appSecret?: string
     privyWalletId?: string
+    cliAccount?: string
+    cliPassword?: string
   },
 ): Promise<void> {
   // Check if wallets already exist — prompt to confirm unless --override
@@ -961,6 +999,38 @@ export async function cmdStart(
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'privy']])
+  } else if (wtype === WalletType.WALLET_CLI) {
+    if (opts?.password) {
+      io.print('--password is only valid for local_secure quick start.')
+      throw new CliExit(1)
+    }
+    provider = getProvider(dir)
+    if (opts?.walletId) {
+      try {
+        provider.getWalletConfig(opts.walletId)
+        io.print(`Wallet '${opts.walletId}' already exists.`)
+        throw new CliExit(1)
+      } catch (e) {
+        if (e instanceof CliExit) throw e
+      }
+    }
+    const targetName = opts?.walletId ?? (await promptWalletId(io, 'default_cli', provider))
+    const cliConfig = await buildWalletCliConfigWithFlags(io, {
+      account: opts?.cliAccount,
+      cliPassword: opts?.cliPassword,
+    })
+
+    provider.ensureStorage()
+    try {
+      provider.addWallet(targetName, cliConfig)
+      provider.setActive(targetName)
+    } catch (e) {
+      io.print(`Error: ${(e as Error).message}`)
+      throw new CliExit(1)
+    }
+
+    io.print(`\nWallet '${targetName}' created:`)
+    printWalletTable(io, [[targetName, 'wallet_cli']])
   } else {
     io.print(`Unsupported quick-start type: ${wtype}`)
     throw new CliExit(1)
@@ -990,6 +1060,8 @@ export async function cmdAdd(
     appId?: string
     appSecret?: string
     privyWalletId?: string
+    cliAccount?: string
+    cliPassword?: string
   },
 ): Promise<void> {
   const wtype = await selectWalletType(opts?.walletType, io, 'Wallet type')
@@ -1069,7 +1141,20 @@ export async function cmdAdd(
       await buildPrivyConfigWithFlags(io, provider, {
         appId: opts?.appId,
         appSecret: opts?.appSecret,
-        privyWalletId: opts?.privyWalletId,
+      privyWalletId: opts?.privyWalletId,
+      }),
+    )
+  } else if (wtype === WalletType.WALLET_CLI) {
+    if (opts?.password) {
+      io.print('--password is only valid for local_secure wallets.')
+      throw new CliExit(1)
+    }
+    targetName = opts?.walletId ?? (await promptWalletId(io, 'default_cli', provider))
+    provider.addWallet(
+      targetName,
+      await buildWalletCliConfigWithFlags(io, {
+        account: opts?.cliAccount,
+        cliPassword: opts?.cliPassword,
       }),
     )
   }
@@ -1137,6 +1222,10 @@ export async function cmdInspect(walletId: string, dir: string, io: CliIO): Prom
     rows.push(['Privy App ID', '[redacted]'])
     rows.push(['Privy App Secret', '[redacted]'])
     rows.push(['Privy Wallet ID', '[redacted]'])
+  } else if (conf.type === 'wallet_cli') {
+    const params = conf.params as WalletCliWalletParams
+    rows.push(['Account', params.account ?? '(active)'])
+    rows.push(['Keystore Password', '[redacted]'])
   }
   printDetailRows(io, rows)
 }
@@ -1692,6 +1781,8 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
   const PRIVY_APP_ID_OPT = '  --app-id <id>         Privy app id'
   const PRIVY_APP_SECRET_OPT = '  --app-secret <secret>  Privy app secret'
   const PRIVY_WALLET_ID_OPT = '  --privy-wallet-id <id>  Privy wallet id'
+  const CLI_ACCOUNT_OPT = '  --account <label>     wallet-cli account label (optional)'
+  const CLI_PASSWORD_OPT = '  --cli-password <pw>   wallet-cli keystore password'
 
   const showCommandHelp = (command: string, subcommand: string | undefined, io: CliIO): 0 => {
     switch (command) {
@@ -1742,29 +1833,45 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           io.print('  --override            Skip confirmation when wallets already exist')
           io.print(PRIVY_APP_ID_OPT)
           io.print(PRIVY_APP_SECRET_OPT)
-          io.print(PRIVY_WALLET_ID_OPT)
+         io.print(PRIVY_WALLET_ID_OPT)
+         io.print(SAVE_RS_OPT)
+         io.print(DIR_OPT)
+         io.print(HELP_OPT)
+         break
+       }
+        if (subcommand === 'wallet_cli') {
+          io.print('Usage: agent-wallet start wallet_cli [options]')
+          io.print('')
+          io.print('Quick start with a wallet-cli managed TRON wallet (external signer).')
+          io.print('')
+          io.print('Options:')
+          io.print('  --wallet-id, -w <id>  Wallet ID')
+          io.print('  --override            Skip confirmation when wallets already exist')
+          io.print(CLI_ACCOUNT_OPT)
+          io.print(CLI_PASSWORD_OPT)
           io.print(SAVE_RS_OPT)
           io.print(DIR_OPT)
           io.print(HELP_OPT)
           break
         }
-        io.print('Usage: agent-wallet start [options]')
-        io.print('       agent-wallet start <local_secure|raw_secret|privy> [options]')
-        io.print('')
-        io.print('Quick setup: initialize and create default wallets.')
-        io.print('')
-        io.print('Options:')
-        io.print('  --wallet-id, -w <id>  Wallet ID')
-        io.print('  --override            Skip confirmation when wallets already exist')
-        io.print(SAVE_RS_OPT)
-        io.print(DIR_OPT)
-        io.print(HELP_OPT)
-        io.print('')
-        io.print('Subcommands:')
-        io.print('  local_secure        Quick start with an encrypted local wallet')
-        io.print('  raw_secret          Quick start with a plaintext raw secret wallet')
-        io.print('  privy               Quick start with a Privy-backed wallet')
-        break
+       io.print('Usage: agent-wallet start [options]')
+        io.print('       agent-wallet start <local_secure|raw_secret|privy|wallet_cli> [options]')
+       io.print('')
+       io.print('Quick setup: initialize and create default wallets.')
+       io.print('')
+       io.print('Options:')
+       io.print('  --wallet-id, -w <id>  Wallet ID')
+       io.print('  --override            Skip confirmation when wallets already exist')
+       io.print(SAVE_RS_OPT)
+       io.print(DIR_OPT)
+       io.print(HELP_OPT)
+       io.print('')
+       io.print('Subcommands:')
+       io.print('  local_secure        Quick start with an encrypted local wallet')
+       io.print('  raw_secret          Quick start with a plaintext raw secret wallet')
+       io.print('  privy               Quick start with a Privy-backed wallet')
+        io.print('  wallet_cli          Quick start with a wallet-cli managed TRON wallet')
+       break
       case 'init':
         io.print('Usage: agent-wallet init [options]')
         io.print('')
@@ -1820,28 +1927,43 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           io.print('  --wallet-id, -w <id>  Wallet ID')
           io.print(PRIVY_APP_ID_OPT)
           io.print(PRIVY_APP_SECRET_OPT)
-          io.print(PRIVY_WALLET_ID_OPT)
+         io.print(PRIVY_WALLET_ID_OPT)
+         io.print(SAVE_RS_OPT)
+         io.print(DIR_OPT)
+         io.print(HELP_OPT)
+         break
+       }
+        if (subcommand === 'wallet_cli') {
+          io.print('Usage: agent-wallet add wallet_cli [options]')
+          io.print('')
+          io.print('Add a wallet-cli managed TRON wallet (external signer).')
+          io.print('')
+          io.print('Options:')
+          io.print('  --wallet-id, -w <id>  Wallet ID')
+          io.print(CLI_ACCOUNT_OPT)
+          io.print(CLI_PASSWORD_OPT)
           io.print(SAVE_RS_OPT)
           io.print(DIR_OPT)
           io.print(HELP_OPT)
           break
         }
-        io.print('Usage: agent-wallet add [options]')
-        io.print('       agent-wallet add <local_secure|raw_secret|privy> [options]')
-        io.print('')
-        io.print('Add a new wallet.')
-        io.print('')
-        io.print('Options:')
-        io.print('  --wallet-id, -w <id>  Wallet ID')
-        io.print(SAVE_RS_OPT)
-        io.print(DIR_OPT)
-        io.print(HELP_OPT)
-        io.print('')
-        io.print('Subcommands:')
-        io.print('  local_secure        Add an encrypted local wallet')
-        io.print('  raw_secret          Add a plaintext raw secret wallet')
-        io.print('  privy               Add a Privy-backed wallet')
-        break
+       io.print('Usage: agent-wallet add [options]')
+        io.print('       agent-wallet add <local_secure|raw_secret|privy|wallet_cli> [options]')
+       io.print('')
+       io.print('Add a new wallet.')
+       io.print('')
+       io.print('Options:')
+       io.print('  --wallet-id, -w <id>  Wallet ID')
+       io.print(SAVE_RS_OPT)
+       io.print(DIR_OPT)
+       io.print(HELP_OPT)
+       io.print('')
+       io.print('Subcommands:')
+       io.print('  local_secure        Add an encrypted local wallet')
+       io.print('  raw_secret          Add a plaintext raw secret wallet')
+       io.print('  privy               Add a Privy-backed wallet')
+        io.print('  wallet_cli          Add a wallet-cli managed TRON wallet')
+       break
       case 'list':
         io.print('Usage: agent-wallet list [options]')
         io.print('')
@@ -2003,13 +2125,15 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           mnemonicIndex: mnemonicIndexOption ? Number(mnemonicIndexOption) : undefined,
           appId: options['app-id'] as string | undefined,
           appSecret: options['app-secret'] as string | undefined,
-          privyWalletId: options['privy-wallet-id'] as string | undefined,
-          saveRuntimeSecrets,
-          override: options.override === true,
-        })
-        break
-      }
-      case 'init':
+         privyWalletId: options['privy-wallet-id'] as string | undefined,
+         saveRuntimeSecrets,
+         override: options.override === true,
+         cliAccount: options.account as string | undefined,
+         cliPassword: options['cli-password'] as string | undefined,
+       })
+       break
+     }
+     case 'init':
         await cmdInit(dir, cliIO, { password, saveRuntimeSecrets })
         break
       case 'add': {
@@ -2024,12 +2148,14 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           mnemonicIndex: mnemonicIndexOption ? Number(mnemonicIndexOption) : undefined,
           appId: options['app-id'] as string | undefined,
           appSecret: options['app-secret'] as string | undefined,
-          privyWalletId: options['privy-wallet-id'] as string | undefined,
-          saveRuntimeSecrets,
-        })
-        break
-      }
-      case 'list':
+         privyWalletId: options['privy-wallet-id'] as string | undefined,
+         saveRuntimeSecrets,
+         cliAccount: options.account as string | undefined,
+         cliPassword: options['cli-password'] as string | undefined,
+       })
+       break
+     }
+     case 'list':
         await cmdList(dir, cliIO)
         break
       case 'use':

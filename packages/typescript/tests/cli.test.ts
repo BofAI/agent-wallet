@@ -440,12 +440,65 @@ describe('cmdStart', () => {
     })
 
     const config = readConfig(secretsDir)
-    expect(config.wallets['auto-wallet'].type).toBe('local_secure')
-    expect(out(io)).toContain('Your master password:')
-  })
+   expect(config.wallets['auto-wallet'].type).toBe('local_secure')
+   expect(out(io)).toContain('Your master password:')
+ })
 })
 
 describe('cmdStart override behavior', () => {
+  it('accepts explicit flags in start wallet_cli', async () => {
+    const io = mockIO()
+    const code = await main(
+      [
+        'start',
+        'wallet_cli',
+        '--wallet-id',
+        'cli1',
+        '--account',
+        'main-1',
+        '--cli-password',
+        'KsPass123!',
+        '-d',
+        secretsDir,
+      ],
+      io,
+    )
+
+    expect(code).toBe(0)
+    const config = readConfig(secretsDir)
+    expect(config.active_wallet).toBe('cli1')
+    expect(config.wallets.cli1.type).toBe('wallet_cli')
+    expect(config.wallets.cli1.params.account).toBe('main-1')
+    expect(config.wallets.cli1.params.password).toBe('KsPass123!')
+  })
+
+ it('prompts for missing wallet_cli password in start wallet_cli', async () => {
+   const io = mockIO(['', '', 'KsPass123!'])
+   await cmdStart(secretsDir, io, {
+     walletType: 'wallet_cli',
+     walletId: 'cli2',
+   })
+
+   expect(out(io)).toContain('is required.')
+   const config = readConfig(secretsDir)
+   expect(config.wallets.cli2.type).toBe('wallet_cli')
+   expect(config.wallets.cli2.params.password).toBe('KsPass123!')
+   expect(config.wallets.cli2.params.account).toBeUndefined()
+ })
+
+ it('rejects --password for wallet_cli start (not local_secure)', async () => {
+   const io = mockIO()
+    await expect(
+      cmdStart(secretsDir, io, {
+        walletType: 'wallet_cli',
+        walletId: 'cli3',
+        password: TEST_PASSWORD,
+        cliPassword: 'KsPass123!',
+      }),
+    ).rejects.toThrow(CliExit)
+    expect(out(io)).toContain('--password is only valid for local_secure')
+  })
+
   it('exits when wallets exist and user selects exit', async () => {
     // First start — create a wallet
     const io1 = mockIO([TEST_PRIVATE_KEY])
@@ -635,7 +688,59 @@ describe('cmdAdd / active wallet', () => {
     expect(out(io2)).toContain('Usage: agent-wallet add privy [options]')
     expect(out(io2)).toContain('--app-id')
     expect(out(io2)).toContain('--privy-wallet-id')
-    expect(out(io2)).not.toContain('--password, -p <pw>')
+   expect(out(io2)).not.toContain('--password, -p <pw>')
+ })
+
+  it('shows mode-specific help for add wallet_cli', async () => {
+    const io = mockIO()
+    const code = await main(['add', 'wallet_cli', '--help'], io)
+    expect(code).toBe(0)
+    expect(out(io)).toContain('Usage: agent-wallet add wallet_cli [options]')
+    expect(out(io)).toContain('--account')
+    expect(out(io)).toContain('--cli-password')
+    expect(out(io)).not.toContain('--password, -p <pw>')
+  })
+
+  it('adds wallet_cli wallet from explicit flags', async () => {
+    const io = mockIO()
+    await cmdAdd(secretsDir, io, {
+      walletType: 'wallet_cli',
+      walletId: 'cli-add',
+      cliAccount: 'main-1',
+      cliPassword: 'KsPass123!',
+    })
+
+    const config = readConfig(secretsDir)
+    expect(config.wallets['cli-add'].type).toBe('wallet_cli')
+    expect(config.wallets['cli-add'].params.account).toBe('main-1')
+    expect(config.wallets['cli-add'].params.password).toBe('KsPass123!')
+  })
+
+  it('adds wallet_cli wallet prompting for password when omitted', async () => {
+    const io = mockIO(['', 'Prompted123!'])
+    await cmdAdd(secretsDir, io, {
+      walletType: 'wallet_cli',
+      walletId: 'cli-prompt',
+    })
+
+    const config = readConfig(secretsDir)
+    expect(config.wallets['cli-prompt'].type).toBe('wallet_cli')
+    expect(config.wallets['cli-prompt'].params.password).toBe('Prompted123!')
+    expect(config.wallets['cli-prompt'].params.account).toBeUndefined()
+  })
+
+  it('accepts wallet_cli via main with --cli-password and no account', async () => {
+    const io = mockIO()
+    const code = await main(
+      ['add', 'wallet_cli', '--wallet-id', 'cli-main', '--cli-password', 'Main123!', '-d', secretsDir],
+      io,
+    )
+
+    expect(code).toBe(0)
+    const config = readConfig(secretsDir)
+    expect(config.wallets['cli-main'].type).toBe('wallet_cli')
+    expect(config.wallets['cli-main'].params.password).toBe('Main123!')
+    expect(config.wallets['cli-main'].params.account).toBeUndefined()
   })
 
   it('adds local_secure wallet from generate shortcut', async () => {
@@ -838,6 +943,32 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
     expect(out(io)).toContain('raw_secret')
     expect(out(io)).toContain('Source Type')
     expect(out(io)).toContain('private_key')
+  })
+
+  it('inspect shows wallet_cli details with account', async () => {
+    const provider = new ConfigWalletProvider(secretsDir)
+    provider.addWallet('cli-inspect', {
+      type: 'wallet_cli',
+      params: { account: 'main-1', password: 'Secret123!' },
+    })
+    const io = mockIO()
+    await cmdInspect('cli-inspect', secretsDir, io)
+    expect(out(io)).toContain('wallet_cli')
+    expect(out(io)).toContain('main-1')
+    expect(out(io)).toContain('[redacted]')
+  })
+
+  it('inspect shows wallet_cli details with (active) when no account', async () => {
+    const provider = new ConfigWalletProvider(secretsDir)
+    provider.addWallet('cli-noacct', {
+      type: 'wallet_cli',
+      params: { password: 'Secret123!' },
+    })
+    const io = mockIO()
+    await cmdInspect('cli-noacct', secretsDir, io)
+    expect(out(io)).toContain('wallet_cli')
+    expect(out(io)).toContain('(active)')
+    expect(out(io)).toContain('[redacted]')
   })
 
   it('resolve-address shows whitelist output for local_secure wallets', async () => {
@@ -1186,6 +1317,6 @@ describe('expandTilde', () => {
 
   it('leaves non-tilde paths unchanged', () => {
     expect(expandTilde('/usr/local')).toBe('/usr/local')
-    expect(expandTilde('relative/path')).toBe('relative/path')
-  })
+   expect(expandTilde('relative/path')).toBe('relative/path')
+ })
 })
