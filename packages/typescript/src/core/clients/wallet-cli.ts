@@ -6,6 +6,14 @@
  * 2 usage). Secrets (keystore password, signed tx) go through stdin, never
  * argv — per wallet-cli's single-stdin-consumer contract.
  *
+ * Trade-off: signing payloads (transaction JSON, message text, typed-data
+ * JSON) are passed via argv, not stdin. This is intentional — wallet-cli
+ * supports only one stdin consumer per invocation, and the keystore password
+ * (the more sensitive secret) takes that slot via --password-stdin. Unsigned
+ * transaction payloads are therefore visible in `ps`/process listings. If
+ * wallet-cli later adds --transaction-stdin support, the password could be
+ * passed via env or a file descriptor instead, freeing stdin for the payload.
+ *
  * This client mirrors PrivyClient as the "external signing source transport"
  * precedent: it lives in core/clients/ and handles only transport + envelope
  * parsing, not signing logic (that's the adapter's job).
@@ -14,11 +22,7 @@
 import { spawn } from 'node:child_process'
 import { z } from 'zod'
 
-import {
-  WalletCliExecutionError,
-  WalletCliNotFoundError,
-  WalletCliUsageError,
-} from '../errors.js'
+import { WalletCliExecutionError, WalletCliNotFoundError, WalletCliUsageError } from '../errors.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,9 +96,7 @@ export class WalletCliClient {
 
   // --- Signing / address methods (used by WalletCliSigner) ---
 
-  async currentAccount(
-    accountRef?: string,
-  ): Promise<WalletCliResult<WalletCliCurrentAccountData>> {
+  async currentAccount(accountRef?: string): Promise<WalletCliResult<WalletCliCurrentAccountData>> {
     const args = ['current', '-o', 'json']
     if (accountRef) args.push('--account', accountRef)
     return this.run(args)
@@ -279,7 +281,7 @@ export class WalletCliClient {
     const major = parseInt(process.version.slice(1).split('.')[0], 10)
     if (major < MIN_NODE_MAJOR) {
       throw new WalletCliExecutionError(
-        `wallet-cli requires Node.js >=${MIN_NODE_MAJOR}; current runtime is Node ${process.version}`,
+        `agent-wallet runtime requires Node.js >=${MIN_NODE_MAJOR} to spawn wallet-cli; current runtime is Node ${process.version}`,
         'unsupported_runtime',
       )
     }
@@ -296,7 +298,7 @@ export interface WalletCliCurrentAccountData {
   type: string
   index: number | null
   active: boolean
-  addresses: { tron: string }
+  addresses: { tron: string; evm?: string }
   seedId?: string
 }
 

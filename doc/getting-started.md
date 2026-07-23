@@ -58,10 +58,10 @@ Use `agent-wallet start --help`, `agent-wallet start local_secure --help`, or `a
 
 | Concept | Meaning |
 |--------|---------|
-| **Wallet types** | `local_secure` — keys in encrypted `secret_<id>.json`; `raw_secret` — key or mnemonic stored **in plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID. |
+| **Wallet types** | `local_secure` — keys in encrypted `secret_<id>.json`; `raw_secret` — key or mnemonic stored **in plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID; `wallet_cli` — Keys managed by the `@tron-walletcli/wallet-cli` binary, signing delegated via subprocess (TRON now, BSC planned) (see [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)). |
 | **Signing network** | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:nile`). The CLI picks EVM vs Tron **adapter** from this string. |
 | **Active wallet** | Used when you omit `--wallet-id` / `-w` on `sign`. Set with `use <id>`. |
-| **Master password** | Encrypts `master.json` and `local_secure` secrets. Not used for `raw_secret` wallets. |
+| **Master password** | Encrypts `master.json` and `local_secure` secrets. Not used for `raw_secret`, `privy`, or `wallet_cli` wallets. |
 
 ## 3. Quick start (`start`)
 
@@ -80,7 +80,7 @@ Shared `start` options:
 
 | Option | Description |
 |--------|-------------|
-| `--wallet-id` | Wallet config ID (default in prompts: `default_secure`, `default_raw`, `default_privy`) |
+| `--wallet-id` | Wallet config ID (default in prompts: `default_secure`, `default_raw`, `default_privy`, `default_cli`) |
 | `--save-runtime-secrets` | If set **and** this flow uses runtime secrets, write `runtime_secrets.json` (plain JSON; sensitive) |
 | `-d` / `--dir` | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`) |
 | `--override` | Skip the "already initialized" confirmation when wallets already exist |
@@ -119,6 +119,15 @@ Shared `start` options:
 | `--app-secret` | Privy app secret |
 | `--privy-wallet-id` | Privy wallet id |
 
+`start wallet_cli` options:
+
+| Option | Description |
+|--------|-------------|
+| `--account` | wallet-cli account label (optional; uses active account if omitted) |
+| `--cli-password` | wallet-cli keystore password (the wallet-cli keystore password, **not** the agent-wallet master password) |
+
+**`wallet_cli`:** adds a TRON wallet whose keys are owned by wallet-cli. Requires the `@tron-walletcli/wallet-cli` binary on PATH (or set `AGENT_WALLET_WALLET_CLI_PATH`). See [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md).
+
 When **`start` creates a new wallet**, that wallet is set as **active** (`set_active`). Re-running `start` for an **existing** wallet id only lists it — active wallet is unchanged unless you use `use`.
 
 ## 4. `init`
@@ -139,6 +148,7 @@ agent-wallet add [options]
 agent-wallet add local_secure [options]
 agent-wallet add raw_secret [options]
 agent-wallet add privy [options]
+agent-wallet add wallet_cli [options]
 ```
 
 Requires `wallets_config.json` to exist (`provider.is_initialized()`). Run `init` or `start` first.  
@@ -153,6 +163,8 @@ Shared `add` options: `--wallet-id`, `--save-runtime-secrets`, `-d/--dir`.
 `add raw_secret` options: `-k/--private-key`, `-m/--mnemonic`, `-mi/--mnemonic-index`, `--derive-as`.
 
 `add privy` options: `--app-id`, `--app-secret`, `--privy-wallet-id`.
+
+`add wallet_cli` options: `--account`, `--cli-password`.
 
 - Mutually exclusive: only one of `--generate`, `--private-key`, `--mnemonic` for secret material source.
 - **`add`** sets active only when there was no active wallet (`add_wallet` default); unlike `start`, it does **not** always call `set_active` on the new id.
@@ -190,6 +202,7 @@ Resolves and prints the wallet address or addresses without signing.
 - If `wallet_id` is omitted, the CLI prompts you to select a wallet interactively.
 - `local_secure` and `raw_secret` wallets print both EVM and TRON addresses derived from the same secret material.
 - `privy` wallets print the hosted wallet address returned by Privy.
+- `wallet_cli` wallets print the TRON address from wallet-cli `current` (requires the wallet-cli binary).
 - `-p` / `--password` is only needed for `local_secure` wallets.
 
 ## 10. `remove`
@@ -249,6 +262,7 @@ Requires `master.json` to exist; otherwise prints that no wallet data was found.
 |----------|------|
 | `AGENT_WALLET_DIR` | Default secrets directory |
 | `AGENT_WALLET_PASSWORD` | Default master password when `-p` is not passed |
+| `AGENT_WALLET_WALLET_CLI_PATH` | Override wallet-cli binary path (used by `wallet_cli` wallets; default: auto-resolve from PATH) |
 
 ## 15. File layout (`local_secure`)
 

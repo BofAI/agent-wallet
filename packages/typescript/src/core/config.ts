@@ -1,8 +1,7 @@
 /**
  * Storage layer: wallets_config.json loading and validation.
  *
- * JSON keys use snake_case to match the Python implementation exactly,
- * ensuring cross-language config file compatibility.
+ * JSON keys use snake_case for consistency with the on-disk config format.
  */
 
 import { chmodSync, writeFileSync, readFileSync } from 'node:fs'

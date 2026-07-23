@@ -36,6 +36,7 @@ With **agent-wallet** you can:
 | `local_secure` | CLI config | EVM + TRON | Yes | Encrypted on disk; recommended for local use. |
 | `raw_secret` | CLI config / env | EVM + TRON | No | Plaintext in config or env (dev only). |
 | `privy` | CLI config | EVM + TRON | No | Uses Privy app credentials + wallet ID. See [doc/how-to-add-privy-wallet.md](./doc/how-to-add-privy-wallet.md). |
+| `wallet_cli` | CLI config | TRON | No | Keys managed by wallet-cli; agent-wallet delegates signing via subprocess (TRON now, BSC planned). Requires `@tron-walletcli/wallet-cli` installed. See [doc/how-to-add-wallet-cli-wallet.md](./doc/how-to-add-wallet-cli-wallet.md). |
 
 ## Quick Start
 
@@ -184,6 +185,7 @@ TypeScript samples under [`packages/typescript/examples/`](./packages/typescript
 |-----|----------|
 | [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI walkthrough |
 | [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md) | Use existing Privy App + Wallet ID in the CLI |
+| [How to add a wallet-cli wallet](./doc/how-to-add-wallet-cli-wallet.md) | Use wallet-cli managed TRON keys in the CLI |
 | [TypeScript package](./packages/typescript/README.md) | `npm` / SDK usage |
 
 Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), and flag reference live in **getting-started** and the package README — you don’t need them for the first run.

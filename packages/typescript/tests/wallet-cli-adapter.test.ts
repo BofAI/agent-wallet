@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { WalletCliSigner } from '../src/core/adapters/wallet-cli.js'
-import { UnsupportedOperationError } from '../src/core/errors.js'
-import type { WalletCliClient, WalletCliResult } from '../src/core/clients/wallet-cli.js'
+import { UnsupportedOperationError, WalletError } from '../src/core/errors.js'
+import type { WalletCliClient } from '../src/core/clients/wallet-cli.js'
 
 function mockClient(): WalletCliClient {
   return {
@@ -23,7 +23,14 @@ describe('WalletCliSigner', () => {
       ;(client.currentAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         command: 'current',
-        data: { accountId: 'wlt_1.0', label: 'main-1', type: 'seed', index: 0, active: true, addresses: { tron: TRON_ADDRESS } },
+        data: {
+          accountId: 'wlt_1.0',
+          label: 'main-1',
+          type: 'seed',
+          index: 0,
+          active: true,
+          addresses: { tron: TRON_ADDRESS },
+        },
       })
 
       const signer = new WalletCliSigner(CONFIG, client)
@@ -37,13 +44,80 @@ describe('WalletCliSigner', () => {
       ;(client.currentAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         command: 'current',
-        data: { accountId: 'wlt_1.0', label: 'main-1', type: 'seed', index: 0, active: true, addresses: { tron: TRON_ADDRESS } },
+        data: {
+          accountId: 'wlt_1.0',
+          label: 'main-1',
+          type: 'seed',
+          index: 0,
+          active: true,
+          addresses: { tron: TRON_ADDRESS },
+        },
       })
 
       const signer = new WalletCliSigner(CONFIG, client)
       await signer.getAddress()
       await signer.getAddress()
       expect(client.currentAccount).toHaveBeenCalledTimes(1)
+    })
+
+    it('defaults to TRON when no network is given', async () => {
+      const client = mockClient()
+      ;(client.currentAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        command: 'current',
+        data: {
+          accountId: 'wlt_1.0',
+          label: 'main-1',
+          type: 'seed',
+          index: 0,
+          active: true,
+          addresses: { tron: TRON_ADDRESS },
+        },
+      })
+
+      const signer = new WalletCliSigner(CONFIG, client)
+      const addr = await signer.getAddress()
+      expect(addr).toBe(TRON_ADDRESS)
+    })
+
+    it('selects TRON address for tron network', async () => {
+      const client = mockClient()
+      ;(client.currentAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        command: 'current',
+        data: {
+          accountId: 'wlt_1.0',
+          label: 'main-1',
+          type: 'seed',
+          index: 0,
+          active: true,
+          addresses: { tron: TRON_ADDRESS, evm: '0xabc' },
+        },
+      })
+
+      const signer = new WalletCliSigner(CONFIG, client, 'tron:nile')
+      const addr = await signer.getAddress()
+      expect(addr).toBe(TRON_ADDRESS)
+    })
+
+    it('throws WalletError for EVM address not yet supported', async () => {
+      const client = mockClient()
+      ;(client.currentAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        command: 'current',
+        data: {
+          accountId: 'wlt_1.0',
+          label: 'main-1',
+          type: 'seed',
+          index: 0,
+          active: true,
+          addresses: { tron: TRON_ADDRESS },
+        },
+      })
+
+      const signer = new WalletCliSigner(CONFIG, client, 'eip155:56')
+      await expect(signer.getAddress()).rejects.toThrow(WalletError)
+      await expect(signer.getAddress()).rejects.toThrow('EVM')
     })
   })
 
@@ -54,7 +128,13 @@ describe('WalletCliSigner', () => {
       ;(client.signTransaction as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         command: 'tx.sign',
-        data: { kind: 'sign', mode: 'sign-only', address: TRON_ADDRESS, txId: 'abc', signed: signedTx },
+        data: {
+          kind: 'sign',
+          mode: 'sign-only',
+          address: TRON_ADDRESS,
+          txId: 'abc',
+          signed: signedTx,
+        },
       })
 
       const signer = new WalletCliSigner(CONFIG, client)
@@ -103,11 +183,21 @@ describe('WalletCliSigner', () => {
       ;(client.signTypedData as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         command: 'typed-data.sign',
-        data: { address: TRON_ADDRESS, primaryType: 'Order', digest: '0x0a8d', signature: '0x8cba1234' },
+        data: {
+          address: TRON_ADDRESS,
+          primaryType: 'Order',
+          digest: '0x0a8d',
+          signature: '0x8cba1234',
+        },
       })
 
       const signer = new WalletCliSigner(CONFIG, client)
-      const sig = await signer.signTypedData({ domain: {}, types: {}, primaryType: 'Order', message: {} })
+      const sig = await signer.signTypedData({
+        domain: {},
+        types: {},
+        primaryType: 'Order',
+        message: {},
+      })
       expect(sig).toBe('8cba1234')
       expect(sig).not.toMatch(/^0x/)
     })

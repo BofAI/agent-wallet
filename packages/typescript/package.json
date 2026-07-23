@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./integrations/wallet-cli": {
+      "types": "./dist/integrations/wallet-cli.d.ts",
+      "import": "./dist/integrations/wallet-cli.js",
+      "require": "./dist/integrations/wallet-cli.cjs"
     }
   },
   "bin": {

@@ -422,7 +422,7 @@ async function selectWalletType(
     local_secure: 'Encrypted key stored locally (recommended)',
     raw_secret: 'Private key/mnemonic saved in plaintext config',
     privy: 'Privy API-backed wallet',
-    wallet_cli: 'TRON wallet managed by wallet-cli (external signer)',
+    wallet_cli: 'wallet-cli managed wallet (TRON, BSC planned)',
   }
   const selected = await selectInput(io, promptText, choices, descriptions, undefined, promptText.toLowerCase())
 
@@ -1842,7 +1842,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'wallet_cli') {
           io.print('Usage: agent-wallet start wallet_cli [options]')
           io.print('')
-          io.print('Quick start with a wallet-cli managed TRON wallet (external signer).')
+          io.print('Quick start with a wallet-cli managed wallet (TRON; BSC planned).')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1870,7 +1870,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
        io.print('  local_secure        Quick start with an encrypted local wallet')
        io.print('  raw_secret          Quick start with a plaintext raw secret wallet')
        io.print('  privy               Quick start with a Privy-backed wallet')
-        io.print('  wallet_cli          Quick start with a wallet-cli managed TRON wallet')
+        io.print('  wallet_cli          Quick start with a wallet-cli managed wallet (TRON; BSC planned)')
        break
       case 'init':
         io.print('Usage: agent-wallet init [options]')
@@ -1936,7 +1936,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'wallet_cli') {
           io.print('Usage: agent-wallet add wallet_cli [options]')
           io.print('')
-          io.print('Add a wallet-cli managed TRON wallet (external signer).')
+          io.print('Add a wallet-cli managed wallet (TRON; BSC planned).')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1962,7 +1962,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
        io.print('  local_secure        Add an encrypted local wallet')
        io.print('  raw_secret          Add a plaintext raw secret wallet')
        io.print('  privy               Add a Privy-backed wallet')
-        io.print('  wallet_cli          Add a wallet-cli managed TRON wallet')
+        io.print('  wallet_cli          Add a wallet-cli managed wallet (TRON; BSC planned)')
        break
       case 'list':
         io.print('Usage: agent-wallet list [options]')

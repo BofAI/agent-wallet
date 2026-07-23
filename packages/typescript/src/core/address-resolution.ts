@@ -1,22 +1,15 @@
 import { Network, WalletType } from './base.js'
 import type {
   LocalSecureWalletParams,
-  PrivyWalletParams,
   RawSecretMnemonicParams,
   RawSecretPrivateKeyParams,
-  WalletCliWalletParams,
   WalletConfig,
 } from './config.js'
 import type { SecretLoaderFn } from './adapters/local-secure.js'
 import { decodePrivateKey, deriveKeyFromMnemonic } from './utils/keys.js'
 import { EvmSigner } from './adapters/evm.js'
 import { TronSigner } from './adapters/tron.js'
-import { PrivyAdapter } from './adapters/privy.js'
-import { PrivyClient } from './clients/privy.js'
-import { PrivyConfigResolver } from './providers/privy-config.js'
-import { WalletCliSigner } from './adapters/wallet-cli.js'
-import { WalletCliClient } from './clients/wallet-cli.js'
-import { WalletCliConfigResolver } from './providers/wallet-cli-config.js'
+import { createAdapter } from './providers/wallet-builder.js'
 
 export type AddressEntry = {
   format: 'eip155' | 'tron'
@@ -44,11 +37,8 @@ export async function resolveWalletAddresses(
   conf: WalletConfig,
   options: ResolveAddressOptions,
 ): Promise<AddressResolutionResult> {
-  if (conf.type === WalletType.PRIVY) {
-    return resolvePrivyAddress(conf.params as PrivyWalletParams)
-  }
-  if (conf.type === WalletType.WALLET_CLI) {
-    return resolveWalletCliAddress(conf.params as WalletCliWalletParams)
+  if (conf.type === WalletType.PRIVY || conf.type === WalletType.WALLET_CLI) {
+    return resolveExternalSignerAddress(conf)
   }
 
   const privateKey =
@@ -70,27 +60,13 @@ export async function resolveWalletAddresses(
   }
 }
 
-async function resolvePrivyAddress(params: PrivyWalletParams): Promise<AddressResolutionResult> {
-  const resolved = new PrivyConfigResolver({ source: params }).resolve()
-  const wallet = new PrivyAdapter(
-    resolved,
-    new PrivyClient({
-      appId: resolved.appId,
-      appSecret: resolved.appSecret,
-    }),
-  )
-  const address = await wallet.getAddress()
-  return {
-    mode: 'single',
-    entries: [{ format: 'canonical', label: 'Address', address }],
-  }
-}
-
-async function resolveWalletCliAddress(
-  params: WalletCliWalletParams,
-): Promise<AddressResolutionResult> {
-  const resolved = new WalletCliConfigResolver({ source: params }).resolve()
-  const wallet = new WalletCliSigner(resolved, new WalletCliClient())
+/**
+ * Resolve address for external signers (privy, wallet_cli) by delegating to
+ * the shared createAdapter registry — same construction path as signing,
+ * so future builder changes apply here automatically.
+ */
+async function resolveExternalSignerAddress(conf: WalletConfig): Promise<AddressResolutionResult> {
+  const wallet = createAdapter(conf, '', undefined, undefined, undefined)
   const address = await wallet.getAddress()
   return {
     mode: 'single',
@@ -112,9 +88,10 @@ function loadLocalSecurePrivateKey(
   return { eip155: privateKey, tron: privateKey }
 }
 
-function loadRawSecretPrivateKey(
-  params: RawSecretPrivateKeyParams | RawSecretMnemonicParams,
-): { eip155: Uint8Array; tron: Uint8Array } {
+function loadRawSecretPrivateKey(params: RawSecretPrivateKeyParams | RawSecretMnemonicParams): {
+  eip155: Uint8Array
+  tron: Uint8Array
+} {
   if (params.source === 'private_key') {
     const privateKey = decodePrivateKey(params.private_key)
     return { eip155: privateKey, tron: privateKey }

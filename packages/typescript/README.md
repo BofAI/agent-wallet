@@ -15,6 +15,10 @@ pnpm add @bankofai/agent-wallet
 
 Includes CLI (`agent-wallet`), EVM and TRON support.
 
+> TRON-focused (BSC planned): the `wallet_cli` wallet type delegates TRON signing to the
+> external [`@tron-walletcli/wallet-cli`](https://www.npmjs.com/package/@tron-walletcli/wallet-cli)
+> binary. EVM and Privy are unaffected.
+
 ## Quick Start
 
 ```ts
@@ -30,11 +34,25 @@ const signature = await wallet.signMessage(new TextEncoder().encode("hello"));
 
 ```ts
 import {
-  resolveWallet,          // → Wallet (one-shot)
-  resolveWalletProvider,  // → ConfigWalletProvider | EnvWalletProvider
-  ConfigWalletProvider,   // file-backed provider (local_secure / raw_secret)
-  EnvWalletProvider,      // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
+  resolveWallet,           // → Wallet (one-shot)
+  resolveWalletProvider,   // → ConfigWalletProvider | EnvWalletProvider
+  ConfigWalletProvider,    // file-backed provider (local_secure / raw_secret / privy / wallet_cli)
+  EnvWalletProvider,       // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
+  WalletCliSigner,         // TRON signing via wallet-cli subprocess
+  WalletCliClient,         // raw wallet-cli transport (run/build/broadcast)
+  ExternalSignerConfigResolver, // base class for external signer config resolvers
 } from "@bankofai/agent-wallet";
+```
+
+wallet-cli chain-ops orchestration is exported from a subpath:
+
+```ts
+import {
+  signAndBroadcast,
+  buildTransfer,
+  broadcast,
+  getTxStatus,
+} from "@bankofai/agent-wallet/integrations/wallet-cli";
 ```
 
 ### resolveWallet
@@ -83,12 +101,28 @@ interface Eip712Capable {
 
 Both EVM and TRON network-specific signers implement `Wallet` + `Eip712Capable`.
 
+## Wallet Types
+
+| Type | Networks | Key source | Needs agent-wallet password |
+|---|---|---|---|
+| `local_secure` | EVM + TRON | Encrypted `secret_<id>.json` on disk | Yes |
+| `raw_secret` | EVM + TRON | Plaintext key/mnemonic in config or env | No |
+| `privy` | EVM + TRON | Privy WaaS (app credentials + wallet ID) | No |
+| `wallet_cli` | TRON (BSC planned) | wallet-cli keystore (subprocess delegation) | No |
+
+The `wallet_cli` password is a **wallet-cli keystore credential** stored in
+`wallets_config.json` params — it is not the agent-wallet master password.
+Configure via CLI (`agent-wallet add wallet_cli`) or directly in config.
+
 ## Network Routing
 
 | Network string | Adapter | Mnemonic derivation |
 |---|---|---|
 | `eip155` or `eip155:<chainId>` | EVM | `m/44'/60'/0'/0/{index}` |
-| `tron` or `tron:<chain>` | TRON | `m/44'/195'/0'/0/{index}` |
+| `tron` or `tron:<chain>` | TRON (local_secure / raw_secret) | `m/44'/195'/0'/0/{index}` |
+
+> `wallet_cli` wallets currently sign TRON via the wallet-cli binary,
+> not via local key derivation — they are not affected by mnemonic routing.
 
 ## Environment Variables
 
@@ -96,9 +130,17 @@ Both EVM and TRON network-specific signers implement `Wallet` + `Eip712Capable`.
 |---|---|
 | `AGENT_WALLET_DIR` | Wallet directory (default `~/.agent-wallet`) |
 | `AGENT_WALLET_PASSWORD` | Password for `local_secure` wallets |
+| `AGENT_WALLET_WALLET_CLI_PATH` | Override wallet-cli binary path (default: auto-resolve from PATH) |
 | `AGENT_WALLET_PRIVATE_KEY` | Env fallback private key (hex) |
 | `AGENT_WALLET_MNEMONIC` | Env fallback mnemonic phrase |
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Mnemonic account index (default `0`) |
+
+`@tron-walletcli/wallet-cli` is an **optional peer dependency**. Install it
+only when using `wallet_cli` wallets:
+
+```bash
+npm install @tron-walletcli/wallet-cli
+```
 
 ## Examples
 

@@ -309,8 +309,6 @@ plaintext                             KeystoreV3 JSON
 | `saveSecret(name, bytes)` | Encrypt & save `secret_<name>.json` |
 | `loadSecret(name)` | Load & decrypt `secret_<name>.json` → bytes |
 | `generateSecret(name, len)` | Generate random bytes, encrypt & save |
-| `saveCredential(name, data)` | Save structured credential (JSON-serializable) |
-| `loadCredential(name)` | Load structured credential |
 
 ### 8.3 File Layout
 

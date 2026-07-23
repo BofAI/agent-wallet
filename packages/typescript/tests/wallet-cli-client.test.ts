@@ -24,7 +24,9 @@ function makeFakeChild(stdout: string, exitCode: number, error?: NodeJS.ErrnoExc
 
   const child = {
     stdin: {
-      write: vi.fn((data: string) => { stdinWrites.push(data) }),
+      write: vi.fn((data: string) => {
+        stdinWrites.push(data)
+      }),
       on: vi.fn(),
       end: vi.fn(() => {
         process.nextTick(() => {
@@ -133,10 +135,7 @@ describe('WalletCliClient', () => {
   })
 
   it('rejects output with wrong schema', async () => {
-    setSpawnResult(
-      JSON.stringify({ schema: 'wrong.version', success: true, command: 'test' }),
-      0,
-    )
+    setSpawnResult(JSON.stringify({ schema: 'wrong.version', success: true, command: 'test' }), 0)
     const client = new WalletCliClient({ binary: 'wallet-cli' })
     await expect(client.run(['current'])).rejects.toThrow()
   })
@@ -146,5 +145,53 @@ describe('WalletCliClient', () => {
     const client = new WalletCliClient({ binary: '/custom/path/wallet-cli' })
     await client.run(['current'])
     expect(mockSpawn.mock.calls[0][0]).toBe('/custom/path/wallet-cli')
+  })
+  it('kills with SIGTERM then SIGKILL on timeout', async () => {
+    vi.useFakeTimers()
+
+    // "Zombie" child: never emits stdout/close until killed
+    const killCalls: string[] = []
+    let closeHandler: ((code: number | null) => void) | undefined
+    let dataHandler: ((chunk: Buffer) => void) | undefined
+    const zombieChild = {
+      stdin: { write: vi.fn(), on: vi.fn(), end: vi.fn() },
+      stdout: {
+        on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+          if (event === 'data') dataHandler = cb as (chunk: Buffer) => void
+        }),
+      },
+      stderr: { on: vi.fn() },
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+        if (event === 'close') closeHandler = cb as (code: number | null) => void
+      }),
+      kill: vi.fn((sig: string) => {
+        killCalls.push(sig)
+        // SIGKILL terminates the zombie; emit a valid error envelope then close
+        // so the close handler hits the timedOut branch (not JSON.parse failure)
+        if (sig === 'SIGKILL') {
+          dataHandler?.(Buffer.from(ENVELOPE_ERR('timeout', 'killed after timeout')))
+          closeHandler?.(1)
+        }
+      }),
+    }
+    mockSpawn.mockImplementationOnce(() => zombieChild)
+
+    const client = new WalletCliClient({ binary: 'wallet-cli', timeoutMs: 50 })
+    const promise = client.run(['current'])
+    // Attach catch handler early to prevent unhandled rejection when
+    // the timeout reject fires inside advanceTimersByTimeAsync
+    const resultPromise = promise.catch((e: unknown) => e)
+
+    // Fire the timeout → triggers SIGTERM + schedules SIGKILL escalation
+    await vi.advanceTimersByTimeAsync(50)
+    // Fire the 5s SIGKILL escalation delay
+    await vi.advanceTimersByTimeAsync(5000)
+
+    const caught = await resultPromise
+    expect(caught).toBeInstanceOf(WalletCliExecutionError)
+    expect(killCalls[0]).toBe('SIGTERM')
+    expect(killCalls).toContain('SIGKILL')
+
+    vi.useRealTimers()
   })
 })

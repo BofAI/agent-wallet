@@ -8,7 +8,11 @@ import { WalletType } from '../base.js'
 import { LocalSecureSigner } from '../adapters/local-secure.js'
 import type { SecretLoaderFn } from '../adapters/local-secure.js'
 import { RawSecretSigner } from '../adapters/raw-secret.js'
-import type { RawSecretPrivateKeyParams, RawSecretMnemonicParams, PrivyWalletParams } from '../config.js'
+import type {
+  RawSecretPrivateKeyParams,
+  RawSecretMnemonicParams,
+  PrivyWalletParams,
+} from '../config.js'
 import { PrivyAdapter } from '../adapters/privy.js'
 import { PrivyClient } from '../clients/privy.js'
 import { PrivyConfigResolver } from './privy-config.js'
@@ -55,14 +59,17 @@ export function createAdapter(
 // here instead of adding if-else branches to createAdapter.
 // ---------------------------------------------------------------------------
 
-export type ExternalSignerBuilder = (
-  params: unknown,
-  ctx: { network?: string },
-) => Wallet
+export type ExternalSignerBuilder = (params: unknown, ctx: { network?: string }) => Wallet
 
 const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
 
 export function registerExternalSigner(type: string, builder: ExternalSignerBuilder): void {
+  if (externalSignerRegistry.has(type)) {
+    console.warn(
+      `[agent-wallet] Overwriting existing external signer registration for "${type}". ` +
+        'This may indicate a duplicate registration or a conflicting plugin.',
+    )
+  }
   externalSignerRegistry.set(type, builder)
 }
 
@@ -88,20 +95,19 @@ registerExternalSigner('privy', (params, _ctx) => {
   return new PrivyAdapter(resolved, client)
 })
 
-registerExternalSigner('wallet_cli', (params, _ctx) => {
+registerExternalSigner('wallet_cli', (params, ctx) => {
   const resolver = new WalletCliConfigResolver({
     source: params as WalletCliWalletParams,
   })
   const resolved = resolver.resolve()
   const client = new WalletCliClient()
-  return new WalletCliSigner(resolved, client)
+  return new WalletCliSigner(resolved, client, ctx.network)
 })
 
-export type EnvWalletResolved =
-  | {
-      params: RawSecretPrivateKeyParams | RawSecretMnemonicParams
-      network: string | undefined
-    }
+export type EnvWalletResolved = {
+  params: RawSecretPrivateKeyParams | RawSecretMnemonicParams
+  network: string | undefined
+}
 
 export function createEnvAdapter(resolved: EnvWalletResolved): Wallet {
   return new RawSecretSigner(resolved.params, resolved.network)

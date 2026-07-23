@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -99,10 +107,13 @@ function cloneDir(src: string, prefix: string): string {
 }
 
 beforeAll(async () => {
-  initializedTemplateDir = await createTemplateDir('agent-wallet-cli-init-template-', async (dir) => {
-    const io = mockIO([TEST_PASSWORD, TEST_PASSWORD])
-    await cmdInit(dir, io)
-  })
+  initializedTemplateDir = await createTemplateDir(
+    'agent-wallet-cli-init-template-',
+    async (dir) => {
+      const io = mockIO([TEST_PASSWORD, TEST_PASSWORD])
+      await cmdInit(dir, io)
+    },
+  )
 
   listTemplateDir = await createTemplateDir('agent-wallet-cli-list-template-', async (dir) => {
     await cloneInitializedDirInto(dir)
@@ -440,9 +451,9 @@ describe('cmdStart', () => {
     })
 
     const config = readConfig(secretsDir)
-   expect(config.wallets['auto-wallet'].type).toBe('local_secure')
-   expect(out(io)).toContain('Your master password:')
- })
+    expect(config.wallets['auto-wallet'].type).toBe('local_secure')
+    expect(out(io)).toContain('Your master password:')
+  })
 })
 
 describe('cmdStart override behavior', () => {
@@ -472,22 +483,22 @@ describe('cmdStart override behavior', () => {
     expect(config.wallets.cli1.params.password).toBe('KsPass123!')
   })
 
- it('prompts for missing wallet_cli password in start wallet_cli', async () => {
-   const io = mockIO(['', '', 'KsPass123!'])
-   await cmdStart(secretsDir, io, {
-     walletType: 'wallet_cli',
-     walletId: 'cli2',
-   })
+  it('prompts for missing wallet_cli password in start wallet_cli', async () => {
+    const io = mockIO(['', '', 'KsPass123!'])
+    await cmdStart(secretsDir, io, {
+      walletType: 'wallet_cli',
+      walletId: 'cli2',
+    })
 
-   expect(out(io)).toContain('is required.')
-   const config = readConfig(secretsDir)
-   expect(config.wallets.cli2.type).toBe('wallet_cli')
-   expect(config.wallets.cli2.params.password).toBe('KsPass123!')
-   expect(config.wallets.cli2.params.account).toBeUndefined()
- })
+    expect(out(io)).toContain('is required.')
+    const config = readConfig(secretsDir)
+    expect(config.wallets.cli2.type).toBe('wallet_cli')
+    expect(config.wallets.cli2.params.password).toBe('KsPass123!')
+    expect(config.wallets.cli2.params.account).toBeUndefined()
+  })
 
- it('rejects --password for wallet_cli start (not local_secure)', async () => {
-   const io = mockIO()
+  it('rejects --password for wallet_cli start (not local_secure)', async () => {
+    const io = mockIO()
     await expect(
       cmdStart(secretsDir, io, {
         walletType: 'wallet_cli',
@@ -688,8 +699,8 @@ describe('cmdAdd / active wallet', () => {
     expect(out(io2)).toContain('Usage: agent-wallet add privy [options]')
     expect(out(io2)).toContain('--app-id')
     expect(out(io2)).toContain('--privy-wallet-id')
-   expect(out(io2)).not.toContain('--password, -p <pw>')
- })
+    expect(out(io2)).not.toContain('--password, -p <pw>')
+  })
 
   it('shows mode-specific help for add wallet_cli', async () => {
     const io = mockIO()
@@ -732,7 +743,16 @@ describe('cmdAdd / active wallet', () => {
   it('accepts wallet_cli via main with --cli-password and no account', async () => {
     const io = mockIO()
     const code = await main(
-      ['add', 'wallet_cli', '--wallet-id', 'cli-main', '--cli-password', 'Main123!', '-d', secretsDir],
+      [
+        'add',
+        'wallet_cli',
+        '--wallet-id',
+        'cli-main',
+        '--cli-password',
+        'Main123!',
+        '-d',
+        secretsDir,
+      ],
       io,
     )
 
@@ -1094,10 +1114,9 @@ describe('sign commands', () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/v1/wallets/wallet-1') && !url.includes('/rpc')) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: { address: '0xabc', chain_type: 'ethereum' } }),
-            { status: 200 },
-          ),
+          new Response(JSON.stringify({ data: { address: '0xabc', chain_type: 'ethereum' } }), {
+            status: 200,
+          }),
         )
       }
       return Promise.resolve(
@@ -1317,6 +1336,6 @@ describe('expandTilde', () => {
 
   it('leaves non-tilde paths unchanged', () => {
     expect(expandTilde('/usr/local')).toBe('/usr/local')
-   expect(expandTilde('relative/path')).toBe('relative/path')
- })
+    expect(expandTilde('relative/path')).toBe('relative/path')
+  })
 })
