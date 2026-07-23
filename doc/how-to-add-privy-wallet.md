@@ -113,14 +113,6 @@ Use the verification scripts to recover the TRON address and compare:
 ```bash
 AGENT_WALLET_DIR=/path/to/wallet-dir \
 AGENT_WALLET_PASSWORD='<your_password>' \
-python packages/python/examples/verify_tron_privy_typed_data.py
-```
-
-TypeScript version:
-
-```bash
-AGENT_WALLET_DIR=/path/to/wallet-dir \
-AGENT_WALLET_PASSWORD='<your_password>' \
 npx tsx packages/typescript/examples/verify-tron-privy-typed-data.ts
 ```
 

@@ -1,16 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
+# Build output
 dist/
 build/
-*.egg
-.venv/
-venv/
-.pytest_cache/
-.coverage
-htmlcov/
-coverage/
 
 # TypeScript
 node_modules/
@@ -39,3 +29,6 @@ Thumbs.db
 
 # codex
 .codex/
+
+# pnpm local store
+.pnpm-store/

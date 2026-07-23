@@ -15,6 +15,15 @@ export {
   PrivyRequestError,
   PrivyRateLimitError,
   PrivyAuthError,
+  ExternalSignerError,
+  ExternalSignerConfigError,
+  ExternalSignerExecutionError,
+  ExternalSignerUsageError,
+  ExternalSignerNotFoundError,
+  WalletCliConfigError,
+  WalletCliNotFoundError,
+  WalletCliUsageError,
+  WalletCliExecutionError,
 } from './core/errors.js'
 
 // Wallet adapters
@@ -24,10 +33,14 @@ export { LocalSigner } from './core/adapters/local.js'
 export { LocalSecureSigner } from './core/adapters/local-secure.js'
 export { RawSecretSigner } from './core/adapters/raw-secret.js'
 export { PrivyAdapter } from './core/adapters/privy.js'
+export { WalletCliSigner } from './core/adapters/wallet-cli.js'
 
 // Provider layer
 export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'
 export type { SecretLoaderFn } from './core/providers/index.js'
+export { ExternalSignerConfigResolver } from './core/providers/external-signer-config.js'
+export { WalletCliConfigResolver } from './core/providers/wallet-cli-config.js'
+export type { WalletCliConfig, WalletCliConfigSource } from './core/providers/wallet-cli-config.js'
 
 // Resolver
 export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
@@ -43,9 +56,21 @@ export type {
   RawSecretMnemonicParams,
   RawSecretParams,
   PrivyWalletParams,
+  WalletCliWalletParams,
 } from './core/config.js'
 export { PrivyConfigResolver } from './core/providers/privy-config.js'
 export { PrivyClient } from './core/clients/privy.js'
+export { WalletCliClient } from './core/clients/wallet-cli.js'
+export type {
+  WalletCliClientOptions,
+  WalletCliResult,
+  WalletCliCurrentAccountData,
+  WalletCliTxSignData,
+  WalletCliMessageSignData,
+  WalletCliTypedDataSignData,
+} from './core/clients/wallet-cli.js'
+export { registerExternalSigner, isRegisteredExternalSigner } from './core/providers/wallet-builder.js'
+export type { ExternalSignerBuilder } from './core/providers/wallet-builder.js'
 
 // KV Store
 export { SecureKVStore, encryptBytes, decryptBytes } from './local/kv-store.js'

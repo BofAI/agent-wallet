@@ -7,7 +7,7 @@
 
 ## 1. System Overview
 
-Agent Wallet is an adapter layer for agent wallets, providing a unified signing interface across multiple blockchain networks. The SDK is implemented in both TypeScript and Python with full API surface parity and file format compatibility.
+Agent Wallet is an adapter layer for agent wallets, providing a unified signing interface across multiple blockchain networks. The SDK is implemented in TypeScript with a stable API surface and file format compatibility.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@ Agent Wallet is an adapter layer for agent wallets, providing a unified signing 
 │              Network-specific signing logic                    │
 ├─────────────────────────┬────────────────────────────┬────────┤
 │       EvmSigner         │       TronSigner           │ Future │
-│  (viem / eth-account)   │ (@noble/curves+viem/tronpy)│ Chains │
+│  (viem)   │ (@noble/curves+viem)│ Chains │
 ├─────────────────────────┴────────────────────────────┴────────┤
 │                    Local Storage Layer                          │
 │              SecureKVStore (Keystore V3 encryption)            │
@@ -48,7 +48,7 @@ Agent Wallet is an adapter layer for agent wallets, providing a unified signing 
 | **Resolver** | Provider selection strategy | `resolver.ts/py` |
 | **Provider** | Wallet lifecycle management | `ConfigWalletProvider`, `EnvWalletProvider` |
 | **Signer** | Network-specific signing | `EvmSigner`, `TronSigner`, `LocalSigner`, `LocalSecureSigner`, `RawSecretSigner` |
-| **Config** | Schema validation & persistence | Zod schemas (TS), Pydantic models (Python) |
+| **Config** | Schema validation & persistence | Zod schemas (TypeScript) |
 | **Storage** | Encrypted key storage | `SecureKVStore`, `secret-loader` |
 
 ### 2.2 Dependency Direction
@@ -245,13 +245,13 @@ parseNetworkFamily(networkString)
 |-----------|---------------|
 | `getAddress()` | Derive from private key → EIP-55 checksummed hex |
 | `signMessage(msg)` | EIP-191 personal sign → 65-byte signature hex |
-| `signTransaction(payload)` | viem/eth-account sign → raw tx hex (broadcast-ready) |
+| `signTransaction(payload)` | viem sign → raw tx hex (broadcast-ready) |
 | `signRaw(rawTx)` | Parse serialized tx → strip sig → re-sign |
 | `signTypedData(data)` | EIP-712 standard → 65-byte signature hex |
 
 **Transaction types:** Legacy (type 0), EIP-2930 (type 1), EIP-1559 (type 2)
 
-**Libraries:** viem (TypeScript), eth-account (Python)
+**Libraries:** viem (TypeScript)
 
 ### 7.3 TronSigner
 
@@ -266,7 +266,7 @@ parseNetworkFamily(networkString)
 **Transaction input:** Unsigned tx from TronGrid API (`txID`, `raw_data_hex`, `raw_data`)
 **Transaction output:** JSON string with `"signature": ["hex"]` appended
 
-**Libraries:** @noble/curves + viem (TypeScript), tronpy (Python)
+**Libraries:** @noble/curves + viem (TypeScript)
 
 ### 7.4 Key Derivation Paths (BIP-44)
 
@@ -356,8 +356,7 @@ WalletConfig  { type, params }
 ### 9.3 Validation
 
 - **TypeScript:** Zod with `z.discriminatedUnion()` on `type` and `source` fields
-- **Python:** Pydantic with `Annotated[..., Discriminator("field")]`
-- JSON keys use **snake_case** for cross-language compatibility
+- JSON keys use **snake_case** for compatibility
 
 ---
 
@@ -383,7 +382,7 @@ Signer (EvmSigner)
   │  await wallet.signTransaction({ to, value, gas, ... })
   │
   │  ┌─────────────────────────────┐
-  │  │ viem/eth-account:           │
+  │  │ viem:           │
   │  │ 1. Serialize tx fields      │
   │  │ 2. RLP encode               │
   │  │ 3. Keccak256 hash           │
@@ -458,7 +457,6 @@ agent-wallet
 | Platform | Framework | Interactive Prompts | Output Formatting |
 |----------|-----------|--------------------|--------------------|
 | TypeScript | Custom readline parser | `@inquirer/prompts` | Console output |
-| Python | Typer | `questionary` + `rich` | Rich tables/panels |
 
 ---
 
@@ -483,30 +481,30 @@ agent-wallet
 
 ---
 
-## 13. Cross-Language Compatibility
+## 13. Compatibility Guarantees
 
 ### 13.1 Guarantees
 
 | Aspect | Guarantee |
 |--------|-----------|
-| Config files | Same JSON format, snake_case keys, readable by both languages |
+| Config files | Same JSON format, snake_case keys |
 | Signatures | Identical output for same private key + same input |
-| Encryption | Same Keystore V3 format, cross-decryptable |
+| Encryption | Same Keystore V3 format |
 | Network IDs | Same string format (`eip155:*`, `tron:*`) |
 | CLI commands | Same command names and argument structure |
 | Env vars | Same variable names |
 
 ### 13.2 Implementation Mapping
 
-| Component | TypeScript | Python |
-|-----------|-----------|--------|
-| EVM signing | viem | eth-account |
-| TRON signing | @noble/curves + viem | tronpy |
-| Schema validation | Zod | Pydantic |
-| CLI framework | Custom readline | Typer |
-| Interactive prompts | @inquirer/prompts | questionary |
-| Output formatting | Console | Rich |
-| Encryption | Node.js crypto | pycryptodome |
+| Component | TypeScript |
+|-----------|-----------|
+| EVM signing | viem |
+| TRON signing | @noble/curves + viem |
+| Schema validation | Zod |
+| CLI framework | Custom readline |
+| Interactive prompts | @inquirer/prompts |
+| Output formatting | Console |
+| Encryption | Node.js crypto |
 
 ---
 

@@ -1,6 +1,6 @@
 # Agent Wallet — Product Requirements Document
 
-**Product:** Agent Wallet (bankofai-agent-wallet / @bankofai/agent-wallet)
+**Product:** Agent Wallet (@bankofai/agent-wallet)
 **Version:** 2.3.0
 **Organization:** BankOfAI
 **License:** MIT
@@ -32,7 +32,6 @@ Agent Wallet is a universal, multi-chain secure signing SDK for AI agents and ap
 
 | Platform | Package Name | Install Command |
 |----------|-------------|-----------------|
-| Python (PyPI) | `bankofai-agent-wallet` | `pip install bankofai-agent-wallet` |
 | npm | `@bankofai/agent-wallet` | `npm install @bankofai/agent-wallet` |
 
 ---
@@ -134,14 +133,14 @@ All adapters also implement `Eip712Capable`:
 - **Message signing:** EIP-191 personal sign
 - **Transaction types:** Legacy (type 0), EIP-2930 (type 1), EIP-1559 (type 2)
 - **Transaction output:** Raw signed hex, ready for `eth_sendRawTransaction`
-- **Libraries:** viem (TypeScript), eth-account (Python)
+- **Libraries:** viem (TypeScript)
 
 ### 4.4 TRON Signing Details
 
 - **Message signing:** Keccak256 hash + secp256k1 ECDSA
 - **Transaction input:** Unsigned tx from TronGrid API (`txID`, `raw_data_hex`, `raw_data`)
 - **Transaction output:** JSON string with `signature` array appended
-- **Libraries:** @noble/curves + viem (TypeScript), tronpy (Python)
+- **Libraries:** @noble/curves + viem (TypeScript)
 
 ### 4.5 Cross-Chain Signature Consistency
 
@@ -172,12 +171,6 @@ When `resolveWallet()` or `resolveWalletProvider()` is called:
 ## 6. SDK API
 
 ### 6.1 Primary Entry Points
-
-**Python:**
-```python
-from agent_wallet import resolve_wallet, resolve_wallet_provider
-from agent_wallet import ConfigWalletProvider, EnvWalletProvider
-```
 
 **TypeScript:**
 ```typescript
@@ -365,13 +358,13 @@ Optional convenience file. Created by `--save-runtime-secrets`. Auto-detected on
 
 ---
 
-## 12. Cross-Language Compatibility
+## 12. Compatibility Guarantees
 
 ### 12.1 Requirements
 
 | Requirement | Status |
 |-------------|--------|
-| Same keystore format readable by both languages | Required |
+| Stable keystore format | Required |
 | Identical signatures for same key + message | Required |
 | Same network identifier format | Required |
 | Same CLI command structure | Required |
@@ -381,7 +374,6 @@ Optional convenience file. Created by `--save-runtime-secrets`. Auto-detected on
 
 | Platform | Minimum Version |
 |----------|----------------|
-| Python | 3.10 |
 | Node.js | 18.0 |
 
 ---
@@ -392,14 +384,13 @@ Optional convenience file. Created by `--save-runtime-secrets`. Auto-detected on
 
 | Platform | Minimum Coverage |
 |----------|-----------------|
-| Python | 80% |
 | TypeScript | 60% |
 
 ### 13.2 Required Test Categories
 
 1. **Signing verification** — sign + recover roundtrip for all adapters and networks
 2. **Deterministic signatures** — same input always produces same output
-3. **Cross-library compatibility** — signatures verifiable across Python and TypeScript
+3. **Signature recovery** — every signature is verifiable by recovering the signer address
 4. **Encryption roundtrip** — encrypt → decrypt yields original key material
 5. **Password validation** — strength requirements enforced
 6. **Config management** — wallet add/remove/switch/list operations
@@ -412,11 +403,11 @@ Optional convenience file. Created by `--save-runtime-secrets`. Auto-detected on
 
 ### 14.1 Pipeline
 
-| Stage | Python | TypeScript |
-|-------|--------|------------|
-| Lint | ruff check (E,W,F,I,B,UP,RUF) | tsc --noEmit + eslint |
-| Test | pytest with coverage | vitest with v8 coverage |
-| Build | python -m build | tsup (ESM + CJS) |
+| Stage | TypeScript |
+|-------|------------|
+| Lint | tsc --noEmit + eslint |
+| Test | vitest with v8 coverage |
+| Build | tsup (ESM + CJS) |
 
 ### 14.2 Triggers
 

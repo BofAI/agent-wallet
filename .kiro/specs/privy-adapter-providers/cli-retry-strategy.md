@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document defines a single retry policy for interactive CLI input across the Python and TypeScript implementations.
+This document defines a single retry policy for interactive CLI input for the TypeScript implementation.
 
-The goal is to remove ad-hoc differences between the two CLIs and make retry behavior predictable for users and implementers.
+The goal is to make retry behavior predictable for users and implementers.
 
 ## Core Rule
 
@@ -97,7 +97,7 @@ These are inputs that come from flags, env vars, runtime secrets, or non-TTY exe
 
 ## Consistency Requirements
 
-The Python and TypeScript CLIs must follow the same policy:
+The TypeScript CLI must follow this policy:
 
 - Existing secret verification -> 3 attempts max in interactive mode
 - New or correctable form input -> unlimited retries in interactive mode
@@ -107,11 +107,6 @@ Differences in framework or prompt library are acceptable. Differences in user-v
 
 ## Implementation Guidance
 
-### Python
-
-- Replace one-shot exits in interactive new-password and required-field flows with loops
-- Keep existing verified-password logic capped at 3 attempts
-
 ### TypeScript
 
 - Keep the existing loop for new password entry
@@ -120,7 +115,7 @@ Differences in framework or prompt library are acceptable. Differences in user-v
 
 ## Testing Expectations
 
-Both CLIs should have coverage for:
+The CLI should have coverage for:
 
 - Wrong existing password three times -> exit
 - Weak new password -> re-prompt

@@ -1,0 +1,49 @@
+/**
+ * Config resolver for the wallet-cli signing backend.
+ *
+ * Mirrors PrivyConfigResolver: config-only (no env), normalizes (trim),
+ * validates required fields, and fails fast on missing configuration.
+ * The wallet-cli keystore password is a config-stored credential
+ * (like Privy's app_secret), not the agent-wallet master password.
+ */
+
+import { WalletCliConfigError } from '../errors.js'
+import { ExternalSignerConfigResolver } from './external-signer-config.js'
+
+export type WalletCliConfig = {
+  account?: string
+  password: string
+}
+
+export type WalletCliConfigSource = {
+  account?: string
+  password?: string
+}
+
+export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
+  WalletCliConfig,
+  WalletCliConfigSource
+> {
+  resolve(): WalletCliConfig {
+    const merged = this.merge()
+    const missing = this.requireFields(merged as Record<string, unknown>, ['password'])
+    if (missing.length > 0) {
+      throw new WalletCliConfigError(
+        `Missing required wallet-cli config keys: ${missing.join(', ')}`,
+      )
+    }
+
+    return {
+      account: merged.account,
+      password: merged.password!,
+    }
+  }
+
+  private merge(): WalletCliConfigSource {
+    const source = this.source
+    return {
+      account: this.normalizeValue(source?.account),
+      password: this.normalizeValue(source?.password),
+    }
+  }
+}

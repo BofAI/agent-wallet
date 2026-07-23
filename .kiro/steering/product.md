@@ -8,7 +8,7 @@ agent-wallet is a multi-chain signing toolkit for AI agents and applications. It
 - Wallet resolution through config-backed and environment-backed providers
 - Signing support for TRON and EVM networks
 - CLI workflows for wallet setup, switching, and signing
-- SDK usage in both Python and TypeScript
+- SDK usage in TypeScript
 
 ## Target Use Cases
 

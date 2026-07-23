@@ -8,52 +8,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  python:
-    name: Python (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
-    defaults:
-      run:
-        working-directory: packages/python
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: packages/python/pyproject.toml
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build hatchling ruff
-          python -m pip install -e ".[dev]"
-
-      - name: Lint
-        run: ruff check src tests examples
-
-      - name: Test
-        run: pytest tests
-
-      - name: Build
-        run: python -m build --no-isolation
-
-      - name: Smoke test CLI
-        env:
-          AGENT_WALLET_DIR: ${{ runner.temp }}/agent-wallet-python-smoke
-        run: |
-          agent-wallet init -p "Abc12345!"
-          agent-wallet add local_secure -w wallet_1 -g -p "Abc12345!"
-          agent-wallet sign msg "hello world" -n tron -p "Abc12345!"
-          python -c "from pathlib import Path; import os; d = Path(os.environ['AGENT_WALLET_DIR']); expected = ['master.json', 'wallets_config.json', 'secret_wallet_1.json']; missing = [name for name in expected if not (d / name).exists()]; assert not missing, f'Missing files in {d}: {missing}'; print(sorted(p.name for p in d.iterdir()))"
-
   typescript:
     name: TypeScript (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

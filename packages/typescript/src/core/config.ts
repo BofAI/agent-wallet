@@ -47,20 +47,31 @@ export const PrivyWalletParamsSchema = z.object({
   wallet_id: z.string(),
 })
 
+export const WalletCliWalletParamsSchema = z.object({
+  account: z.string().optional(),
+  password: z.string(),
+})
+
 // ---------------------------------------------------------------------------
 // Zod schemas — WalletConfig (unified type + params)
 // ---------------------------------------------------------------------------
 
 export const WalletConfigSchema = z
   .object({
-    type: z.enum(['local_secure', 'raw_secret', 'privy']),
-    params: z.union([LocalSecureWalletParamsSchema, RawSecretParamsSchema, PrivyWalletParamsSchema]),
+    type: z.enum(['local_secure', 'raw_secret', 'privy', 'wallet_cli']),
+    params: z.union([
+      LocalSecureWalletParamsSchema,
+      RawSecretParamsSchema,
+      PrivyWalletParamsSchema,
+      WalletCliWalletParamsSchema,
+    ]),
   })
   .refine(
     (data) => {
       if (data.type === 'local_secure') return 'secret_ref' in data.params
       if (data.type === 'raw_secret') return 'source' in data.params
       if (data.type === 'privy') return 'app_id' in data.params
+      if (data.type === 'wallet_cli') return 'password' in data.params
       return false
     },
     { message: 'params must match wallet type' },
@@ -80,6 +91,7 @@ export type RawSecretPrivateKeyParams = z.infer<typeof RawSecretPrivateKeyParams
 export type RawSecretMnemonicParams = z.infer<typeof RawSecretMnemonicParamsSchema>
 export type RawSecretParams = z.infer<typeof RawSecretParamsSchema>
 export type PrivyWalletParams = z.infer<typeof PrivyWalletParamsSchema>
+export type WalletCliWalletParams = z.infer<typeof WalletCliWalletParamsSchema>
 export type WalletConfig = z.infer<typeof WalletConfigSchema>
 export type WalletsTopology = z.infer<typeof WalletsTopologySchema>
 

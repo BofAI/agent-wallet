@@ -1555,16 +1555,6 @@ export async function cmdChangePassword(
     }
   }
 
-  for (const file of files) {
-    if (file.startsWith('cred_') && file.endsWith('.json')) {
-      const name = file.slice(5, -5)
-      const cred = kvStoreOld.loadCredential(name)
-      kvStoreNew.saveCredential(name, cred)
-      io.print(`  \u2713 ${file}`)
-      reEncrypted += 1
-    }
-  }
-
   io.print(`\nPassword changed. Re-encrypted ${reEncrypted} files.`)
 
   const newProvider = getProvider(dir, newPw)

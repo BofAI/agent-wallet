@@ -1,6 +1,6 @@
 # Agent Wallet — 产品需求文档
 
-**产品名称：** Agent Wallet (bankofai-agent-wallet / @bankofai/agent-wallet)
+**产品名称：** Agent Wallet (@bankofai/agent-wallet)
 **版本：** 2.3.0
 **组织：** BankOfAI
 **许可证：** MIT
@@ -32,7 +32,6 @@ Agent Wallet 是一个面向 AI 代理和应用的通用多链安全签名 SDK�
 
 | 平台 | 包名 | 安装命令 |
 |------|------|---------|
-| Python (PyPI) | `bankofai-agent-wallet` | `pip install bankofai-agent-wallet` |
 | npm | `@bankofai/agent-wallet` | `npm install @bankofai/agent-wallet` |
 
 ---
@@ -134,14 +133,14 @@ Agent Wallet 是一个面向 AI 代理和应用的通用多链安全签名 SDK�
 - **消息签名：** EIP-191 个人签名
 - **交易类型：** Legacy（type 0）、EIP-2930（type 1）、EIP-1559（type 2）
 - **交易输出：** 原始签名十六进制，可直接用于 `eth_sendRawTransaction`
-- **使用库：** viem（TypeScript）、eth-account（Python）
+- **使用库：** viem（TypeScript）
 
 ### 4.4 TRON 签名细节
 
 - **消息签名：** Keccak256 哈希 + secp256k1 ECDSA
 - **交易输入：** 来自 TronGrid API 的未签名交易（`txID`、`raw_data_hex`、`raw_data`）
 - **交易输出：** 附加 `signature` 数组的 JSON 字符串
-- **使用库：** @noble/curves + viem（TypeScript）、tronpy（Python）
+- **使用库：** @noble/curves + viem（TypeScript）
 
 ### 4.5 跨链签名一致性
 
@@ -172,12 +171,6 @@ Agent Wallet 是一个面向 AI 代理和应用的通用多链安全签名 SDK�
 ## 6. SDK API
 
 ### 6.1 主要入口
-
-**Python：**
-```python
-from agent_wallet import resolve_wallet, resolve_wallet_provider
-from agent_wallet import ConfigWalletProvider, EnvWalletProvider
-```
 
 **TypeScript：**
 ```typescript
@@ -216,7 +209,7 @@ import { ConfigWalletProvider, EnvWalletProvider } from "@bankofai/agent-wallet"
 
 ## 7. CLI 命令
 
-入口命令：`agent-wallet`（pip 和 npm 安装均可用）
+入口命令：`agent-wallet`（npm 安装可用）
 
 ### 7.1 设置与初始化
 
@@ -365,13 +358,13 @@ import { ConfigWalletProvider, EnvWalletProvider } from "@bankofai/agent-wallet"
 
 ---
 
-## 12. 跨语言兼容性
+## 12. 兼容性保证
 
 ### 12.1 要求
 
 | 要求 | 状态 |
 |------|------|
-| 两种语言可读取相同的密钥库格式 | 必需 |
+| 稳定的密钥库格式 | 必需 |
 | 相同密钥+消息产生完全相同的签名 | 必需 |
 | 相同的网络标识符格式 | 必需 |
 | 相同的 CLI 命令结构 | 必需 |
@@ -381,7 +374,6 @@ import { ConfigWalletProvider, EnvWalletProvider } from "@bankofai/agent-wallet"
 
 | 平台 | 最低版本 |
 |------|---------|
-| Python | 3.10 |
 | Node.js | 18.0 |
 
 ---
@@ -392,14 +384,13 @@ import { ConfigWalletProvider, EnvWalletProvider } from "@bankofai/agent-wallet"
 
 | 平台 | 最低覆盖率 |
 |------|-----------|
-| Python | 80% |
 | TypeScript | 60% |
 
 ### 13.2 必需的测试类别
 
 1. **签名验证** — 所有适配器和网络的签名 + 恢复往返测试
 2. **确定性签名** — 相同输入始终产生相同输出
-3. **跨库兼容性** — Python 和 TypeScript 之间签名可互相验证
+3. **签名恢复** — 每个签名均可通过恢复签名者地址来验证
 4. **加密往返** — 加密 → 解密得到原始密钥材料
 5. **密码验证** — 强度要求被正确执行
 6. **配置管理** — 钱包添加/删除/切换/列表操作
@@ -412,11 +403,11 @@ import { ConfigWalletProvider, EnvWalletProvider } from "@bankofai/agent-wallet"
 
 ### 14.1 流水线
 
-| 阶段 | Python | TypeScript |
-|------|--------|------------|
-| 代码检查 | ruff check (E,W,F,I,B,UP,RUF) | tsc --noEmit + eslint |
-| 测试 | pytest + 覆盖率 | vitest + v8 覆盖率 |
-| 构建 | python -m build | tsup (ESM + CJS) |
+| 阶段 | TypeScript |
+|------|------------|
+| 代码检查 | tsc --noEmit + eslint |
+| 测试 | vitest with v8 覆盖率 |
+| 构建 | tsup (ESM + CJS) |
 
 ### 14.2 触发条件
 

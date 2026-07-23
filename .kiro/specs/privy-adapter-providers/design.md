@@ -6,7 +6,7 @@ This feature adds a Privy-based wallet adapter to agent-wallet and introduces a 
 Target users are SDK integrators and operators who need to sign messages and transactions using Privy-hosted wallets. The change extends the wallet adapter set without altering core caller workflows (`resolveWallet`, `resolveWalletProvider`) and emphasizes safe handling of credentials.
 
 ### Goals
-- Enable Privy adapter selection in both TypeScript and Python SDKs.
+- Enable Privy adapter selection in the TypeScript SDK.
 - Support config-provider and env-provider configuration sources with explicit source isolation.
 - Map agent-wallet signing methods to Privy RPC endpoints with explicit error handling.
 - Preserve existing adapter/provider behaviors for non-Privy wallets.
@@ -22,15 +22,15 @@ Target users are SDK integrators and operators who need to sign messages and tra
 - Current adapters include `local_secure`, `raw_secret`, and network-specific EVM/TRON signers.
 - Provider resolution prefers config-backed providers, then falls back to env-backed providers.
 - Each provider reads only its own data source (config file vs env vars).
-- Wallet configuration is persisted in `wallets_config.json` with shared schemas between TypeScript and Python.
+- Wallet configuration is persisted in `wallets_config.json` with a shared schema in the TypeScript SDK.
 
 ### Architecture Pattern & Boundary Map
 **Architecture Integration**:
 - Selected pattern: Hexagonal (ports & adapters) with a dedicated Privy adapter.
 - Domain/feature boundaries: Configuration resolution (providers) is separated from signing behavior (adapters) and HTTP transport (client).
-- Existing patterns preserved: `Wallet` interface, provider resolution order, config schema parity between TypeScript and Python.
+- Existing patterns preserved: `Wallet` interface, provider resolution order, config schema consistency in the TypeScript SDK.
 - New components rationale: Privy adapter encapsulates RPC mapping; Privy client centralizes auth headers and retries; Privy config resolver normalizes a single source (config or env).
-- Steering compliance: Aligns with product/tech/structure guidance (provider separation, signing-only scope, cross-language parity).
+- Steering compliance: Aligns with product/tech/structure guidance (provider separation, signing-only scope, internal consistency).
 
 ```mermaid
 graph TB
@@ -49,7 +49,6 @@ graph TB
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
 | Backend / Services | Node 18+ fetch | Privy HTTP calls in TypeScript SDK | No new dependency |
-| Backend / Services | Python 3.11 stdlib HTTPS client | Privy HTTP calls in Python SDK | Avoid new dependency unless required |
 | Infrastructure / Runtime | HTTPS (TLS) | Secure Privy API transport | Required by Privy |
 
 ## CLI Support
@@ -610,10 +609,6 @@ async signMessage(msg: Uint8Array, options?: SignOptions): Promise<string> {
   return extractSignature(response)
 }
 ```
-
-**Python note**
-- Use a `SignOptions` dataclass or optional parameter pattern (e.g., `options: SignOptions | None = None`).
-- Privy adapter reads `options.authorization_signature` when present.
 
 **Dependencies**
 - Inbound: WalletBuilder — constructs adapter from config (P0)

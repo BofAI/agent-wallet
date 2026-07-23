@@ -250,7 +250,7 @@ Requires `master.json` to exist; otherwise prints that no wallet data was found.
 | `AGENT_WALLET_DIR` | Default secrets directory |
 | `AGENT_WALLET_PASSWORD` | Default master password when `-p` is not passed |
 
-## 15. File layout (Python / `local_secure`)
+## 15. File layout (`local_secure`)
 
 ```
 ~/.agent-wallet/          (mode 700)
@@ -282,6 +282,5 @@ Requires `master.json` to exist; otherwise prints that no wallet data was found.
 
 ## Next steps
 
-- **Python SDK** — `packages/python/README.md`, `examples/`
 - **TypeScript** — `packages/typescript/README.md` (npm CLI)
-- Resolver helpers — `resolve_wallet`, `resolve_wallet_provider` in Python package
+- Resolver helpers — `resolveWallet`, `resolveWalletProvider` in the TypeScript package

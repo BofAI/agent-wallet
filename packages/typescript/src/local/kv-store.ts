@@ -178,30 +178,7 @@ export class SecureKVStore {
     const secret = randomBytes(opts?.length ?? 32)
     this.saveSecret(name, secret)
     return Uint8Array.from(secret)
-  }
 
-  loadCredential(name: string): string | Record<string, unknown> {
-    const keystore = this.readJson(`cred_${name}.json`) as KeystoreV3
-    const plaintext = decryptBytes(keystore, this.password)
-    const text = Buffer.from(plaintext).toString('utf-8')
-    try {
-      const parsed = JSON.parse(text)
-      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>
-      }
-    } catch {
-      // not JSON, return raw text
-    }
-    return text
-  }
-
-  saveCredential(name: string, value: string | Record<string, unknown>): void {
-    const plaintext =
-      typeof value === 'string'
-        ? Buffer.from(value, 'utf-8')
-        : Buffer.from(JSON.stringify(value), 'utf-8')
-    const keystore = encryptBytes(plaintext, this.password)
-    this.writeJson(`cred_${name}.json`, keystore)
   }
 
   private readJson(filename: string): unknown {

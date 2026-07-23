@@ -12,6 +12,10 @@ import type { RawSecretPrivateKeyParams, RawSecretMnemonicParams, PrivyWalletPar
 import { PrivyAdapter } from '../adapters/privy.js'
 import { PrivyClient } from '../clients/privy.js'
 import { PrivyConfigResolver } from './privy-config.js'
+import type { WalletCliWalletParams } from '../config.js'
+import { WalletCliConfigResolver } from './wallet-cli-config.js'
+import { WalletCliClient } from '../clients/wallet-cli.js'
+import { WalletCliSigner } from '../adapters/wallet-cli.js'
 
 export function createAdapter(
   conf: WalletConfig,
@@ -20,6 +24,14 @@ export function createAdapter(
   network: string | undefined,
   secretLoader: SecretLoaderFn | undefined,
 ): Wallet {
+  // External signers (privy, wallet_cli, and future types) use the registry;
+  // they carry their own credentials in params and don't need
+  // password/configDir/secretLoader.
+  const externalBuilder = externalSignerRegistry.get(conf.type)
+  if (externalBuilder) {
+    return externalBuilder(conf.params, { network })
+  }
+
   if (conf.type === WalletType.LOCAL_SECURE) {
     return new LocalSecureSigner(
       conf.params as { secret_ref: string },
@@ -35,19 +47,55 @@ export function createAdapter(
       network,
     )
   }
-  if (conf.type === WalletType.PRIVY) {
-    const resolver = new PrivyConfigResolver({
-      source: conf.params as PrivyWalletParams,
-    })
-    const resolved = resolver.resolve()
-    const client = new PrivyClient({
-      appId: resolved.appId,
-      appSecret: resolved.appSecret,
-    })
-    return new PrivyAdapter(resolved, client)
-  }
   throw new Error(`Unknown wallet config type: ${conf.type}`)
 }
+
+// ---------------------------------------------------------------------------
+// External signer registry — new external signing backends self-register
+// here instead of adding if-else branches to createAdapter.
+// ---------------------------------------------------------------------------
+
+export type ExternalSignerBuilder = (
+  params: unknown,
+  ctx: { network?: string },
+) => Wallet
+
+const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
+
+export function registerExternalSigner(type: string, builder: ExternalSignerBuilder): void {
+  externalSignerRegistry.set(type, builder)
+}
+
+export function isRegisteredExternalSigner(type: string): boolean {
+  return externalSignerRegistry.has(type)
+}
+
+// ---------------------------------------------------------------------------
+// External signer registrations — privy and wallet_cli both follow the same
+// pattern: resolver → resolve → client → adapter. They carry their own
+// credentials in params (not agent-wallet master password).
+// ---------------------------------------------------------------------------
+
+registerExternalSigner('privy', (params, _ctx) => {
+  const resolver = new PrivyConfigResolver({
+    source: params as PrivyWalletParams,
+  })
+  const resolved = resolver.resolve()
+  const client = new PrivyClient({
+    appId: resolved.appId,
+    appSecret: resolved.appSecret,
+  })
+  return new PrivyAdapter(resolved, client)
+})
+
+registerExternalSigner('wallet_cli', (params, _ctx) => {
+  const resolver = new WalletCliConfigResolver({
+    source: params as WalletCliWalletParams,
+  })
+  const resolved = resolver.resolve()
+  const client = new WalletCliClient()
+  return new WalletCliSigner(resolved, client)
+})
 
 export type EnvWalletResolved =
   | {

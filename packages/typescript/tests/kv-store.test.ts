@@ -74,20 +74,6 @@ describe('secret storage', () => {
   })
 })
 
-describe('credential storage', () => {
-  it('roundtrips string credentials', () => {
-    const store = createStore()
-    store.saveCredential('api_key', 'my-secret-api-key')
-    expect(store.loadCredential('api_key')).toBe('my-secret-api-key')
-  })
-
-  it('roundtrips object credentials', () => {
-    const store = createStore()
-    const cred = { api_key: 'abc123', api_secret: 'xyz789', extra: true }
-    store.saveCredential('complex', cred)
-    expect(store.loadCredential('complex')).toEqual(cred)
-  })
-})
 
 describe('encrypt/decrypt helpers', () => {
   it('encrypts and decrypts roundtrip', () => {

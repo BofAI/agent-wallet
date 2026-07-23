@@ -1,7 +1,6 @@
 # agent-wallet
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Python](https://img.shields.io/badge/Python-≥3.11-blue.svg)
 ![Node.js](https://img.shields.io/badge/Node.js-≥18-339933)
 
 **Wallet signing for AI agents and apps** — store keys safely (or use env for quick tests), pick an active wallet, and **sign** transactions, messages, and typed data on **TRON** and **EVM** chains.
@@ -26,7 +25,7 @@ With **agent-wallet** you can:
 
 - **Create or import** a wallet (encrypted “secure” mode, or plaintext-in-config for dev only).
 - **Switch** which wallet is “active” when you have more than one.
-- **Sign** from the CLI or from Python / TypeScript code.
+- **Sign** from the CLI or from TypeScript code.
 - **Integrate WaaS adapters** (e.g. Privy) for hosted signing without local keys.
 
 
@@ -72,8 +71,6 @@ Install the CLI:
 
 ```bash
 npm install -g @bankofai/agent-wallet
-#or
-pip install bankofai-agent-wallet
 ```
 
 
@@ -169,7 +166,7 @@ For mode-specific help, use hierarchical commands such as `agent-wallet start lo
 
 ## Examples
 
-TypeScript samples under [`packages/typescript/examples/`](./packages/typescript/examples/) (Python equivalents live in [`packages/python/examples/`](./packages/python/examples/) if you need them).
+TypeScript samples under [`packages/typescript/examples/`](./packages/typescript/examples/).
 
 | What | Example |
 |------|---------|
@@ -185,12 +182,11 @@ TypeScript samples under [`packages/typescript/examples/`](./packages/typescript
 
 | Doc | Audience |
 |-----|----------|
-| [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI (npm-focused intro; deeper detail also covers Python Typer) |
+| [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI walkthrough |
 | [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md) | Use existing Privy App + Wallet ID in the CLI |
-| [Python package](./packages/python/README.md) | `pip` install, SDK usage |
 | [TypeScript package](./packages/typescript/README.md) | `npm` / SDK usage |
 
-Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), and flag reference live in **getting-started** and package READMEs — you don’t need them for the first run.
+Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), and flag reference live in **getting-started** and the package README — you don’t need them for the first run.
 
 ## Security
 
@@ -202,13 +198,9 @@ Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), a
 
 | Package | Path |
 |---------|------|
-| Python (`bankofai-agent-wallet`) | [`packages/python/`](./packages/python/) |
 | TypeScript (`@bankofai/agent-wallet`) | [`packages/typescript/`](./packages/typescript/) |
 
 ```bash
-# Python tests
-cd packages/python && pytest
-
 # TypeScript tests
 cd packages/typescript && pnpm test
 ```

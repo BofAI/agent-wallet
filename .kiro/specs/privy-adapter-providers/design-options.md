@@ -66,7 +66,7 @@ This document compares three design options for supporting Privy with EVM and TR
 
 **Compatibility**
 - Medium: requires a config schema change and migration logic.
-- Might require updates across Python/TypeScript schemas and tests.
+- Might require updates to the TypeScript schema and tests.
 
 **Risks / Tradeoffs**
 - Higher upfront change cost.

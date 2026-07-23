@@ -9,6 +9,7 @@ export const WalletType = {
   LOCAL_SECURE: 'local_secure',
   RAW_SECRET: 'raw_secret',
   PRIVY: 'privy',
+  WALLET_CLI: 'wallet_cli',
 } as const
 
 export type WalletType = (typeof WalletType)[keyof typeof WalletType]
