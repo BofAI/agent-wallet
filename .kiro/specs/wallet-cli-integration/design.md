@@ -25,7 +25,7 @@ wallet-cli 的 keystore 主密碼是**外部憑證**（用於解鎖 wallet-cli �
 
 ### Goals
 - 新增 `wallet_cli` 錢包類型，由 wallet-cli keystore 擁有 TRON 金鑰、agent-wallet 委派簽名。
-- `WalletCliSigner` 實作 `Wallet` + `Eip712Capable`，把 `signTransaction` / `signMessage` / `signTypedData` 委派給 wallet-cli 簽名指令，`getAddress` 用 `current`。
+- `WalletCliAdapter` 實作 `Wallet` + `Eip712Capable`，把 `signTransaction` / `signMessage` / `signTypedData` 委派給 wallet-cli 簽名指令，`getAddress` 用 `current`。
 - 沿用既有 adapter/provider/config 模式（與 Privy 先例一致）：client 在 `core/clients/`、adapter 在 `core/adapters/`、config resolver 在 `core/providers/`、類型在 `core/config.ts`、`createAdapter` 分派。
 - 密碼模型鏡像 Privy `app_secret`：config-stored、resolver 解析、不涉 agent-wallet 主密碼。
 - 提供選用編排能力（`integrations/`）：wallet-cli 建交易 → agent-wallet 簽名 → wallet-cli 廣播 → wallet-cli 追蹤。
@@ -62,7 +62,7 @@ graph TB
   subgraph "agent-wallet core（簽名核心，只簽名）"
     Resolver[resolveWallet / ConfigWalletProvider] --> Builder[createAdapter]
     Builder --> CliResolver[WalletCliConfigResolver]
-    CliResolver --> Adapter[WalletCliSigner 適配器]
+    CliResolver --> Adapter[WalletCliAdapter 適配器]
     Adapter --> Client[WalletCliClient 傳輸+信封解析]
   end
   subgraph "agent-wallet integrations（選用，非核心）"
@@ -77,7 +77,7 @@ graph TB
 
 - **`core/clients/wallet-cli.ts`**：子程序傳輸 + `wallet-cli.result.v1` zod 校驗 + 退出碼分派。對齊 `PrivyClient` 先例。
 - **`core/providers/wallet-cli-config.ts`**：`WalletCliConfigResolver`（鏡像 `PrivyConfigResolver`）從 config params 解析密碼與帳戶。對齊 `privy-config.ts`。
-- **`core/adapters/wallet-cli.ts`**：`WalletCliSigner implements Wallet, Eip712Capable`。僅用 client 的**簽名 / 位址**指令（`tx sign` / `message sign` / `typed-data sign` / `current`），不廣播。→ 核心維持「signs only」。
+- **`core/adapters/wallet-cli.ts`**：`WalletCliAdapter implements Wallet, Eip712Capable`。僅用 client 的**簽名 / 位址**指令（`tx sign` / `message sign` / `typed-data sign` / `current`），不廣播。→ 核心維持「signs only」。
 - **`integrations/wallet-cli/`**：廣播 / 查詢 / 編排。復用同一 client；標示選用、可安全移除、不為 `resolveWallet` 依賴。
 - **`core/config.ts`**：擴充 `WalletConfigSchema` 新增 `wallet_cli` 型 + `WalletCliWalletParamsSchema`。
 
@@ -87,8 +87,8 @@ graph TB
 
 | 階段 | 資料形狀 | 產生者 | 消費者 |
 |------|----------|--------|--------|
-| 取位址 | `current` → `addresses.tron`（base58） | wallet-cli | `WalletCliSigner.getAddress` |
-| 簽交易 | `tx sign` → `data.signed`（完整已簽 tx，含 `signature[]`） | wallet-cli | `WalletCliSigner.signTransaction` → `JSON.stringify(data.signed)` |
+| 取位址 | `current` → `addresses.tron`（base58） | wallet-cli | `WalletCliAdapter.getAddress` |
+| 簽交易 | `tx sign` → `data.signed`（完整已簽 tx，含 `signature[]`） | wallet-cli | `WalletCliAdapter.signTransaction` → `JSON.stringify(data.signed)` |
 | 簽訊息 | `message sign` → `data.signature`（`0x` 前綴） | wallet-cli | adapter 去 `0x` 前綴 |
 | 簽 typed-data | `typed-data sign` → `data.signature`（`0x` 前綴） | wallet-cli | adapter 去 `0x` 前綴 |
 | 建交易（編排） | `tx send --dry-run` → `data.tx`（未簽）+ `data.fee` | wallet-cli | `Wallet.signTransaction` |
@@ -174,12 +174,12 @@ interface WalletCliResult<T> {
 - exit 2 → 拋 `WalletCliUsageError`（`usage_error` / `missing_option` / `invalid_value` / `weak_password` / `secret_source_error` …）。
 - spawn ENOENT → `WalletCliNotFoundError`，提示 `npm i -g @tron-walletcli/wallet-cli`。
 
-#### 1.4 `WalletCliSigner`（`core/adapters/wallet-cli.ts`）
+#### 1.4 `WalletCliAdapter`（`core/adapters/wallet-cli.ts`）
 
 實作 `Wallet` + `Eip712Capable`，委派簽名給 client。**建構子接收已解析的 `WalletCliConfig`（含密碼）+ `WalletCliClient`**，鏡像 `PrivyAdapter(config, client)`——不接收 agent-wallet 主密碼。
 
 ```ts
-class WalletCliSigner implements Wallet, Eip712Capable {
+class WalletCliAdapter implements Wallet, Eip712Capable {
   constructor(config: WalletCliConfig, client: WalletCliClient) {}
 }
 ```
@@ -205,7 +205,7 @@ class WalletCliSigner implements Wallet, Eip712Capable {
 // wallet-cli 模組自行註冊（import 時生效）
 registerExternalSigner('wallet_cli', (params, _ctx) => {
   const resolved = new WalletCliConfigResolver({ source: params as WalletCliWalletParams }).resolve()
-  return new WalletCliSigner(resolved, new WalletCliClient())
+  return new WalletCliAdapter(resolved, new WalletCliClient())
 })
 
 // createAdapter 內：外部簽名器走註冊表
@@ -220,7 +220,7 @@ if (builder) return builder(conf.params, { network })
 #### 1.6 匯出（`src/index.ts`）
 
 ```ts
-export { WalletCliSigner } from './core/adapters/wallet-cli.js'
+export { WalletCliAdapter } from './core/adapters/wallet-cli.js'
 export { WalletCliClient } from './core/clients/wallet-cli.js'
 export { WalletCliConfigResolver } from './core/providers/wallet-cli-config.js'
 export type { WalletCliWalletParams, WalletCliConfig } from '...'
@@ -255,7 +255,7 @@ interface SignAndBroadcastParams {
 
 流程：
 1. `client.buildTransfer(...)` → 未簽 tx（`txID`/`raw_data_hex`）。
-2. `wallet.signTransaction(unsignedTx)` → 已簽 tx JSON（**agent-wallet 核心簽名**；若 `wallet` 為 `WalletCliSigner`，則再委派 wallet-cli `tx sign`——密碼在此環節由 adapter 內部使用）。
+2. `wallet.signTransaction(unsignedTx)` → 已簽 tx JSON（**agent-wallet 核心簽名**；若 `wallet` 為 `WalletCliAdapter`，則再委派 wallet-cli `tx sign`——密碼在此環節由 adapter 內部使用）。
 3. `client.broadcast(JSON.parse(signedTxJson))` → `txId`。
 4. `wait` 為真則輪詢 `client.getTxStatus(txId)` 至 `confirmed`/`failed`。
 5. 回傳 `{ txId, stage, confirmed?, failed? }`。
@@ -402,7 +402,7 @@ npm install -g @tron-walletcli/wallet-cli       # 兩者皆全域，PATH 可見
 ```mermaid
 sequenceDiagram
   participant App as Caller
-  participant Signer as WalletCliSigner
+  participant Signer as WalletCliAdapter
   participant Client as WalletCliClient
   participant Cli as wallet-cli 子程序
 
@@ -427,7 +427,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant App as Caller
-  participant Signer as WalletCliSigner
+  participant Signer as WalletCliAdapter
   participant Client as WalletCliClient
   participant Cli as wallet-cli 子程序
 
@@ -449,7 +449,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant App as Caller
-  participant Signer as WalletCliSigner
+  participant Signer as WalletCliAdapter
   participant Client as WalletCliClient
   participant Cli as wallet-cli 子程序
 
@@ -476,7 +476,7 @@ sequenceDiagram
   participant App as Caller
   participant Orch as signAndBroadcast
   participant Client as WalletCliClient
-  participant Signer as WalletCliSigner
+  participant Signer as WalletCliAdapter
   participant Cli as wallet-cli 子程序
 
   App->>Orch: signAndBroadcast({ to, amount, network:"tron:nile", wait:true })
@@ -606,7 +606,7 @@ const ResultEnvelopeSchema = z.object({
   - `WalletCliConfigResolver`：校驗密碼必填（缺失拋 `WalletCliConfigError`）、`account` 選填、正規化（鏡像 `PrivyConfigResolver` 測試）。
   - `WalletCliClient`：stub `spawn` 模擬 exit 0/1/2 與 ENOENT，驗證信封解析與錯誤分派；stdin 餵密碼/tx 的串流行為。
   - zod 信封校驗：合法/缺欄/未知 schema fixture。
-  - `WalletCliSigner`：mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signMessage`/`signTypedData` 去 `0x`、`signRaw` 拋 `UnsupportedOperationError`、密碼經 stdin 傳遞。
+  - `WalletCliAdapter`：mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signMessage`/`signTypedData` 去 `0x`、`signRaw` 拋 `UnsupportedOperationError`、密碼經 stdin 傳遞。
   - `createAdapter`：`wallet_cli` 分支正確建構 adapter（不使用 `password` 參數）；config schema 校驗 `wallet_cli` 條目。
 - **整合（可跳過的網路測試）**：以真實 wallet-cli binary（CI 預裝）對 `tron:nile`：`current` 取位址（無密碼）→ `message sign`（密碼走 stdin）→ 驗證簽名可由 agent-wallet 既有驗證邏輯復原。
 - **編排**：mock `Wallet` + mock `WalletCliClient`，驗證 `signAndBroadcast` 的建→簽→廣→追蹤順序與分支（confirmed/failed/timeout）。
@@ -635,7 +635,7 @@ const ResultEnvelopeSchema = z.object({
 
 | 意向需求 | 涉及元件 | 介面 / 流程 |
 |----------|----------|-------------|
-| wallet-cli 持有 TRON 金鑰並提供簽名 | `WalletCliSigner` + `WalletCliClient` | Part 1.3/1.4 |
+| wallet-cli 持有 TRON 金鑰並提供簽名 | `WalletCliAdapter` + `WalletCliClient` | Part 1.3/1.4 |
 | 密碼為 config-stored 憑證（鏡像 app_secret） | `WalletCliConfigResolver` + config params | Part 1.1/1.2 |
 | `wallet_cli` 成為可配置錢包類型 | `core/config.ts` + `createAdapter` | Part 1.1/1.5 |
 | 既有 resolver/provider 自動套用、無需主密碼 | 不改 `resolveWallet` / `walletIsAvailableWithoutPassword` | Part 1.5 |

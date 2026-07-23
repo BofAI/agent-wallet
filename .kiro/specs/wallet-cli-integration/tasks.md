@@ -67,7 +67,7 @@
 
 ## 4. 簽名適配器
 
-- [ ] 4.1 (P) 實作 `WalletCliSigner`（`core/adapters/wallet-cli.ts`）
+- [ ] 4.1 (P) 實作 `WalletCliAdapter`（`core/adapters/wallet-cli.ts`）
   - `implements Wallet, Eip712Capable`；建構子接收 `WalletCliConfig`（含密碼）+ `WalletCliClient`
   - `getAddress()` → `client.currentAccount()`，回 `addresses.tron`，快取結果
   - `signTransaction(payload)` → `client.signTransaction` → `JSON.stringify(data.signed)`
@@ -80,13 +80,13 @@
 ## 5. 接線與相依
 
 - [ ] 5.1 (P) 接線 `createAdapter` 註冊 `wallet_cli`（`core/providers/wallet-builder.ts`）
-  - `registerExternalSigner('wallet_cli', (params, _ctx) => { resolver.resolve() → new WalletCliSigner(resolved, new WalletCliClient()) })`
+  - `registerExternalSigner('wallet_cli', (params, _ctx) => { resolver.resolve() → new WalletCliAdapter(resolved, new WalletCliClient()) })`
   - 不使用 `password`/`configDir`/`secretLoader`（與 Privy 分支一致）
   - 確認 `walletIsAvailableWithoutPassword` 對 `wallet_cli` 回 `true`（既有邏輯即正確）
   - _Requirements: 2.2, 2.5, 3.4_
 
 - [ ] 5.2 (P) 匯出公開 API（`src/index.ts`）
-  - 匯出 `WalletCliSigner`、`WalletCliClient`、`WalletCliConfigResolver`、相關型別、錯誤類別
+  - 匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver`、相關型別、錯誤類別
   - _Requirements: 3.5_
 
 - [ ] 5.3 (P) 宣告 wallet-cli 為 optional peer dependency（`packages/typescript/package.json`）
@@ -125,7 +125,7 @@
   - Node 版本守衛：< 20 拋明確錯誤
   - _Requirements: 4.1-4.8, 7.3, 7.4, 7.6_
 
-- [ ] 7.2 (P) 單元測試：`WalletCliSigner` 適配器
+- [ ] 7.2 (P) 單元測試：`WalletCliAdapter` 適配器
   - mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signMessage`/`signTypedData` 去 `0x`、`signRaw` 拋 `UnsupportedOperationError`
   - `signMessage` 的 `Uint8Array` → UTF-8 文字轉換驗證
   - 密碼經 stdin 傳遞、不進 argv/env

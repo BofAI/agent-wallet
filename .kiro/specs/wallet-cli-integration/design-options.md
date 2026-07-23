@@ -5,13 +5,13 @@
 ## 選項 A：子程序簽名適配器 + 選用編排層（建議）
 
 **摘要**
-- 新增 `WalletCliSigner`（`core/adapters/wallet-cli.ts`）實作 `Wallet` + `Eip712Capable`，把 TRON 簽名**委派**給 wallet-cli 子程序（`tx sign` / `message sign` / `typed-data sign`），`getAddress` 用 `current`。
+- 新增 `WalletCliAdapter`（`core/adapters/wallet-cli.ts`）實作 `Wallet` + `Eip712Capable`，把 TRON 簽名**委派**給 wallet-cli 子程序（`tx sign` / `message sign` / `typed-data sign`），`getAddress` 用 `current`。
 - 新增 `WalletCliClient`（`core/clients/wallet-cli.ts`）為子程序傳輸 + `wallet-cli.result.v1` 信封解析（zod）+ 退出碼分派；對齊 `PrivyClient` 置於 core 的先例。
 - 新增錢包類型 `wallet_cli`（`core/config.ts` 擴充 `WalletConfigSchema`），`params` 帶 `account`（label/accountId，可選）。
 - 密碼：agent-wallet 既有解析機制（`AGENT_WALLET_PASSWORD` / runtime secrets）解析到的主密碼，經 `--password-stdin` 餵 wallet-cli（單一主密碼慣例；兩工具密碼策略一致）。
 - 廣播/查詢/編排置於獨立 `integrations/wallet-cli/`（選用、非核心），復用同一 client。
 
-**對核心職責的尊重**：高。`WalletCliSigner` 只實作 `Wallet`（簽名介面），不廣播；廣播在 `integrations/`。agent-wallet 核心契約維持「signs only」。
+**對核心職責的尊重**：高。`WalletCliAdapter` 只實作 `Wallet`（簽名介面），不廣播；廣播在 `integrations/`。agent-wallet 核心契約維持「signs only」。
 
 **金鑰擁有權/耦合**：高。金鑰由 wallet-cli keystore 擁有，agent-wallet 不碰其加密格式；僅依賴文件保證的 `result.v1` 契約與簽名指令。wallet-cli 版更不影響 agent-wallet 內部。
 
@@ -64,7 +64,7 @@
 **理由**
 - 金鑰由 wallet-cli keystore 擁有、agent-wallet 委派簽名，符合「wallet-cli 替代 local_secure」的本意（wallet-cli 為 source of truth），且不耦合其內部加密格式。
 - 完全沿用 Privy 先例（client/adapter/config 分層），與既有 adapter/provider 模式一致，學習與維護成本最低。
-- `WalletCliSigner` 只實作 `Wallet`（簽名），廣播/查詢置於獨立 `integrations/`，正面回應 steering「signs only」。
+- `WalletCliAdapter` 只實作 `Wallet`（簽名），廣播/查詢置於獨立 `integrations/`，正面回應 steering「signs only」。
 - 僅依賴文件保證的 `result.v1` + 退出碼，版更安全。
 
 **明確排除**：B（匯入未公開內部）與 C（複製外部 keystore 格式）。

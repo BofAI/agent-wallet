@@ -12,7 +12,7 @@
 **目標：** 作為整合者，我希望能透過 wallet-cli 對 TRON 交易、訊息與型別化資料進行簽名，以便 agent-wallet 能以 wallet-cli 作為 TRON 本地簽名來源。
 
 #### 驗收準則
-1. 當使用者配置 `wallet_cli` 錢包類型時，agent-wallet 系統應透過 `WalletCliSigner`（實作 `Wallet` 與 `Eip712Capable` 介面）提供簽名能力。
+1. 當使用者配置 `wallet_cli` 錢包類型時，agent-wallet 系統應透過 `WalletCliAdapter`（實作 `Wallet` 與 `Eip712Capable` 介面）提供簽名能力。
 2. 當呼叫 `getAddress()` 時，agent-wallet 系統應以 `wallet-cli current` 子程序取得 TRON base58 位址，並快取結果以避免重複呼叫。
 3. 當呼叫 `signTransaction(payload)` 時，agent-wallet 系統應以 `wallet-cli tx sign` 子程序產生已簽名交易，並回傳 `JSON.stringify(data.signed)` 以符合既有 `TronSigner` 輸出慣例。
 4. 當呼叫 `signMessage(msg)` 時，agent-wallet 系統應將 `Uint8Array` 以 UTF-8 解碼為文字，以 `wallet-cli message sign` 子程序簽名，並去除回傳簽名的 `0x` 前綴。當呼叫 `signTypedData(data)` 時，應以 `wallet-cli typed-data sign` 子程序簽名（標準 EIP-712 JSON，形狀相容），並去除回傳簽名的 `0x` 前綴。**語意注意**：`signMessage` 簽的是 UTF-8 文字（EIP-191 personal_sign），與 `TronSigner`（直接 keccak256 位元組）語意有別；純 ASCII 訊息一致，非 UTF-8 位元組簽名會不同。
@@ -37,7 +37,7 @@
 2. 當配置 `wallet_cli` 條目時，`WalletCliConfigResolver` 應從 config source 解析、正規化（trim）、校驗必填欄位。
 3. 當 `account` 省略時，agent-wallet 系統應使用 wallet-cli 的 active account。
 4. 當配置檔載入 `wallet_cli` 條目時，既有 `ConfigWalletProvider` / `resolveWallet` 解析順序應自動套用，無需修改其原始碼。
-5. agent-wallet 系統應匯出 `WalletCliSigner`、`WalletCliClient`、`WalletCliConfigResolver` 及相關型別與錯誤類別。
+5. agent-wallet 系統應匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver` 及相關型別與錯誤類別。
 
 ### 需求 4：子程序互動與信封解析
 **目標：** 作為整合者，我希望 agent-wallet 能可靠地呼叫 wallet-cli 並解析其回應，以便簽名與查詢結果可程式化消費。
@@ -123,7 +123,7 @@
 
 | 需求 | 對應設計元件 | design.md 章節 |
 |------|-------------|----------------|
-| 需求 1 | `WalletCliSigner` + `WalletCliClient` | Component Design Part 1 |
+| 需求 1 | `WalletCliAdapter` + `WalletCliClient` | Component Design Part 1 |
 | 需求 2 | config params + `WalletCliConfigResolver` | Component Design 1.1/1.2 |
 | 需求 3 | `core/config.ts` + `createAdapter` | Component Design 1.1/1.5 |
 | 需求 4 | `WalletCliClient` 子程序互動 | Component Design 1.3 + System Flows |

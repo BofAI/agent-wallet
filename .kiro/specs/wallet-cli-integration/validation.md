@@ -45,7 +45,7 @@
 
 **影響**：純 ASCII 訊息（如 `"hello"`）無問題（UTF-8 與 ASCII 一致）。含非 UTF-8 位元組的訊息會簽名不一致。
 
-**修正（設計處理）**：`WalletCliSigner.signMessage` 應以 UTF-8 解碼 `Uint8Array` 為文字字串傳 wallet-cli `--message`；並在文件/註解明確標示此語意差異（wallet-cli 的 personal_sign 簽的是「UTF-8 文字」，非任意位元組）。對需簽名任意位元組的場景，應改用 `signTransaction` 或另議 hex 輸入（若 wallet-cli 未來支援）。
+**修正（設計處理）**：`WalletCliAdapter.signMessage` 應以 UTF-8 解碼 `Uint8Array` 為文字字串傳 wallet-cli `--message`；並在文件/註解明確標示此語意差異（wallet-cli 的 personal_sign 簽的是「UTF-8 文字」，非任意位元組）。對需簽名任意位元組的場景，應改用 `signTransaction` 或另議 hex 輸入（若 wallet-cli 未來支援）。
 
 **建議**：需求 1.4 與設計 1.4 補述此轉換與語意限制。
 

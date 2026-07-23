@@ -106,7 +106,7 @@ wallet-cli `tx send --sign-only` 的 `data.signed` 即 `tx broadcast` 所吃；a
 wallet-cli 僅支援 TRON。故「替代 `local_secure`」僅及於 **TRON 本地簽名**；EVM 仍由 agent-wallet 既有 adapter（`local_secure`/`raw_secret`/`evm`）與 Privy 負責。`wallet_cli` 錢包類型為 **TRON-only**。
 
 ## 8. 風險點
-- agent-wallet steering（`structure.md`）明文：「Do not mix transaction broadcasting or RPC orchestration into this project; this project signs only.」→ 簽名委派（`WalletCliSigner` 實作 `Wallet`）符合「signs only」（只簽不廣播）；廣播/查詢須置於獨立 `integrations/` 層並標示選用。
+- agent-wallet steering（`structure.md`）明文：「Do not mix transaction broadcasting or RPC orchestration into this project; this project signs only.」→ 簽名委派（`WalletCliAdapter` 實作 `Wallet`）符合「signs only」（只簽不廣播）；廣播/查詢須置於獨立 `integrations/` 層並標示選用。
 - 子程序往返成本：每次簽名 spawn 一次 wallet-cli。可接受（wallet-cli 本即 CLI；軟體簽名本地無網路，延遲低如 `message sign` ~15ms）。
 - wallet-cli 需 Node ≥20、agent-wallet 承諾 ≥18；故以 **optional peer dependency** 而非硬依賴（避免抬升整體 Node 下限、避免重依賴足跡與 LGPL 授權灌入所有使用者）。binary 解析：顯式 path → `AGENT_WALLET_WALLET_CLI_PATH` → PATH；皆無拋 `WalletCliNotFoundError`。詳見 design.md Installation & Dependency。
 - 密碼傳遞：wallet-cli 密碼存於 config params（鏡像 `app_secret`），經 stdin（`--password-stdin`）傳 wallet-cli；須確保密碼不進 argv/env/日誌；config 檔 `0600`，`inspect` 輸出須 redact。
