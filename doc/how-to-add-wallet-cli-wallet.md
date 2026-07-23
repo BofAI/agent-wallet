@@ -156,11 +156,11 @@ The `integrations/wallet-cli` module provides an optional orchestration helper
 that chains wallet-cli build → agent-wallet sign → wallet-cli broadcast:
 
 ```ts
-import { WalletCliSigner, WalletCliClient } from "@bankofai/agent-wallet";
+import { WalletCliAdapter, WalletCliClient } from "@bankofai/agent-wallet";
 import { signAndBroadcast } from "@bankofai/agent-wallet/integrations/wallet-cli";
 
 const client = new WalletCliClient();
-const wallet = new WalletCliSigner({ password: "keystore-pw", account: "main-1" }, client);
+const wallet = new WalletCliAdapter({ password: "keystore-pw", account: "main-1" }, client);
 
 const result = await signAndBroadcast(wallet, client, {
   to: "T...",

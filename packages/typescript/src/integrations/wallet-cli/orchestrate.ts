@@ -6,7 +6,7 @@
  * (signed tx via stdin, no password) → optional poll tx status (no password).
  *
  * Lives in integrations/ (optional, non-core). The signing core (Wallet
- * interface) is injected, so this works with any adapter — WalletCliSigner,
+ * interface) is injected, so this works with any adapter — WalletCliAdapter,
  * TronSigner, etc.
  */
 

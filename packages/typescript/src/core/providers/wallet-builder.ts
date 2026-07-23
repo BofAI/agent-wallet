@@ -19,7 +19,7 @@ import { PrivyConfigResolver } from './privy-config.js'
 import type { WalletCliWalletParams } from '../config.js'
 import { WalletCliConfigResolver } from './wallet-cli-config.js'
 import { WalletCliClient } from '../clients/wallet-cli.js'
-import { WalletCliSigner } from '../adapters/wallet-cli.js'
+import { WalletCliAdapter } from '../adapters/wallet-cli.js'
 
 export function createAdapter(
   conf: WalletConfig,
@@ -101,7 +101,7 @@ registerExternalSigner('wallet_cli', (params, ctx) => {
   })
   const resolved = resolver.resolve()
   const client = new WalletCliClient()
-  return new WalletCliSigner(resolved, client, ctx.network)
+  return new WalletCliAdapter(resolved, client, ctx.network)
 })
 
 export type EnvWalletResolved = {

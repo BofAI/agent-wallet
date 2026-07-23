@@ -1,5 +1,5 @@
 /**
- * WalletCliSigner — signing adapter backed by the wallet-cli CLI.
+ * WalletCliAdapter — signing adapter backed by the wallet-cli CLI.
  *
  * Currently TRON-only. BSC (EVM) support is planned for when wallet-cli
  * adds EVM account addresses and signing commands; the network-family
@@ -27,7 +27,7 @@ import type { WalletCliClient } from '../clients/wallet-cli.js'
 import type { WalletCliConfig } from '../providers/wallet-cli-config.js'
 import { parseNetworkFamily } from '../utils/network.js'
 
-export class WalletCliSigner implements Wallet, Eip712Capable {
+export class WalletCliAdapter implements Wallet, Eip712Capable {
   private readonly config: WalletCliConfig
   private readonly client: WalletCliClient
   private readonly network: string | undefined

@@ -8,7 +8,11 @@
  */
 
 import { WalletCliConfigError } from '../errors.js'
-import { ExternalSignerConfigResolver } from './external-signer-config.js'
+import {
+  ExternalSignerConfigResolver,
+  normalizeValue,
+  requireFields,
+} from './external-signer-config.js'
 
 export type WalletCliConfig = {
   account?: string
@@ -26,7 +30,7 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
 > {
   resolve(): WalletCliConfig {
     const merged = this.merge()
-    const missing = this.requireFields(merged as Record<string, unknown>, ['password'])
+    const missing = requireFields(merged as Record<string, unknown>, ['password'])
     if (missing.length > 0) {
       throw new WalletCliConfigError(
         `Missing required wallet-cli config keys: ${missing.join(', ')}`,
@@ -42,8 +46,8 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
   private merge(): WalletCliConfigSource {
     const source = this.source
     return {
-      account: this.normalizeValue(source?.account),
-      password: this.normalizeValue(source?.password),
+      account: normalizeValue(source?.account),
+      password: normalizeValue(source?.password),
     }
   }
 }

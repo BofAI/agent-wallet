@@ -33,7 +33,7 @@ export { LocalSigner } from './core/adapters/local.js'
 export { LocalSecureSigner } from './core/adapters/local-secure.js'
 export { RawSecretSigner } from './core/adapters/raw-secret.js'
 export { PrivyAdapter } from './core/adapters/privy.js'
-export { WalletCliSigner } from './core/adapters/wallet-cli.js'
+export { WalletCliAdapter } from './core/adapters/wallet-cli.js'
 
 // Provider layer
 export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'

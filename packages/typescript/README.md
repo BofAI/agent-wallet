@@ -38,7 +38,7 @@ import {
   resolveWalletProvider,   // → ConfigWalletProvider | EnvWalletProvider
   ConfigWalletProvider,    // file-backed provider (local_secure / raw_secret / privy / wallet_cli)
   EnvWalletProvider,       // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
-  WalletCliSigner,         // TRON signing via wallet-cli subprocess
+  WalletCliAdapter,         // TRON signing via wallet-cli subprocess
   WalletCliClient,         // raw wallet-cli transport (run/build/broadcast)
   ExternalSignerConfigResolver, // base class for external signer config resolvers
 } from "@bankofai/agent-wallet";

@@ -94,7 +94,7 @@ export class WalletCliClient {
     this.options = options ?? {}
   }
 
-  // --- Signing / address methods (used by WalletCliSigner) ---
+  // --- Signing / address methods (used by WalletCliAdapter) ---
 
   async currentAccount(accountRef?: string): Promise<WalletCliResult<WalletCliCurrentAccountData>> {
     const args = ['current', '-o', 'json']
