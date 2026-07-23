@@ -5,9 +5,36 @@
  * Privy, wallet-cli, and future external signers: normalize (trim) values,
  * detect missing required fields, and fail-fast on incomplete configuration.
  *
+ * `normalizeValue` and `requireFields` are exported as standalone pure
+ * functions so concrete resolvers can use them directly in their own merge
+ * logic without calling protected methods.
+ *
  * Concrete resolvers extend this base and declare their own field set and
  * required keys (see PrivyConfigResolver, WalletCliConfigResolver).
  */
+
+/**
+ * Normalize a string value: trim whitespace, return undefined for empty.
+ */
+export function normalizeValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+/**
+ * Detect which required fields are missing from a normalized source object.
+ * Returns the list of missing field names (empty if all present).
+ */
+export function requireFields(merged: Record<string, unknown>, required: string[]): string[] {
+  const missing: string[] = []
+  for (const field of required) {
+    const value = merged[field]
+    if (value === undefined || value === null || value === '') {
+      missing.push(field)
+    }
+  }
+  return missing
+}
 
 export abstract class ExternalSignerConfigResolver<TConfig, TSource> {
   protected readonly source: TSource | undefined
@@ -18,26 +45,6 @@ export abstract class ExternalSignerConfigResolver<TConfig, TSource> {
 
   abstract resolve(): TConfig
 
-  /**
-   * Normalize a string value: trim whitespace, return undefined for empty.
-   */
-  protected normalizeValue(value: string | undefined): string | undefined {
-    const trimmed = value?.trim()
-    return trimmed ? trimmed : undefined
-  }
-
-  /**
-   * Detect which required fields are missing from a normalized source object.
-   * Returns the list of missing field names (empty if all present).
-   */
-  protected requireFields(merged: Record<string, unknown>, required: string[]): string[] {
-    const missing: string[] = []
-    for (const field of required) {
-      const value = merged[field]
-      if (value === undefined || value === null || value === '') {
-        missing.push(field)
-      }
-    }
-    return missing
-  }
+  protected normalizeValue = normalizeValue
+  protected requireFields = requireFields
 }
