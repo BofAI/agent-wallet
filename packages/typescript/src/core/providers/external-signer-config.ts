@@ -5,13 +5,15 @@
  * Privy, wallet-cli, and future external signers: normalize (trim) values,
  * detect missing required fields, and fail-fast on incomplete configuration.
  *
- * `normalizeValue` and `requireFields` are exported as standalone pure
- * functions so concrete resolvers can use them directly in their own merge
- * logic without calling protected methods.
- *
  * Concrete resolvers extend this base and declare their own field set and
  * required keys (see PrivyConfigResolver, WalletCliConfigResolver).
+ *
+ * resolve() is async because credential fields may reference exec scripts
+ * (see secret-resolver.ts) that need to be executed.
  */
+
+import type { SecretValue } from '../secret-resolver.js'
+import { resolveSecret } from '../secret-resolver.js'
 
 /**
  * Normalize a string value: trim whitespace, return undefined for empty.
@@ -29,7 +31,9 @@ export function requireFields(merged: Record<string, unknown>, required: string[
   const missing: string[] = []
   for (const field of required) {
     const value = merged[field]
-    if (value === undefined || value === null || value === '') {
+    if (value === undefined || value === null) {
+      missing.push(field)
+    } else if (typeof value === 'string' && value.trim() === '') {
       missing.push(field)
     }
   }
@@ -40,11 +44,23 @@ export abstract class ExternalSignerConfigResolver<TConfig, TSource> {
   protected readonly source: TSource | undefined
 
   constructor(opts: { source?: TSource }) {
-    this.source = opts.source
+    this.source = opts?.source
   }
 
-  abstract resolve(): TConfig
+  abstract resolve(): Promise<TConfig>
 
   protected normalizeValue = normalizeValue
   protected requireFields = requireFields
+
+  /**
+   * Resolve a credential field that may be a plaintext string or a SecretRef.
+   * The label is used in error messages to identify which field failed.
+   */
+  protected async resolveCredential(
+    value: SecretValue | undefined,
+    label: string,
+  ): Promise<string | undefined> {
+    if (value === undefined) return undefined
+    return resolveSecret(value, label)
+  }
 }

@@ -30,28 +30,29 @@ export {
 export { EvmSigner } from './core/adapters/evm.js'
 export { TronSigner } from './core/adapters/tron.js'
 export { LocalSigner } from './core/adapters/local.js'
-export { LocalSecureSigner } from './core/adapters/local-secure.js'
 export { RawSecretSigner } from './core/adapters/raw-secret.js'
 export { PrivyAdapter } from './core/adapters/privy.js'
 export { WalletCliAdapter } from './core/adapters/wallet-cli.js'
 
 // Provider layer
 export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'
-export type { SecretLoaderFn } from './core/providers/index.js'
 export { ExternalSignerConfigResolver } from './core/providers/external-signer-config.js'
 export { WalletCliConfigResolver } from './core/providers/wallet-cli-config.js'
 export type { WalletCliConfig, WalletCliConfigSource } from './core/providers/wallet-cli-config.js'
+
+// Secret resolver
+export type { SecretRef, SecretValue } from './core/secret-resolver.js'
+export { resolveSecret, isSecretRef, DEFAULT_EXEC_TIMEOUT_MS } from './core/secret-resolver.js'
 
 // Resolver
 export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
 export type { ResolvedWalletProvider } from './core/resolver.js'
 
 // Config types and functions
-export { loadConfig, saveConfig, loadRuntimeSecretsPassword } from './core/config.js'
+export { loadConfig, saveConfig } from './core/config.js'
 export type {
   WalletConfig,
   WalletsTopology,
-  LocalSecureWalletParams,
   RawSecretPrivateKeyParams,
   RawSecretMnemonicParams,
   RawSecretParams,
@@ -66,11 +67,7 @@ export type {
   WalletCliResult,
   WalletCliCurrentAccountData,
   WalletCliTxSignData,
-  WalletCliMessageSignData,
   WalletCliTypedDataSignData,
 } from './core/clients/wallet-cli.js'
 export { registerExternalSigner, isRegisteredExternalSigner } from './core/providers/wallet-builder.js'
 export type { ExternalSignerBuilder } from './core/providers/wallet-builder.js'
-
-// KV Store
-export { SecureKVStore, encryptBytes, decryptBytes } from './local/kv-store.js'

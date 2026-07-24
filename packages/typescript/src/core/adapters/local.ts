@@ -22,16 +22,8 @@ export class LocalSigner implements Wallet, Eip712Capable {
     return this._impl.getAddress()
   }
 
-  async signRaw(rawTx: Uint8Array, options?: SignOptions): Promise<string> {
-    return this._impl.signRaw(rawTx, options)
-  }
-
   async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
     return this._impl.signTransaction(payload, options)
-  }
-
-  async signMessage(msg: Uint8Array, options?: SignOptions): Promise<string> {
-    return this._impl.signMessage(msg, options)
   }
 
   async signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string> {

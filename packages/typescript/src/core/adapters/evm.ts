@@ -1,4 +1,3 @@
-import { parseTransaction } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
 import { SigningError } from '../errors.js'
@@ -17,26 +16,6 @@ export class EvmSigner implements Wallet, Eip712Capable {
     return this.account.address
   }
 
-  async signRaw(rawTx: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      const serialized = `0x${Buffer.from(rawTx).toString('hex')}` as `0x${string}`
-      const parsed = parseTransaction(serialized)
-      const {
-        r: _r,
-        s: _s,
-        v: _v,
-        yParity: _yParity,
-        ...transaction
-      } = parsed as Record<string, unknown>
-      const sig = await this.account.signTransaction(
-        transaction as Parameters<typeof this.account.signTransaction>[0],
-      )
-      return sig.slice(2)
-    } catch (e) {
-      throw new SigningError(`EVM sign_raw failed: ${e}`)
-    }
-  }
-
   async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
     try {
       const sig = await this.account.signTransaction(
@@ -45,17 +24,6 @@ export class EvmSigner implements Wallet, Eip712Capable {
       return sig.slice(2)
     } catch (e) {
       throw new SigningError(`EVM sign_transaction failed: ${e}`)
-    }
-  }
-
-  async signMessage(msg: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      const sig = await this.account.signMessage({
-        message: { raw: msg },
-      })
-      return sig.slice(2)
-    } catch (e) {
-      throw new SigningError(`EVM sign_message failed: ${e}`)
     }
   }
 

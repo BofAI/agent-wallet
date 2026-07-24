@@ -13,7 +13,7 @@
  *
  * Prerequisites:
  *   - Either configure a wallet via the CLI:
- *       agent-wallet start local_secure --wallet-id wallet-b
+ *       agent-wallet start raw_secret --wallet-id wallet-b
  *       agent-wallet start raw_secret --wallet-id wallet-b --mnemonic "..."
  *   - Or provide env fallback:
  *       AGENT_WALLET_PRIVATE_KEY=<hex>
@@ -53,8 +53,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 3: Sign a message (pure local, no network)
   // ----------------------------------------------------------------
-  const message = Buffer.from('Hello from agent-wallet!')
-  const msgSig = await wallet.signMessage(message)
+  const msgSig = await wallet.signTypedData(JSON.parse('{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"Mail":[{"name":"from","type":"string"},{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Test","version":"1","chainId":1},"message":{"from":"0x","contents":"hello"}}'))
   console.log(`Message signature: ${msgSig}`)
   console.log()
 

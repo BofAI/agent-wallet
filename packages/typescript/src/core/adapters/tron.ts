@@ -1,4 +1,3 @@
-import { keccak256 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58checkModule from 'bs58check'
@@ -42,14 +41,6 @@ export class TronSigner implements Wallet, Eip712Capable {
     return this.address
   }
 
-  async signRaw(rawTx: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      return this.ecdsaSign(rawTx)
-    } catch (e) {
-      throw new SigningError(`Tron sign_raw failed: ${e}`)
-    }
-  }
-
   /**
    * Sign a pre-built unsigned transaction from TronGrid.
    *
@@ -75,14 +66,6 @@ export class TronSigner implements Wallet, Eip712Capable {
     } catch (e) {
       if (e instanceof SigningError) throw e
       throw new SigningError(`Tron sign_transaction failed: ${e}`)
-    }
-  }
-
-  async signMessage(msg: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      return this.ecdsaSign(msg)
-    } catch (e) {
-      throw new SigningError(`Tron sign_message failed: ${e}`)
     }
   }
 
@@ -112,16 +95,6 @@ export class TronSigner implements Wallet, Eip712Capable {
     } catch (e) {
       throw new SigningError(`Tron sign_typed_data failed: ${e}`)
     }
-  }
-
-  /**
-   * Raw ECDSA sign: keccak256(data) → secp256k1 sign → r || s || v (65 bytes hex)
-   * This matches tronpy's PrivateKey.sign_msg() behavior.
-   */
-  private ecdsaSign(data: Uint8Array): string {
-    const hash = keccak256(data)
-    const hashBytes = Buffer.from(hash.slice(2), 'hex')
-    return this.signDigest(hashBytes)
   }
 
   /**

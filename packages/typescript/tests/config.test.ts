@@ -5,14 +5,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  LocalSecureWalletParamsSchema,
   type PrivyWalletParams,
   RawSecretPrivateKeyParamsSchema,
   RawSecretMnemonicParamsSchema,
   WalletConfigSchema,
   WalletsTopologySchema,
   loadConfig,
-  loadRuntimeSecretsPassword,
   saveConfig,
   type WalletsTopology,
 } from '../src/core/config.js'
@@ -28,15 +26,6 @@ afterEach(() => {
 })
 
 describe('config schemas', () => {
-  it('accepts local_secure wallet config', () => {
-    const parsed = WalletConfigSchema.parse({
-      type: 'local_secure',
-      params: { secret_ref: 'wallet-a' },
-    })
-    expect(parsed.type).toBe('local_secure')
-    expect((parsed.params as { secret_ref: string }).secret_ref).toBe('wallet-a')
-  })
-
   it('accepts raw_secret private key config', () => {
     const parsed = WalletConfigSchema.parse({
       type: 'raw_secret',
@@ -65,7 +54,7 @@ describe('config schemas', () => {
     expect(() =>
       WalletConfigSchema.parse({
         type: 'legacy_local',
-        params: { secret_ref: 'old' },
+        params: { source: 'private_key', private_key: '0xold' },
       }),
     ).toThrow()
   })
@@ -83,8 +72,6 @@ describe('config schemas', () => {
   })
 
   it('parses params sub-schemas independently', () => {
-    const lsp = LocalSecureWalletParamsSchema.parse({ secret_ref: 'w1' })
-    expect(lsp.secret_ref).toBe('w1')
 
     const pkp = RawSecretPrivateKeyParamsSchema.parse({ source: 'private_key', private_key: '0x1' })
     expect(pkp.source).toBe('private_key')
@@ -118,8 +105,11 @@ describe('loadConfig / saveConfig', () => {
       active_wallet: 'wallet-a',
       wallets: {
         'wallet-a': {
-          type: 'local_secure',
-          params: { secret_ref: 'wallet-a' },
+          type: 'raw_secret',
+          params: {
+            source: 'private_key',
+            private_key: '0x1234',
+          },
         },
         hot: {
           type: 'raw_secret',
@@ -135,7 +125,7 @@ describe('loadConfig / saveConfig', () => {
     const loaded = loadConfig(secretsDir)
 
     expect(loaded.active_wallet).toBe('wallet-a')
-    expect(loaded.wallets['wallet-a'].type).toBe('local_secure')
+    expect(loaded.wallets['wallet-a'].type).toBe('raw_secret')
     expect(loaded.wallets.hot.type).toBe('raw_secret')
   })
 
@@ -183,41 +173,6 @@ describe('loadConfig / saveConfig', () => {
   })
 })
 
-describe('runtime secrets', () => {
-  it('loads password from runtime_secrets.json', () => {
-    writeFileSync(
-      join(secretsDir, 'runtime_secrets.json'),
-      JSON.stringify({ password: '  secret-pass  ' }),
-      'utf-8',
-    )
-    expect(loadRuntimeSecretsPassword(secretsDir)).toBe('secret-pass')
-  })
-
-  it('returns null when runtime_secrets.json is missing', () => {
-    expect(loadRuntimeSecretsPassword(secretsDir)).toBeNull()
-  })
-
-  it('throws on invalid runtime secrets object shape', () => {
-    writeFileSync(join(secretsDir, 'runtime_secrets.json'), JSON.stringify(['bad']), 'utf-8')
-    expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(/JSON object/)
-  })
-
-  it('throws on invalid runtime secrets JSON', () => {
-    writeFileSync(join(secretsDir, 'runtime_secrets.json'), '{bad json', 'utf-8')
-    expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(
-      /Invalid JSON in runtime_secrets\.json/,
-    )
-  })
-
-  it('throws on non-string password', () => {
-    writeFileSync(
-      join(secretsDir, 'runtime_secrets.json'),
-      JSON.stringify({ password: 123 }),
-      'utf-8',
-    )
-    expect(() => loadRuntimeSecretsPassword(secretsDir)).toThrow(/password must be a string/)
-  })
-})
 
 describe('wallet topology schema', () => {
   it('defaults active_wallet to null', () => {

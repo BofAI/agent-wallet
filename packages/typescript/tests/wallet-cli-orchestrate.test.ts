@@ -6,9 +6,7 @@ import type { WalletCliClient, WalletCliResult } from '../src/core/clients/walle
 function mockWallet(signedTxJson: string): Wallet {
   return {
     getAddress: vi.fn().mockResolvedValue('TTest123'),
-    signRaw: vi.fn(),
     signTransaction: vi.fn().mockResolvedValue(signedTxJson),
-    signMessage: vi.fn(),
   }
 }
 

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { PrivyAdapter } from '../src/core/adapters/privy.js'
-import { UnsupportedOperationError } from '../src/core/errors.js'
 import { keccak256 } from 'viem'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58checkModule from 'bs58check'
@@ -62,23 +61,6 @@ class FakePrivyClient {
 }
 
 describe('PrivyAdapter', () => {
-  it('maps signMessage to personal_sign', async () => {
-    const client = new FakePrivyClient()
-    const adapter = new PrivyAdapter(
-      {
-        appId: 'app',
-        appSecret: 'secret',
-        walletId: 'wallet-1',
-      },
-      client,
-    )
-
-    const signature = await adapter.signMessage(Uint8Array.from([1, 2, 3]))
-    expect(signature).toBe('sig')
-    expect(client.calls[0].method).toBe('personal_sign')
-    expect(client.calls[0].params.encoding).toBe('hex')
-    expect(client.calls[0].params.message).toBe('0x010203')
-  })
 
   it('maps signTransaction to eth_signTransaction', async () => {
     const client = new FakePrivyClient()
@@ -164,52 +146,7 @@ describe('PrivyAdapter', () => {
     expect(client.calls[0].params.typed_data.primary_type).toBe('Message')
   })
 
-  it('throws for signRaw on non-tron wallets', async () => {
-    const client = new FakePrivyClient({ chainType: 'ethereum' })
-    const adapter = new PrivyAdapter(
-      {
-        appId: 'app',
-        appSecret: 'secret',
-        walletId: 'wallet-1',
-      },
-      client,
-    )
 
-    await expect(adapter.signRaw(Uint8Array.from([1]))).rejects.toBeInstanceOf(
-      UnsupportedOperationError,
-    )
-  })
-
-  it('routes TRON signing through raw_sign and appends v', async () => {
-    const privateKey = Uint8Array.from(Buffer.alloc(32, 1))
-    const pubkey = secp256k1.getPublicKey(privateKey, false)
-    const hash = keccak256(Uint8Array.from([1, 2, 3]))
-    const hashBytes = Buffer.from(hash.slice(2), 'hex')
-    const sig = secp256k1.sign(hashBytes, privateKey)
-    const r = sig.r.toString(16).padStart(64, '0')
-    const s = sig.s.toString(16).padStart(64, '0')
-    const rawSignature = `0x${r}${s}`
-    const v = sig.recovery + 27
-
-    const tronAddress = toTronAddress(pubkey)
-    const client = new FakePrivyClient({
-      chainType: 'tron',
-      address: tronAddress,
-      rawSignature,
-    })
-    const adapter = new PrivyAdapter(
-      {
-        appId: 'app',
-        appSecret: 'secret',
-        walletId: 'wallet-1',
-      },
-      client,
-    )
-
-    const signature = await adapter.signMessage(Uint8Array.from([1, 2, 3]))
-    expect(signature).toBe(`${r}${s}${v.toString(16).padStart(2, '0')}`)
-    expect(client.rawCalls).toHaveLength(1)
-  })
 
   it('caches getAddress', async () => {
     const client = new FakePrivyClient()

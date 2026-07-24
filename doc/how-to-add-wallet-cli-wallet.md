@@ -85,6 +85,30 @@ agent-wallet start wallet_cli \
 
 ---
 
+## Using Exec Scripts for Keystore Password
+
+Instead of passing `--cli-password` directly, you can reference an exec script that fetches the password from a tool like 1Password CLI:
+
+```bash
+agent-wallet add wallet_cli \
+  --wallet-id my_tron_cli \
+  --account main-1 \
+  --cli-password-exec /path/to/fetch-password.sh
+```
+
+The script must be executable and print the password to stdout. It inherits `process.env`, so `OP_SESSION_*` works automatically.
+
+Example script:
+
+```bash
+#!/bin/sh
+op read 'op://Private/wallet-cli-password/password'
+```
+
+You can also use `--cli-password-exec` with the `start wallet_cli` command for first-time setup.
+
+---
+
 ## Inspect and Resolve Address
 
 Check the wallet details:
@@ -122,7 +146,7 @@ with a `tron:` value.
 ### Sign a Message
 
 ```bash
-agent-wallet sign msg "hello" -n tron:nile -w my_tron_cli
+agent-wallet sign typed-data '{"types":{},"primaryType":"Message","domain":{},"message":{}}' -n tron:nile -w my_tron_cli
 ```
 
 ### Sign Typed Data (EIP-712)
@@ -145,7 +169,7 @@ or TronGrid):
 agent-wallet sign tx '{"raw_data_hex":"..."}' -n tron:nile -w my_tron_cli
 ```
 
-> The `wallet_cli` adapter does not support `signRaw` (raw digest signing).
+> The `wallet_cli` adapter does not support raw digest signing.
 > Use `signTransaction` with an unsigned tx object instead.
 
 ---
@@ -179,17 +203,15 @@ console.log(result);
 
 ## FAQ
 
-### 1. Do I need the agent-wallet master password for wallet_cli?
-No. The `--cli-password` is the **wallet-cli keystore password**, stored in
-`wallets_config.json` params. The agent-wallet master password (used for
-`local_secure`) is not involved.
+### 1. What password does wallet_cli use?
+The `--cli-password` is the **wallet-cli keystore password** (set during `wallet-cli init`). It is stored in `wallets_config.json` params. agent-wallet does not use a master password.
 
 ### 2. What if wallet-cli is not on PATH?
 Set `AGENT_WALLET_WALLET_CLI_PATH` to the full binary path, or pass
 `binary` to `WalletCliClient` in SDK code.
 
 ### 3. Does wallet_cli support EVM?
-Not yet. wallet-cli currently supports TRON only; BSC (EVM) is planned. For EVM signing use `local_secure`, `raw_secret`,
+Not yet. wallet-cli currently supports TRON only; BSC (EVM) is planned. For EVM signing use `raw_secret`
 or `privy`.
 
 ### 4. Where is the keystore password stored?
@@ -202,5 +224,5 @@ In `wallets_config.json` under `params.password` (file mode `0600`).
 
 - **Prerequisite:** install + init wallet-cli, create a TRON account
 - **Add:** `agent-wallet add wallet_cli --account <label> --cli-password <pw>`
-- **Sign:** `agent-wallet sign msg/typed-data/tx -n tron:<network> -w <id>`
+- **Sign:** `agent-wallet sign typed-data/tx -n tron:<network> -w <id>`
 - **Orchestrate:** `signAndBroadcast` helper for build → sign → broadcast

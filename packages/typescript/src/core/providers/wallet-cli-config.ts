@@ -4,7 +4,7 @@
  * Mirrors PrivyConfigResolver: config-only (no env), normalizes (trim),
  * validates required fields, and fails fast on missing configuration.
  * The wallet-cli keystore password is a config-stored credential
- * (like Privy's app_secret), not the agent-wallet master password.
+ * (like Privy's app_secret) that may be plaintext or an exec script ref.
  */
 
 import { WalletCliConfigError } from '../errors.js'
@@ -13,6 +13,7 @@ import {
   normalizeValue,
   requireFields,
 } from './external-signer-config.js'
+import type { SecretValue } from '../secret-resolver.js'
 
 export type WalletCliConfig = {
   account?: string
@@ -21,14 +22,14 @@ export type WalletCliConfig = {
 
 export type WalletCliConfigSource = {
   account?: string
-  password?: string
+  password?: SecretValue
 }
 
 export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
   WalletCliConfig,
   WalletCliConfigSource
 > {
-  resolve(): WalletCliConfig {
+  async resolve(): Promise<WalletCliConfig> {
     const merged = this.merge()
     const missing = requireFields(merged as Record<string, unknown>, ['password'])
     if (missing.length > 0) {
@@ -37,9 +38,11 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
       )
     }
 
+    const password = await this.resolveCredential(merged.password, 'wallet-cli password')
+
     return {
       account: merged.account,
-      password: merged.password!,
+      password: password!,
     }
   }
 
@@ -47,7 +50,7 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
     const source = this.source
     return {
       account: normalizeValue(source?.account),
-      password: normalizeValue(source?.password),
+      password: source?.password,
     }
   }
 }

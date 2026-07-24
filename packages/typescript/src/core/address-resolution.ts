@@ -1,11 +1,9 @@
 import { Network, WalletType } from './base.js'
 import type {
-  LocalSecureWalletParams,
   RawSecretMnemonicParams,
   RawSecretPrivateKeyParams,
   WalletConfig,
 } from './config.js'
-import type { SecretLoaderFn } from './adapters/local-secure.js'
 import { decodePrivateKey, deriveKeyFromMnemonic } from './utils/keys.js'
 import { EvmSigner } from './adapters/evm.js'
 import { TronSigner } from './adapters/tron.js'
@@ -27,24 +25,16 @@ export type AddressResolutionResult =
       entries: [AddressEntry, AddressEntry]
     }
 
-type ResolveAddressOptions = {
-  configDir: string
-  password?: string
-  secretLoader?: SecretLoaderFn
-}
-
 export async function resolveWalletAddresses(
   conf: WalletConfig,
-  options: ResolveAddressOptions,
 ): Promise<AddressResolutionResult> {
   if (conf.type === WalletType.PRIVY || conf.type === WalletType.WALLET_CLI) {
     return resolveExternalSignerAddress(conf)
   }
 
-  const privateKey =
-    conf.type === WalletType.LOCAL_SECURE
-      ? loadLocalSecurePrivateKey(conf.params as LocalSecureWalletParams, options)
-      : loadRawSecretPrivateKey(conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams)
+  const privateKey = loadRawSecretPrivateKey(
+    conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams,
+  )
 
   const [evmAddress, tronAddress] = await Promise.all([
     new EvmSigner(privateKey.eip155, 'eip155').getAddress(),
@@ -66,26 +56,12 @@ export async function resolveWalletAddresses(
  * so future builder changes apply here automatically.
  */
 async function resolveExternalSignerAddress(conf: WalletConfig): Promise<AddressResolutionResult> {
-  const wallet = createAdapter(conf, '', undefined, undefined, undefined)
+  const wallet = await createAdapter(conf, '', undefined)
   const address = await wallet.getAddress()
   return {
     mode: 'single',
     entries: [{ format: 'canonical', label: 'Address', address }],
   }
-}
-
-function loadLocalSecurePrivateKey(
-  params: LocalSecureWalletParams,
-  options: ResolveAddressOptions,
-): { eip155: Uint8Array; tron: Uint8Array } {
-  if (!options.password) {
-    throw new Error('Password required for local_secure wallets')
-  }
-  if (!options.secretLoader) {
-    throw new Error('local_secure wallets require a configured secret loader')
-  }
-  const privateKey = options.secretLoader(options.configDir, options.password, params.secret_ref)
-  return { eip155: privateKey, tron: privateKey }
 }
 
 function loadRawSecretPrivateKey(params: RawSecretPrivateKeyParams | RawSecretMnemonicParams): {

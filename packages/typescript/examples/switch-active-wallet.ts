@@ -52,7 +52,7 @@ async function main() {
   if (activeId) {
     const wallet = await provider.getActiveWallet();
     const address = await wallet.getAddress();
-    const sig = await wallet.signMessage(Buffer.from("Hello from active wallet!"));
+    const sig = await wallet.signTypedData(JSON.parse('{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"Mail":[{"name":"from","type":"string"},{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Test","version":"1","chainId":1},"message":{"from":"0x","contents":"hello"}}'));
     console.log(`Signed with active wallet '${activeId}':`);
     console.log(`  Address:   ${address}`);
     console.log(`  Signature: ${sig}`);
@@ -78,7 +78,7 @@ async function main() {
   // ----------------------------------------------------------------
   const wallet = await provider.getActiveWallet();
   const address = await wallet.getAddress();
-  const sig = await wallet.signMessage(Buffer.from("Hello from active wallet!"));
+  const sig = await wallet.signTypedData(JSON.parse('{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"}],"Mail":[{"name":"from","type":"string"},{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Test","version":"1","chainId":1},"message":{"from":"0x","contents":"hello"}}'));
   console.log(`Signed with new active wallet '${newActive}':`);
   console.log(`  Address:   ${address}`);
   console.log(`  Signature: ${sig}`);

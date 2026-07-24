@@ -1,8 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import { privateKeyToAccount } from 'viem/accounts'
-import { keccak256 } from 'viem'
-import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58check from 'bs58check'
 import { TronSigner } from '../src/core/adapters/tron.js'
 import { EvmSigner } from '../src/core/adapters/evm.js'
@@ -21,16 +19,6 @@ function makeWallet(key?: Uint8Array, network?: string): TronSigner {
   return new TronSigner(key ?? TEST_KEY, network)
 }
 
-/** Manual ECDSA sign matching tronpy PrivateKey.sign_msg */
-function tronpySign(data: Uint8Array, key: Uint8Array): string {
-  const hash = keccak256(data)
-  const hashBytes = Buffer.from(hash.slice(2), 'hex')
-  const sig = secp256k1.sign(hashBytes, key)
-  const r = sig.r.toString(16).padStart(64, '0')
-  const s = sig.s.toString(16).padStart(64, '0')
-  const v = (sig.recovery + 27).toString(16).padStart(2, '0')
-  return r + s + v
-}
 
 const EIP712_DATA = {
   types: {
@@ -111,63 +99,7 @@ describe('Address', () => {
     const expected = bs58check.encode(Buffer.concat([Buffer.from([0x41]), ethAddrBytes]))
     expect(await wallet.getAddress()).toBe(expected)
   })
-})
 
-// --- signMessage ---
-
-describe('signMessage', () => {
-  it('should be deterministic', async () => {
-    const wallet = makeWallet()
-    const sig1 = await wallet.signMessage(Buffer.from('test message'))
-    const sig2 = await wallet.signMessage(Buffer.from('test message'))
-    expect(sig1).toBe(sig2)
-  })
-
-  it('should differ for different messages', async () => {
-    const wallet = makeWallet()
-    const sig1 = await wallet.signMessage(Buffer.from('message A'))
-    const sig2 = await wallet.signMessage(Buffer.from('message B'))
-    expect(sig1).not.toBe(sig2)
-  })
-
-  it('should match tronpy sign_msg', async () => {
-    const key = randomBytes(32)
-    const wallet = new TronSigner(key)
-    const msg = Buffer.from('verify this tron message')
-    const ourSig = await wallet.signMessage(msg)
-    const expected = tronpySign(msg, key)
-    expect(ourSig).toBe(expected)
-  })
-
-  it('should produce 65-byte signature', async () => {
-    const wallet = makeWallet()
-    const sigHex = await wallet.signMessage(Buffer.from('check length'))
-    expect(Buffer.from(sigHex, 'hex').length).toBe(65)
-  })
-})
-
-// --- signRaw ---
-
-describe('signRaw', () => {
-  it('should be deterministic', async () => {
-    const wallet = makeWallet()
-    const raw = randomBytes(64)
-    const sig1 = await wallet.signRaw(raw)
-    const sig2 = await wallet.signRaw(raw)
-    expect(sig1).toBe(sig2)
-  })
-
-  it('should match tronpy sign_msg', async () => {
-    const key = randomBytes(32)
-    const wallet = new TronSigner(key)
-    const rawData = randomBytes(32)
-    const ourSig = await wallet.signRaw(rawData)
-    const expected = tronpySign(rawData, key)
-    expect(ourSig).toBe(expected)
-  })
-})
-
-describe('signTransaction validation', () => {
   it('computes txID when missing', async () => {
     const wallet = makeWallet()
     const rawDataHex = 'deadbeef'
@@ -287,9 +219,8 @@ describe('Cross-key isolation', () => {
     const walletA = new TronSigner(randomBytes(32))
     const walletB = new TronSigner(randomBytes(32))
 
-    const msg = Buffer.from('same message')
-    const sigA = await walletA.signMessage(msg)
-    const sigB = await walletB.signMessage(msg)
+    const sigA = await walletA.signTypedData(EIP712_DATA)
+    const sigB = await walletB.signTypedData(EIP712_DATA)
     expect(sigA).not.toBe(sigB)
   })
 })

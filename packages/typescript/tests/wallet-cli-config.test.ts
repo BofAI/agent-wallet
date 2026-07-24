@@ -4,56 +4,56 @@ import { WalletCliConfigError } from '../src/core/errors.js'
 import { WalletConfigSchema } from '../src/core/config.js'
 
 describe('WalletCliConfigResolver', () => {
-  it('resolves with account and password', () => {
+  it('resolves with account and password', async () => {
     const resolver = new WalletCliConfigResolver({
       source: { account: 'main-1', password: 'Abc12345!@' },
     })
-    const config = resolver.resolve()
+    const config = await resolver.resolve()
     expect(config.account).toBe('main-1')
     expect(config.password).toBe('Abc12345!@')
   })
 
-  it('resolves with password only (account optional)', () => {
+  it('resolves with password only (account optional)', async () => {
     const resolver = new WalletCliConfigResolver({
       source: { password: 'Abc12345!@' },
     })
-    const config = resolver.resolve()
+    const config = await resolver.resolve()
     expect(config.account).toBeUndefined()
     expect(config.password).toBe('Abc12345!@')
   })
 
-  it('throws WalletCliConfigError when password missing', () => {
+  it('throws WalletCliConfigError when password missing', async () => {
     const resolver = new WalletCliConfigResolver({
       source: { account: 'main-1' },
     })
-    expect(() => resolver.resolve()).toThrow(WalletCliConfigError)
-    expect(() => resolver.resolve()).toThrow('password')
+    await expect(resolver.resolve()).rejects.toThrow(WalletCliConfigError)
+    await expect(resolver.resolve()).rejects.toThrow('password')
   })
 
-  it('throws when source is undefined', () => {
+  it('throws when source is undefined', async () => {
     const resolver = new WalletCliConfigResolver({})
-    expect(() => resolver.resolve()).toThrow(WalletCliConfigError)
+    await expect(resolver.resolve()).rejects.toThrow(WalletCliConfigError)
   })
 
-  it('trims whitespace from values', () => {
+  it('trims whitespace from values', async () => {
     const resolver = new WalletCliConfigResolver({
       source: { account: '  main-1  ', password: '  Abc12345!@  ' },
     })
-    const config = resolver.resolve()
+    const config = await resolver.resolve()
     expect(config.account).toBe('main-1')
     expect(config.password).toBe('Abc12345!@')
   })
 
-  it('treats empty string as missing', () => {
+  it('treats empty string as missing', async () => {
     const resolver = new WalletCliConfigResolver({
       source: { password: '   ' },
     })
-    expect(() => resolver.resolve()).toThrow(WalletCliConfigError)
+    await expect(resolver.resolve()).rejects.toThrow(WalletCliConfigError)
   })
 })
 
 describe('WalletConfigSchema — wallet_cli type', () => {
-  it('validates a wallet_cli entry with account and password', () => {
+  it('validates a wallet_cli entry with account and password', async () => {
     const config = WalletConfigSchema.parse({
       type: 'wallet_cli',
       params: { account: 'main-1', password: 'Abc12345!@' },
@@ -61,7 +61,7 @@ describe('WalletConfigSchema — wallet_cli type', () => {
     expect(config.type).toBe('wallet_cli')
   })
 
-  it('validates a wallet_cli entry with password only', () => {
+  it('validates a wallet_cli entry with password only', async () => {
     const config = WalletConfigSchema.parse({
       type: 'wallet_cli',
       params: { password: 'Abc12345!@' },
@@ -69,7 +69,7 @@ describe('WalletConfigSchema — wallet_cli type', () => {
     expect(config.type).toBe('wallet_cli')
   })
 
-  it('rejects wallet_cli without password', () => {
+  it('rejects wallet_cli without password', async () => {
     expect(() =>
       WalletConfigSchema.parse({
         type: 'wallet_cli',
@@ -78,7 +78,7 @@ describe('WalletConfigSchema — wallet_cli type', () => {
     ).toThrow()
   })
 
-  it('rejects params mismatch (wallet_cli type with privy params)', () => {
+  it('rejects params mismatch (wallet_cli type with privy params)', async () => {
     expect(() =>
       WalletConfigSchema.parse({
         type: 'wallet_cli',

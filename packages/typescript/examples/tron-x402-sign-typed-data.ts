@@ -12,7 +12,7 @@
  *
  * Prerequisites:
  *   - Either configure a wallet via the CLI:
- *       agent-wallet start local_secure --wallet-id tron-wallet
+ *       agent-wallet start raw_secret --wallet-id tron-wallet
  *       agent-wallet start raw_secret --wallet-id tron-wallet --mnemonic "..."
  *   - Or provide env fallback:
  *       AGENT_WALLET_PRIVATE_KEY=<hex>

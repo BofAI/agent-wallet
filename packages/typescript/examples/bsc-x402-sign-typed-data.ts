@@ -9,7 +9,7 @@
  *   AGENT_WALLET_PRIVATE_KEY=<hex> npx tsx examples/bsc-x402-sign-typed-data.ts
  *   AGENT_WALLET_MNEMONIC="word1 word2 ..." npx tsx examples/bsc-x402-sign-typed-data.ts
  *
- * Optional local_secure mode also works:
+ * Optional raw_secret mode also works:
  *   AGENT_WALLET_PASSWORD=<password> npx tsx examples/bsc-x402-sign-typed-data.ts
  */
 

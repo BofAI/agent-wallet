@@ -4,6 +4,7 @@ import {
   normalizeValue,
   requireFields,
 } from './external-signer-config.js'
+import type { SecretValue } from '../secret-resolver.js'
 
 export type PrivyConfig = {
   appId: string
@@ -13,7 +14,7 @@ export type PrivyConfig = {
 
 export type PrivyConfigSource = {
   app_id?: string
-  app_secret?: string
+  app_secret?: SecretValue
   wallet_id?: string
 }
 
@@ -28,16 +29,18 @@ export class PrivyConfigResolver extends ExternalSignerConfigResolver<
     return Boolean(merged.app_id && merged.app_secret && merged.wallet_id)
   }
 
-  resolve(): PrivyConfig {
+  async resolve(): Promise<PrivyConfig> {
     const merged = this.merge()
     const missing = requireFields(merged as Record<string, unknown>, [...REQUIRED_KEYS])
     if (missing.length > 0) {
       throw new PrivyConfigError(`Missing required Privy config keys: ${missing.join(', ')}`)
     }
 
+    const appSecret = await this.resolveCredential(merged.app_secret, 'privy app_secret')
+
     return {
       appId: merged.app_id!,
-      appSecret: merged.app_secret!,
+      appSecret: appSecret!,
       walletId: merged.wallet_id!,
     }
   }
@@ -46,10 +49,8 @@ export class PrivyConfigResolver extends ExternalSignerConfigResolver<
     const source = this.source
     return {
       app_id: normalizeValue(source?.app_id),
-      app_secret: normalizeValue(source?.app_secret),
+      app_secret: source?.app_secret,
       wallet_id: normalizeValue(source?.wallet_id),
     }
   }
 }
-
-// NOTE: base URL is fixed to Privy API; no validation required.

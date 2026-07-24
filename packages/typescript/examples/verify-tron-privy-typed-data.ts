@@ -24,7 +24,7 @@ const bs58check =
       (bs58checkModule as typeof import("bs58check")));
 
 if (!PASSWORD) {
-  throw new Error("AGENT_WALLET_PASSWORD is required to access local_secure wallets.");
+  throw new Error("No wallet source found. Set AGENT_WALLET_PRIVATE_KEY or configure a wallet.");
 }
 
 const provider = resolveWalletProvider({ dir: DIR, network: NETWORK });

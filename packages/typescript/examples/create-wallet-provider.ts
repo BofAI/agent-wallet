@@ -5,7 +5,7 @@
  *
  *   1. Raw private key env fallback
  *   2. Raw mnemonic env fallback
- *   3. Config-backed local_secure mode
+ *   3. Config-backed raw_secret mode
  *
  * Usage:
  *   PRIVATE_KEY=<hex> npx tsx examples/create-wallet-provider.ts
@@ -52,7 +52,7 @@ async function main() {
     await printWallet("TRON", tronProvider);
     await printWallet("EVM", evmProvider);
   } else {
-    console.log("Mode: local_secure (password)\n");
+    console.log("Mode: config-backed\n");
     process.env.AGENT_WALLET_PASSWORD = walletPassword
 
     const provider = resolveWalletProvider({ network: "eip155" });

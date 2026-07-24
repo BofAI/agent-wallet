@@ -38,14 +38,6 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
     return wallet.address
   }
 
-  async signRaw(_rawTx: Uint8Array, options?: SignOptions): Promise<string> {
-    const chain = await this.getChainType()
-    if (chain === 'tron') {
-      return this.tronSignBytes(_rawTx, options)
-    }
-    throw new UnsupportedOperationError('Privy adapter does not support raw transaction signing')
-  }
-
   async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
     const chain = await this.getChainType()
     if (chain === 'tron') {
@@ -61,23 +53,6 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
       throw new SigningError('Privy eth_signTransaction did not return signed_transaction')
     }
     return stripHexPrefix(signed)
-  }
-
-  async signMessage(msg: Uint8Array, options?: SignOptions): Promise<string> {
-    const chain = await this.getChainType()
-    if (chain === 'tron') {
-      return this.tronSignBytes(msg, options)
-    }
-    const hex = `0x${Buffer.from(msg).toString('hex')}`
-    const response = await this.rpc(
-      'personal_sign',
-      {
-        message: hex,
-        encoding: 'hex',
-      },
-      options,
-    )
-    return extractSignature(response)
   }
 
   async signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string> {
@@ -109,12 +84,6 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
     const signature = await this.tronSignHash(Buffer.from(txId, 'hex'), options)
     const signedTx = { ...payload, txID: txId, signature: [signature] }
     return JSON.stringify(signedTx)
-  }
-
-  private async tronSignBytes(bytes: Uint8Array, options?: SignOptions): Promise<string> {
-    const hashHex = keccak256(bytes)
-    const hash = Buffer.from(hashHex.slice(2), 'hex')
-    return this.tronSignHash(hash, options)
   }
 
   private async tronSignTypedData(

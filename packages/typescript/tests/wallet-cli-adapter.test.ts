@@ -7,7 +7,6 @@ function mockClient(): WalletCliClient {
   return {
     currentAccount: vi.fn(),
     signTransaction: vi.fn(),
-    signMessage: vi.fn(),
     signTypedData: vi.fn(),
     run: vi.fn(),
   } as unknown as WalletCliClient
@@ -148,35 +147,6 @@ describe('WalletCliAdapter', () => {
     })
   })
 
-  describe('signMessage', () => {
-    it('strips 0x prefix from signature', async () => {
-      const client = mockClient()
-      ;(client.signMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
-        success: true,
-        command: 'message.sign',
-        data: { address: TRON_ADDRESS, message: 'hello', signature: '0x9f3cabcd' },
-      })
-
-      const signer = new WalletCliAdapter(CONFIG, client)
-      const sig = await signer.signMessage(Buffer.from('hello'))
-      expect(sig).toBe('9f3cabcd')
-      expect(sig).not.toMatch(/^0x/)
-    })
-
-    it('converts Uint8Array to UTF-8 text', async () => {
-      const client = mockClient()
-      ;(client.signMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
-        success: true,
-        command: 'message.sign',
-        data: { address: TRON_ADDRESS, message: 'hello', signature: '0x9f3c' },
-      })
-
-      const signer = new WalletCliAdapter(CONFIG, client)
-      await signer.signMessage(new Uint8Array([104, 101, 108, 108, 111]))
-      expect(client.signMessage).toHaveBeenCalledWith('hello', 'Abc12345!@', 'main-1')
-    })
-  })
-
   describe('signTypedData', () => {
     it('strips 0x prefix from signature', async () => {
       const client = mockClient()
@@ -203,13 +173,4 @@ describe('WalletCliAdapter', () => {
     })
   })
 
-  describe('signRaw', () => {
-    it('throws UnsupportedOperationError', async () => {
-      const client = mockClient()
-      const signer = new WalletCliAdapter(CONFIG, client)
-      await expect(signer.signRaw(new Uint8Array([1, 2, 3]))).rejects.toThrow(
-        UnsupportedOperationError,
-      )
-    })
-  })
 })

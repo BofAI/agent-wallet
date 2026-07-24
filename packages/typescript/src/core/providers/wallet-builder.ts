@@ -5,8 +5,6 @@
 import { type Wallet } from '../base.js'
 import type { WalletConfig } from '../config.js'
 import { WalletType } from '../base.js'
-import { LocalSecureSigner } from '../adapters/local-secure.js'
-import type { SecretLoaderFn } from '../adapters/local-secure.js'
 import { RawSecretSigner } from '../adapters/raw-secret.js'
 import type {
   RawSecretPrivateKeyParams,
@@ -21,29 +19,17 @@ import { WalletCliConfigResolver } from './wallet-cli-config.js'
 import { WalletCliClient } from '../clients/wallet-cli.js'
 import { WalletCliAdapter } from '../adapters/wallet-cli.js'
 
-export function createAdapter(
+export async function createAdapter(
   conf: WalletConfig,
   configDir: string,
-  password: string | undefined,
   network: string | undefined,
-  secretLoader: SecretLoaderFn | undefined,
-): Wallet {
+): Promise<Wallet> {
   // External signers (privy, wallet_cli, and future types) use the registry;
   // they carry their own credentials in params and don't need
-  // password/configDir/secretLoader.
+  // password/configDir.
   const externalBuilder = externalSignerRegistry.get(conf.type)
   if (externalBuilder) {
     return externalBuilder(conf.params, { network })
-  }
-
-  if (conf.type === WalletType.LOCAL_SECURE) {
-    return new LocalSecureSigner(
-      conf.params as { secret_ref: string },
-      configDir,
-      password,
-      network,
-      secretLoader,
-    )
   }
   if (conf.type === WalletType.RAW_SECRET) {
     return new RawSecretSigner(
@@ -59,7 +45,10 @@ export function createAdapter(
 // here instead of adding if-else branches to createAdapter.
 // ---------------------------------------------------------------------------
 
-export type ExternalSignerBuilder = (params: unknown, ctx: { network?: string }) => Wallet
+export type ExternalSignerBuilder = (
+  params: unknown,
+  ctx: { network?: string },
+) => Promise<Wallet>
 
 const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
 
@@ -83,11 +72,11 @@ export function isRegisteredExternalSigner(type: string): boolean {
 // credentials in params (not agent-wallet master password).
 // ---------------------------------------------------------------------------
 
-registerExternalSigner('privy', (params, _ctx) => {
+registerExternalSigner('privy', async (params, _ctx) => {
   const resolver = new PrivyConfigResolver({
     source: params as PrivyWalletParams,
   })
-  const resolved = resolver.resolve()
+  const resolved = await resolver.resolve()
   const client = new PrivyClient({
     appId: resolved.appId,
     appSecret: resolved.appSecret,
@@ -95,11 +84,11 @@ registerExternalSigner('privy', (params, _ctx) => {
   return new PrivyAdapter(resolved, client)
 })
 
-registerExternalSigner('wallet_cli', (params, ctx) => {
+registerExternalSigner('wallet_cli', async (params, ctx) => {
   const resolver = new WalletCliConfigResolver({
     source: params as WalletCliWalletParams,
   })
-  const resolved = resolver.resolve()
+  const resolved = await resolver.resolve()
   const client = new WalletCliClient()
   return new WalletCliAdapter(resolved, client, ctx.network)
 })

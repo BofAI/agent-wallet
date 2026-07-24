@@ -112,16 +112,6 @@ export class WalletCliClient {
     return this.run(args, password)
   }
 
-  async signMessage(
-    message: string,
-    password: string,
-    accountRef?: string,
-  ): Promise<WalletCliResult<WalletCliMessageSignData>> {
-    const args = ['message', 'sign', '--message', message, '--password-stdin', '-o', 'json']
-    if (accountRef) args.push('--account', accountRef)
-    return this.run(args, password)
-  }
-
   async signTypedData(
     typedDataJson: string,
     password: string,
@@ -308,12 +298,6 @@ export interface WalletCliTxSignData {
   address: string
   txId: string
   signed: Record<string, unknown> & { signature: string[] }
-}
-
-export interface WalletCliMessageSignData {
-  address: string
-  message: string
-  signature: string
 }
 
 export interface WalletCliTypedDataSignData {

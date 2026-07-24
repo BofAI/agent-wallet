@@ -88,51 +88,6 @@ describe('Address', () => {
   })
 })
 
-// --- signMessage ---
-
-describe('signMessage', () => {
-  it('should be deterministic', async () => {
-    const wallet = makeWallet()
-    const sig1 = await wallet.signMessage(Buffer.from('test message'))
-    const sig2 = await wallet.signMessage(Buffer.from('test message'))
-    expect(sig1).toBe(sig2)
-  })
-
-  it('should differ for different messages', async () => {
-    const wallet = makeWallet()
-    const sig1 = await wallet.signMessage(Buffer.from('message A'))
-    const sig2 = await wallet.signMessage(Buffer.from('message B'))
-    expect(sig1).not.toBe(sig2)
-  })
-
-  it('should produce recoverable signature', async () => {
-    const key = randomBytes(32)
-    const wallet = new EvmSigner(key)
-    const expectedAddr = privateKeyToAccount(`0x${key.toString('hex')}`).address
-
-    const msg = Buffer.from('verify this message')
-    const sigHex = await wallet.signMessage(msg)
-
-    const recovered = await recoverMessageAddress({
-      message: { raw: msg },
-      signature: `0x${sigHex}`,
-    })
-    expect(recovered).toBe(expectedAddr)
-  })
-
-  it('should match viem direct signing', async () => {
-    const key = randomBytes(32)
-    const wallet = new EvmSigner(key)
-    const account = privateKeyToAccount(`0x${key.toString('hex')}`)
-
-    const msg = Buffer.from('compare signatures')
-    const ourSig = await wallet.signMessage(msg)
-    const viemSig = await account.signMessage({ message: { raw: msg } })
-
-    expect(ourSig).toBe(viemSig.slice(2))
-  })
-})
-
 // --- signTypedData ---
 
 describe('signTypedData', () => {
@@ -234,39 +189,6 @@ describe('signTransaction', () => {
   })
 })
 
-// --- signRaw ---
-
-describe('signRaw', () => {
-  it('matches signTransaction for an unsigned serialized transaction', async () => {
-    const key = randomBytes(32)
-    const wallet = new EvmSigner(key)
-
-    const tx = {
-      to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as `0x${string}`,
-      value: BigInt(0),
-      gas: BigInt(21000),
-      maxFeePerGas: BigInt(20000000000),
-      maxPriorityFeePerGas: BigInt(1000000000),
-      nonce: 1,
-      chainId: 1,
-      type: 'eip1559' as const,
-    }
-
-    const unsigned = serializeTransaction(tx)
-    const signedRaw = await wallet.signRaw(Buffer.from(unsigned.slice(2), 'hex'))
-    const signedTx = await wallet.signTransaction(tx)
-
-    expect(signedRaw).toBe(signedTx)
-  })
-
-  it('fails clearly on invalid raw transaction bytes', async () => {
-    const wallet = makeWallet()
-    await expect(wallet.signRaw(Buffer.from('deadbeef', 'hex'))).rejects.toThrow(
-      /EVM sign_raw failed/,
-    )
-  })
-})
-
 // --- x402 behavioral compatibility ---
 
 describe('x402 compatibility', () => {
@@ -326,8 +248,8 @@ describe('Cross-key isolation', () => {
     const walletB = new EvmSigner(randomBytes(32))
 
     const msg = Buffer.from('same message')
-    const sigA = await walletA.signMessage(msg)
-    const sigB = await walletB.signMessage(msg)
+    const sigA = await walletA.signTypedData(EIP712_DATA)
+    const sigB = await walletB.signTypedData(EIP712_DATA)
 
     expect(sigA).not.toBe(sigB)
   })
