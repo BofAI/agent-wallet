@@ -566,13 +566,11 @@ async function buildWalletCliConfigWithFlags(
  * Catches errors non-fatally so the wallet is still saved; the user is
  * prompted to install wallet-cli if the binary is missing.
  */
-async function probeWalletCli(
-  io: CliIO,
-  account?: string,
-): Promise<void> {
+async function probeWalletCli(io: CliIO): Promise<void> {
   const client = new WalletCliClient()
   try {
-    await client.currentAccount(account)
+    // `list` needs no keystore unlock — purely checks binary availability
+    await client.run(['list', '-o', 'json'])
     return
   } catch (e) {
     if (!(e instanceof WalletCliNotFoundError)) {
@@ -619,6 +617,9 @@ async function installWalletCli(io: CliIO): Promise<void> {
     return
   }
   io.print('wallet-cli installed successfully.')
+  io.print(
+    'Next: initialize the keystore and import a TRON key:\n  wallet-cli init\n  wallet-cli import private-key --label main-1',
+  )
 }
 
 // --- Commands ---
@@ -741,6 +742,7 @@ export async function cmdStart(
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'privy']])
   } else if (wtype === WalletType.WALLET_CLI) {
+    await probeWalletCli(io)
     provider = getProvider(dir)
     if (opts?.walletId) {
       try {
@@ -769,7 +771,6 @@ export async function cmdStart(
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'wallet_cli']])
-    await probeWalletCli(io, opts?.cliAccount)
   } else {
     io.print(`Unsupported quick-start type: ${wtype}`)
     throw new CliExit(1)
@@ -842,6 +843,7 @@ export async function cmdAdd(
       }),
     )
   } else if (wtype === WalletType.WALLET_CLI) {
+    await probeWalletCli(io)
     targetName = opts?.walletId ?? (await promptWalletId(io, 'default_cli', provider))
     provider.addWallet(
       targetName,
@@ -851,7 +853,6 @@ export async function cmdAdd(
         cliPasswordExec: opts?.cliPasswordExec,
       }),
     )
-    await probeWalletCli(io, opts?.cliAccount)
   }
 
   io.print(`Wallet '${targetName}' added. Config updated.`)
