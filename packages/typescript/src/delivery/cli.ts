@@ -3,7 +3,6 @@
  */
 
 import { existsSync, unlinkSync } from 'node:fs'
-import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
@@ -562,64 +561,24 @@ async function buildWalletCliConfigWithFlags(
 }
 
 /**
- * Probe wallet-cli availability after a wallet_cli wallet is created.
- * Catches errors non-fatally so the wallet is still saved; the user is
- * prompted to install wallet-cli if the binary is missing.
+ * Probe wallet-cli binary availability before collecting credentials.
+ * If the binary is missing, print install guidance and exit — collecting a
+ * keystore password without a wallet-cli keystore would produce a useless
+ * config entry.
  */
 async function probeWalletCli(io: CliIO): Promise<void> {
   const client = new WalletCliClient()
   try {
     // `list` needs no keystore unlock — purely checks binary availability
     await client.run(['list', '-o', 'json'])
-    return
   } catch (e) {
-    if (!(e instanceof WalletCliNotFoundError)) {
-      io.print(`\nWarning: could not reach wallet-cli: ${(e as Error).message}`)
-      return
+    if (e instanceof WalletCliNotFoundError) {
+      io.print('wallet-cli not found. Please install it first: npm i -g @tron-walletcli/wallet-cli')
+      throw new CliExit(1)
     }
-    // binary not found — prompt to install in interactive mode
-    if (io.interactive === false) {
-      io.print(
-        '\nWarning: wallet-cli binary not found. Install it to use this wallet:\n  npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
-      )
-      return
-    }
-    const install = await confirmInput(
-      io,
-      'wallet-cli binary not found. Install @tron-walletcli/wallet-cli now?',
-      true,
-      'wallet-cli install',
-    )
-    if (!install) {
-      io.print(
-        'Skipped. Install manually: npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
-      )
-      return
-    }
-    await installWalletCli(io)
+    io.print(`\nWarning: could not reach wallet-cli: ${(e as Error).message}`)
+    throw new CliExit(1)
   }
-}
-
-async function installWalletCli(io: CliIO): Promise<void> {
-  io.print('Installing @tron-walletcli/wallet-cli ...')
-  const code = await new Promise<number>((resolve) => {
-    const child = spawn('npm', ['install', '-g', '@tron-walletcli/wallet-cli'], {
-      stdio: 'inherit',
-      env: process.env,
-    })
-    child.on('close', resolve)
-    child.on('error', () => resolve(1))
-  })
-  if (code !== 0) {
-    io.print(
-      'Installation failed. Install manually: npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
-    )
-    return
-  }
-  io.print('wallet-cli installed successfully.')
-  io.print(
-    'Next: initialize the keystore and import a TRON key:\n  wallet-cli init\n  wallet-cli import private-key --label main-1',
-  )
 }
 
 // --- Commands ---
