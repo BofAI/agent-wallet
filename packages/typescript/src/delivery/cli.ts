@@ -573,7 +573,7 @@ async function probeWalletCli(io: CliIO): Promise<void> {
     await client.run(['list', '-o', 'json'])
   } catch (e) {
     if (e instanceof WalletCliNotFoundError) {
-      io.print('wallet-cli not found. Please install it first: npm i -g @tron-walletcli/wallet-cli')
+      io.print('wallet-cli not found. Please install (npm i -g @tron-walletcli/wallet-cli) and add your account first.')
       throw new CliExit(1)
     }
     io.print(`\nWarning: could not reach wallet-cli: ${(e as Error).message}`)
