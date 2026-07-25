@@ -807,7 +807,7 @@ describe('sign commands', () => {
         io,
       ),
     ).rejects.toThrow(CliExit)
-    expect(out(io)).toContain('Error: network is required')
+    expect(out(io)).toContain('network is required')
   })
 
   it('allows privy signing without network', async () => {

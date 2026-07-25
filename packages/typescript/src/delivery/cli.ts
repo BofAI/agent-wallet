@@ -3,6 +3,7 @@
  */
 
 import { existsSync, unlinkSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
@@ -17,6 +18,8 @@ import {
 } from '../core/config.js'
 import { WALLETS_CONFIG_FILENAME } from '../core/constants.js'
 import { WalletError } from '../core/errors.js'
+import { WalletCliNotFoundError } from '../core/errors.js'
+import { WalletCliClient } from '../core/clients/wallet-cli.js'
 import { ConfigWalletProvider } from '../core/providers/config-provider.js'
 import { decodePrivateKey } from '../core/utils/keys.js'
 import { parseNetworkFamily } from '../core/utils/network.js'
@@ -558,6 +561,66 @@ async function buildWalletCliConfigWithFlags(
   }
 }
 
+/**
+ * Probe wallet-cli availability after a wallet_cli wallet is created.
+ * Catches errors non-fatally so the wallet is still saved; the user is
+ * prompted to install wallet-cli if the binary is missing.
+ */
+async function probeWalletCli(
+  io: CliIO,
+  account?: string,
+): Promise<void> {
+  const client = new WalletCliClient()
+  try {
+    await client.currentAccount(account)
+    return
+  } catch (e) {
+    if (!(e instanceof WalletCliNotFoundError)) {
+      io.print(`\nWarning: could not reach wallet-cli: ${(e as Error).message}`)
+      return
+    }
+    // binary not found — prompt to install in interactive mode
+    if (io.interactive === false) {
+      io.print(
+        '\nWarning: wallet-cli binary not found. Install it to use this wallet:\n  npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
+      )
+      return
+    }
+    const install = await confirmInput(
+      io,
+      'wallet-cli binary not found. Install @tron-walletcli/wallet-cli now?',
+      true,
+      'wallet-cli install',
+    )
+    if (!install) {
+      io.print(
+        'Skipped. Install manually: npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
+      )
+      return
+    }
+    await installWalletCli(io)
+  }
+}
+
+async function installWalletCli(io: CliIO): Promise<void> {
+  io.print('Installing @tron-walletcli/wallet-cli ...')
+  const code = await new Promise<number>((resolve) => {
+    const child = spawn('npm', ['install', '-g', '@tron-walletcli/wallet-cli'], {
+      stdio: 'inherit',
+      env: process.env,
+    })
+    child.on('close', resolve)
+    child.on('error', () => resolve(1))
+  })
+  if (code !== 0) {
+    io.print(
+      'Installation failed. Install manually: npm i -g @tron-walletcli/wallet-cli\nOr set AGENT_WALLET_WALLET_CLI_PATH to the binary path.',
+    )
+    return
+  }
+  io.print('wallet-cli installed successfully.')
+}
+
 // --- Commands ---
 
 export async function cmdStart(
@@ -636,14 +699,14 @@ export async function cmdStart(
       mnemonicIndex: opts?.mnemonicIndex ?? 0,
     })
 
-    provider.ensureStorage()
-    try {
-      provider.addWallet(targetName, rawConfig)
-      provider.setActive(targetName)
-    } catch (e) {
-      io.print(`Error: ${(e as Error).message}`)
-      throw new CliExit(1)
-    }
+   provider.ensureStorage()
+   try {
+     provider.addWallet(targetName, rawConfig)
+     provider.setActive(targetName)
+   } catch (e) {
+      io.print((e as Error).message)
+     throw new CliExit(1)
+   }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'raw_secret']])
@@ -666,14 +729,14 @@ export async function cmdStart(
       privyWalletId: opts?.privyWalletId,
     })
 
-    provider.ensureStorage()
-    try {
-      provider.addWallet(targetName, privyConfig)
-      provider.setActive(targetName)
-    } catch (e) {
-      io.print(`Error: ${(e as Error).message}`)
-      throw new CliExit(1)
-    }
+   provider.ensureStorage()
+   try {
+     provider.addWallet(targetName, privyConfig)
+     provider.setActive(targetName)
+   } catch (e) {
+      io.print((e as Error).message)
+     throw new CliExit(1)
+   }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'privy']])
@@ -695,17 +758,18 @@ export async function cmdStart(
       cliPasswordExec: opts?.cliPasswordExec,
     })
 
-    provider.ensureStorage()
-    try {
-      provider.addWallet(targetName, cliConfig)
-      provider.setActive(targetName)
-    } catch (e) {
-      io.print(`Error: ${(e as Error).message}`)
-      throw new CliExit(1)
-    }
+   provider.ensureStorage()
+   try {
+     provider.addWallet(targetName, cliConfig)
+     provider.setActive(targetName)
+   } catch (e) {
+      io.print((e as Error).message)
+     throw new CliExit(1)
+   }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'wallet_cli']])
+    await probeWalletCli(io, opts?.cliAccount)
   } else {
     io.print(`Unsupported quick-start type: ${wtype}`)
     throw new CliExit(1)
@@ -787,6 +851,7 @@ export async function cmdAdd(
         cliPasswordExec: opts?.cliPasswordExec,
       }),
     )
+    await probeWalletCli(io, opts?.cliAccount)
   }
 
   io.print(`Wallet '${targetName}' added. Config updated.`)
@@ -1069,11 +1134,11 @@ export async function cmdSignTx(
     }
   } catch (e) {
     if (e instanceof WalletError || e instanceof SyntaxError) {
-      io.print(`Error: ${(e as Error).message}`)
+      io.print((e as Error).message)
       throw new CliExit(1)
     }
     if (e instanceof Error) {
-      io.print(`Error: ${e.message}`)
+      io.print(e.message)
       throw new CliExit(1)
     }
     throw e
@@ -1101,11 +1166,11 @@ export async function cmdSignTypedData(
     io.print(`Signature: ${signature}`)
   } catch (e) {
     if (e instanceof WalletError || e instanceof SyntaxError) {
-      io.print(`Error: ${(e as Error).message}`)
+      io.print((e as Error).message)
       throw new CliExit(1)
     }
     if (e instanceof Error) {
-      io.print(`Error: ${e.message}`)
+      io.print(e.message)
       throw new CliExit(1)
     }
     throw e
@@ -1595,16 +1660,20 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         cliIO.print(`Unknown command: ${command}`)
         return 1
     }
-  } catch (e) {
-    if (e instanceof CliExit) {
-      return e.code
-    }
-    if (e instanceof Error && e.message.startsWith('Invalid wallet config in ')) {
+ } catch (e) {
+   if (e instanceof CliExit) {
+     return e.code
+   }
+    if (e instanceof WalletError) {
       cliIO.print(e.message)
       return 1
     }
-    throw e
-  }
+   if (e instanceof Error && e.message.startsWith('Invalid wallet config in ')) {
+     cliIO.print(e.message)
+     return 1
+   }
+   throw e
+ }
 
   return 0
 }
