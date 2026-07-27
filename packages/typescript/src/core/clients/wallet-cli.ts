@@ -143,6 +143,7 @@ export class WalletCliClient {
       const child = spawn(binary, args, {
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
       })
 
       const stdoutChunks: Buffer[] = []

@@ -61,6 +61,7 @@ async function execSecret(ref: SecretRef, label: string): Promise<string> {
     const child = spawn(scriptPath, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
+      shell: process.platform === 'win32',
     })
 
     const stdoutChunks: Buffer[] = []

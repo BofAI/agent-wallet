@@ -16,11 +16,45 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true })
 })
 
+const isWindows = process.platform === 'win32'
+
 function makeExecutable(name: string, content: string): string {
-  const path = join(tempDir, name)
-  writeFileSync(path, content, 'utf-8')
-  chmodSync(path, 0o755)
+  const ext = isWindows ? '.cmd' : ''
+  const path = join(tempDir, name + ext)
+  if (isWindows) {
+    // Windows: .cmd batch wrapper
+    writeFileSync(path, content, 'utf-8')
+  } else {
+    writeFileSync(path, content, 'utf-8')
+    chmodSync(path, 0o755)
+  }
   return path
+}
+
+function echoScript(value: string): string {
+  if (isWindows) return `@echo off\r\necho ${value}`
+  return `#!/bin/sh\necho "${value}"`
+}
+
+function failScript(stderrMsg: string): string {
+  if (isWindows) return `@echo off\r\necho ${stderrMsg} 1>&2\r\nexit /b 1`
+  return `#!/bin/sh\necho "${stderrMsg}" >&2\nexit 1`
+}
+
+function emptyScript(): string {
+  return isWindows ? '@echo off\r\nexit /b 0' : '#!/bin/sh\nexit 0'
+}
+
+function sleepScript(seconds: number): string {
+  return isWindows
+    ? `@echo off\r\nping -n ${seconds + 1} 127.0.0.1 >nul`
+    : `#!/bin/sh\nsleep ${seconds}\necho "done"`
+}
+
+function envCheckScript(): string {
+  return isWindows
+    ? '@echo off\r\necho %PATH%'
+    : '#!/bin/sh\necho "$PATH" | head -c 1'
 }
 
 describe('isSecretRef', () => {
@@ -47,25 +81,25 @@ describe('resolveSecret', () => {
   })
 
   it('executes a script and returns trimmed stdout', async () => {
-    const script = makeExecutable('echo-secret.sh', '#!/bin/bash\necho "my-secret-value"')
+    const script = makeExecutable('echo-secret', echoScript('my-secret-value'))
     const result = await resolveSecret({ exec: script }, 'test')
     expect(result).toBe('my-secret-value')
   })
 
   it('trims trailing whitespace from stdout', async () => {
-    const script = makeExecutable('multiline.sh', '#!/bin/bash\nprintf "value\\n\\n"')
+    const script = makeExecutable('multiline', echoScript('value'))
     const result = await resolveSecret({ exec: script }, 'test')
     expect(result).toBe('value')
   })
 
   it('inherits process.env (e.g. PATH)', async () => {
-    const script = makeExecutable('env-check.sh', '#!/bin/bash\necho "$PATH" | head -c 1')
+    const script = makeExecutable('env-check', envCheckScript())
     const result = await resolveSecret({ exec: script }, 'test')
     expect(result.length).toBeGreaterThan(0)
   })
 
   it('throws ExternalSignerConfigError on non-zero exit', async () => {
-    const script = makeExecutable('fail.sh', '#!/bin/bash\necho "error msg" >&2\nexit 1')
+    const script = makeExecutable('fail', failScript('error msg'))
     await expect(resolveSecret({ exec: script }, 'test-label')).rejects.toThrow(
       ExternalSignerConfigError,
     )
@@ -75,7 +109,7 @@ describe('resolveSecret', () => {
   })
 
   it('throws when script produces no output', async () => {
-    const script = makeExecutable('empty.sh', '#!/bin/bash\nexit 0')
+    const script = makeExecutable('empty', emptyScript())
     await expect(resolveSecret({ exec: script }, 'test-label')).rejects.toThrow(
       /test-label.*no output/,
     )
@@ -88,7 +122,7 @@ describe('resolveSecret', () => {
   })
 
   it('respects custom timeout', async () => {
-    const script = makeExecutable('slow.sh', '#!/bin/bash\nsleep 5\necho "done"')
+    const script = makeExecutable('slow', sleepScript(5))
     await expect(resolveSecret({ exec: script, timeout: 500 }, 'test-label')).rejects.toThrow(
       /test-label.*timed out after 500ms/,
     )
