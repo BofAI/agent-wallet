@@ -216,3 +216,4 @@ cd packages/typescript && pnpm test
 ## License
 
 [MIT](./LICENSE) — BankOfAI
+
