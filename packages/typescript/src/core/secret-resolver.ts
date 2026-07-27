@@ -45,10 +45,12 @@ export async function resolveSecret(value: SecretValue, label: string): Promise<
 async function execSecret(ref: SecretRef, label: string): Promise<string> {
   const scriptPath = ref.exec
 
-  // Validate the path exists and is executable — fail fast with a clear
-  // error rather than letting spawn fail with a cryptic ENOENT.
+  // Validate the path exists — fail fast with a clear error rather than
+  // letting spawn fail with a cryptic ENOENT. On Windows there is no
+  // executable bit, so only check existence (F_OK); on POSIX also require
+  // execute permission (X_OK).
   try {
-    accessSync(scriptPath, constants.X_OK)
+    accessSync(scriptPath, process.platform === 'win32' ? constants.F_OK : constants.X_OK)
   } catch {
     throw new ExternalSignerConfigError(
       `${label}: exec script not found or not executable: ${scriptPath}`,
