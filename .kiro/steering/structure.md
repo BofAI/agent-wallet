@@ -21,11 +21,6 @@ This project is package-oriented and layered by responsibility. The TypeScript i
 **Purpose**: CLI-facing entry points and user interaction logic  
 **Example**: command parsing, console output, interactive prompts
 
-### Local secure storage
-**Location**: `/packages/typescript/src/**/local/`  
-**Purpose**: Storage and persistence logic that specifically supports `local_secure` wallets  
-**Example**: encrypted secret files, secure KV storage, local secure read/write helpers
-
 ### Documentation
 **Location**: `/doc/`  
 **Purpose**: User-facing guides and process documentation  
@@ -48,6 +43,6 @@ This project is package-oriented and layered by responsibility. The TypeScript i
 
 - Keep signing logic separate from CLI interaction
 - Keep provider resolution separate from adapter implementation
-- The `local/` layer is reserved for `local_secure` storage concerns, not general provider resolution or unrelated filesystem helpers
+- 外部簽名器憑證解析位於 `core/secret-resolver.ts`；`local_secure` 與自有加密 KV 已移除
 - Cross-platform filesystem behavior must be explicit and tested when changed
 - Do not mix transaction broadcasting or RPC orchestration into this project; this project signs only

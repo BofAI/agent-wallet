@@ -1,5 +1,7 @@
 # Research Notes — wallet-cli 對接
 
+> **歷史文件註記（2026-08-01）**：此文件記錄整合前研究，因此包含當時存在的 `local_secure`、Python package、`signMessage` 與 `signRaw`。目前實作已移除上述能力；現行公開契約以更新後的 `requirements.md` 與 `design.md` 為準。
+
 ## 1. 兩個專案的定位
 
 | 維度 | agent-wallet（本專案） | wallet-cli（同級目錄 `../wallet-cli`） |

@@ -1,5 +1,7 @@
 # Agent Wallet — 产品需求文档
 
+> **歷史基線**：此 2.3.0 文件保留供遷移追溯。現行產品已移除 Python package、`local_secure`、自有加密 KV、`signRaw`、`signMessage` 與 `sign msg`；目前支援 `raw_secret`、`privy`、`wallet_cli`。現行需求請以 `.kiro/steering/` 與 `.kiro/specs/wallet-cli-integration/requirements.md` 為準。
+
 **产品名称：** Agent Wallet (@bankofai/agent-wallet)
 **版本：** 2.3.0
 **组织：** BankOfAI

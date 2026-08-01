@@ -218,6 +218,7 @@ TypeScript samples under [`packages/typescript/examples/`](./packages/typescript
 
 | Doc | Audience |
 |-----|----------|
+| [文件導覽](./doc/README.md) | 現行文件責任、維護規則與歷史封存入口 |
 | [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI walkthrough |
 | [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md) | Use existing Privy App + Wallet ID in the CLI |
 | [How to add a wallet-cli wallet](./doc/how-to-add-wallet-cli-wallet.md) | Use wallet-cli managed TRON keys in the CLI |

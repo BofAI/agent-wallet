@@ -152,13 +152,10 @@ describe('WalletCliClient', () => {
     // "Zombie" child: never emits stdout/close until killed
     const killCalls: string[] = []
     let closeHandler: ((code: number | null) => void) | undefined
-    let dataHandler: ((chunk: Buffer) => void) | undefined
     const zombieChild = {
       stdin: { write: vi.fn(), on: vi.fn(), end: vi.fn() },
       stdout: {
-        on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
-          if (event === 'data') dataHandler = cb as (chunk: Buffer) => void
-        }),
+        on: vi.fn(),
       },
       stderr: { on: vi.fn() },
       on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
@@ -166,10 +163,8 @@ describe('WalletCliClient', () => {
       }),
       kill: vi.fn((sig: string) => {
         killCalls.push(sig)
-        // SIGKILL terminates the zombie; emit a valid error envelope then close
-        // so the close handler hits the timedOut branch (not JSON.parse failure)
+        // Real timed-out processes commonly close without a JSON envelope.
         if (sig === 'SIGKILL') {
-          dataHandler?.(Buffer.from(ENVELOPE_ERR('timeout', 'killed after timeout')))
           closeHandler?.(1)
         }
       }),
@@ -189,6 +184,7 @@ describe('WalletCliClient', () => {
 
     const caught = await resultPromise
     expect(caught).toBeInstanceOf(WalletCliExecutionError)
+    expect((caught as WalletCliExecutionError).code).toBe('timeout')
     expect(killCalls[0]).toBe('SIGTERM')
     expect(killCalls).toContain('SIGKILL')
 

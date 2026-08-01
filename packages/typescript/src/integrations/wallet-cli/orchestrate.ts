@@ -12,6 +12,7 @@
 
 import type { Wallet } from '../../core/base.js'
 import type { WalletCliClient } from '../../core/clients/wallet-cli.js'
+import { WalletCliExecutionError } from '../../core/errors.js'
 import { buildTransfer, broadcast, getTxStatus } from './chain-ops.js'
 
 export interface SignAndBroadcastParams {
@@ -69,7 +70,16 @@ export async function signAndBroadcast(
   const signedTxJson = await wallet.signTransaction(buildResult.data.tx as Record<string, unknown>)
 
   // Step 3: Broadcast (signed tx via stdin, no password)
-  const broadcastResult = await broadcast(client, signedTxJson, params.network)
+  let broadcastResult
+  try {
+    broadcastResult = await broadcast(client, signedTxJson, params.network)
+  } catch (error) {
+    if (error instanceof WalletCliExecutionError && error.code === 'timeout') {
+      const txId = extractTxId(signedTxJson) ?? extractTxId(buildResult.data.tx)
+      if (txId) return { txId, stage: 'timeout' }
+    }
+    throw error
+  }
   if (!broadcastResult.success || !broadcastResult.data?.txId) {
     throw new Error(`Failed to broadcast: ${broadcastResult.error?.message}`)
   }
@@ -111,4 +121,19 @@ export async function signAndBroadcast(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function extractTxId(transaction: string | Record<string, unknown>): string | undefined {
+  let parsed: unknown = transaction
+  if (typeof transaction === 'string') {
+    try {
+      parsed = JSON.parse(transaction)
+    } catch {
+      return undefined
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const record = parsed as Record<string, unknown>
+  const txId = record.txID ?? record.txId
+  return typeof txId === 'string' && txId ? txId : undefined
 }

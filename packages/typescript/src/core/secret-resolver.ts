@@ -105,7 +105,7 @@ async function execSecret(ref: SecretRef, label: string): Promise<string> {
       if (code !== 0) {
         reject(
           new ExternalSignerConfigError(
-            `${label}: exec script exited with code ${code}: ${stderr || stdout || '(no output)'}`,
+            `${label}: exec script exited with code ${code}: ${stderr || '(no stderr output)'}`,
           ),
         )
         return

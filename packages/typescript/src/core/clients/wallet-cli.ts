@@ -194,6 +194,14 @@ export class WalletCliClient {
         const stdout = Buffer.concat(stdoutChunks).toString('utf-8')
         const stderr = Buffer.concat(stderrChunks).toString('utf-8')
 
+        // A process terminated by our timer commonly exits without emitting a
+        // JSON envelope. Preserve the timeout classification before attempting
+        // to parse stdout so callers can safely avoid retrying in-flight work.
+        if (timedOut) {
+          reject(new WalletCliExecutionError('wallet-cli timed out', 'timeout'))
+          return
+        }
+
         let envelope: z.infer<typeof ResultEnvelopeSchema>
         try {
           const parsed = JSON.parse(stdout)
@@ -210,16 +218,6 @@ export class WalletCliClient {
 
         if (code === 0 && envelope.success) {
           resolve(envelope as WalletCliResult<T>)
-          return
-        }
-
-        if (timedOut) {
-          reject(
-            new WalletCliExecutionError(
-              envelope.error?.message ?? 'wallet-cli timed out',
-              'timeout',
-            ),
-          )
           return
         }
 

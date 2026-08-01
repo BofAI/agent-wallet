@@ -1,5 +1,7 @@
 # Agent Wallet — Technical Architecture
 
+> **歷史基線**：此文件描述 2.3.0 架構，保留供遷移追溯。現行 TypeScript 架構已移除 Python package、`local_secure`、自有加密 KV、`signRaw` 與 `signMessage`；目前支援 `raw_secret`、`privy`、`wallet_cli`，現行規範請以 `.kiro/steering/` 與 `.kiro/specs/wallet-cli-integration/` 為準。
+
 **Version:** 2.3.0
 **Last Updated:** 2026-03-20
 

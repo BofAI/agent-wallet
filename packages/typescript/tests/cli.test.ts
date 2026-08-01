@@ -29,6 +29,7 @@ import {
 } from '../src/delivery/cli.js'
 import { saveConfig } from '../src/core/config.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
+import { WalletCliClient } from '../src/core/clients/wallet-cli.js'
 
 const TEST_PRIVATE_KEY = '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
 const TEST_MNEMONIC = 'test test test test test test test test test test test junk'
@@ -80,6 +81,11 @@ beforeEach(() => {
   delete process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  vi.spyOn(WalletCliClient.prototype, 'run').mockResolvedValue({
+    success: true,
+    command: 'list',
+    data: {},
+  })
 })
 
 afterEach(() => {

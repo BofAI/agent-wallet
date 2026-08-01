@@ -18,7 +18,7 @@
 
 - [ ] 1.3 (P) 新增註冊表分派機制（`core/providers/wallet-builder.ts`）
   - 新增 `externalSignerRegistry`（`Map<string, ExternalSignerBuilder>`）與 `registerExternalSigner(type, builder)`
-  - `createAdapter` 對外部簽名器走 `externalSignerRegistry.get(conf.type)`；`local_secure`/`raw_secret` 維持既有 if-else
+  - `createAdapter` 對外部簽名器走 `externalSignerRegistry.get(conf.type)`；`raw_secret` 維持既有 if-else
   - `ExternalSignerBuilder` 簽章：`(params: unknown, ctx: { network?: string }) => Wallet`
   - _Requirements: 6.2, 6.3, 6.4_
 
@@ -60,7 +60,6 @@
 - [ ] 3.3 實作簽名/位址相關方法
   - `currentAccount(accountRef?)` → `current`（無密碼）
   - `signTransaction(transactionJson, password, accountRef?)` → `tx sign --transaction <json> --password-stdin`
-  - `signMessage(message, password, accountRef?)` → `message sign --message <text> --password-stdin`
   - `signTypedData(typedDataJson, password, accountRef?)` → `typed-data sign --typed-data <json> --password-stdin`
   - 通用 `run(args, stdinPayload?)` 供 `integrations/` 與未來擴充
   - _Requirements: 1.2, 1.3, 1.4, 4.3_
@@ -71,9 +70,8 @@
   - `implements Wallet, Eip712Capable`；建構子接收 `WalletCliConfig`（含密碼）+ `WalletCliClient`
   - `getAddress()` → `client.currentAccount()`，回 `addresses.tron`，快取結果
   - `signTransaction(payload)` → `client.signTransaction` → `JSON.stringify(data.signed)`
-  - `signMessage(msg)` → `Uint8Array` 以 UTF-8 解碼為文字 → `client.signMessage` → `data.signature.slice(2)` 去 `0x`
   - `signTypedData(data)` → `client.signTypedData` → `data.signature.slice(2)` 去 `0x`
-  - `signRaw(_rawTx)` → 拋 `UnsupportedOperationError`（語意註明：wallet-cli 無對應指令，EIP-191 與 keccak256 raw 語意不同）
+  - 公開 `Wallet` 契約不提供 `signMessage` 或 `signRaw`
   - 密碼只在 adapter 內部經 stdin 傳 wallet-cli，不進 argv/env/日誌
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.2, 9.1, 9.2, 10.2, 10.3, 10.4, 10.5_
 
@@ -126,8 +124,7 @@
   - _Requirements: 4.1-4.8, 7.3, 7.4, 7.6_
 
 - [ ] 7.2 (P) 單元測試：`WalletCliAdapter` 適配器
-  - mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signMessage`/`signTypedData` 去 `0x`、`signRaw` 拋 `UnsupportedOperationError`
-  - `signMessage` 的 `Uint8Array` → UTF-8 文字轉換驗證
+  - mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signTypedData` 去 `0x`
   - 密碼經 stdin 傳遞、不進 argv/env
   - _Requirements: 1.1-1.6, 9.1, 9.2, 10.2, 10.3, 10.4_
 
@@ -138,7 +135,7 @@
 
 - [ ] 7.4 單元測試：擴充性抽象
   - `ExternalSignerConfigResolver` 基底行為
-  - 註冊表：`registerExternalSigner` + `createAdapter` 分派（外部型走註冊表、`local_secure`/`raw_secret` 走既有 if-else）
+  - 註冊表：`registerExternalSigner` + `createAdapter` 分派（外部型走註冊表、`raw_secret` 走既有 if-else）
   - Privy 錯誤回填後 `instanceof WalletError`/`instanceof Privy*` 相容
   - _Requirements: 5.1-5.3, 6.1-6.6_
 
@@ -149,7 +146,7 @@
   - _Requirements: 8.1-8.8_
 
 - [ ] 7.6 整合測試（可跳過的網路測試）：真實 wallet-cli binary
-  - 以真實 `wallet-cli`（CI 預裝）對 `tron:nile`：`current` 取位址（無密碼）→ `message sign`（密碼走 stdin）→ 驗證簽名
+  - 以真實 `wallet-cli`（CI 預裝）對 `tron:nile`：`current` 取位址（無密碼）→ `typed-data sign`（密碼走 stdin）→ 驗證簽名
   - 標記為可跳過（離線/無 CI binary 時）
   - _Requirements: 1.1-1.4, 4.1-4.4_
 

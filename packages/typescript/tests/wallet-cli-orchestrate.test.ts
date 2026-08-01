@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { signAndBroadcast } from '../src/integrations/wallet-cli/orchestrate.js'
 import type { Wallet } from '../src/core/base.js'
 import type { WalletCliClient, WalletCliResult } from '../src/core/clients/wallet-cli.js'
+import { WalletCliExecutionError } from '../src/core/errors.js'
 
 function mockWallet(signedTxJson: string): Wallet {
   return {
@@ -26,8 +27,19 @@ describe('signAndBroadcast', () => {
     const wallet = mockWallet(SIGNED_TX_JSON)
     const client = mockClient()
     ;(client.run as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(mockRunResult({ kind: 'send', mode: 'dry-run', tx: UNSIGNED_TX, fee: {}, rawAmount: '1000000', to: 'T...' }))
-      .mockResolvedValueOnce(mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx123' }))
+      .mockResolvedValueOnce(
+        mockRunResult({
+          kind: 'send',
+          mode: 'dry-run',
+          tx: UNSIGNED_TX,
+          fee: {},
+          rawAmount: '1000000',
+          to: 'T...',
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx123' }),
+      )
 
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
@@ -45,10 +57,23 @@ describe('signAndBroadcast', () => {
     const wallet = mockWallet(SIGNED_TX_JSON)
     const client = mockClient()
     ;(client.run as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(mockRunResult({ kind: 'send', mode: 'dry-run', tx: UNSIGNED_TX, fee: {}, rawAmount: '1000000', to: 'T...' }))
-      .mockResolvedValueOnce(mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx456' }))
+      .mockResolvedValueOnce(
+        mockRunResult({
+          kind: 'send',
+          mode: 'dry-run',
+          tx: UNSIGNED_TX,
+          fee: {},
+          rawAmount: '1000000',
+          to: 'T...',
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx456' }),
+      )
       .mockResolvedValueOnce(mockRunResult({ state: 'pending', confirmed: false, failed: false }))
-      .mockResolvedValueOnce(mockRunResult({ state: 'confirmed', confirmed: true, failed: false, blockNumber: '12345' }))
+      .mockResolvedValueOnce(
+        mockRunResult({ state: 'confirmed', confirmed: true, failed: false, blockNumber: '12345' }),
+      )
 
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
@@ -67,8 +92,19 @@ describe('signAndBroadcast', () => {
     const wallet = mockWallet(SIGNED_TX_JSON)
     const client = mockClient()
     ;(client.run as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(mockRunResult({ kind: 'send', mode: 'dry-run', tx: UNSIGNED_TX, fee: {}, rawAmount: '1000000', to: 'T...' }))
-      .mockResolvedValueOnce(mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx789' }))
+      .mockResolvedValueOnce(
+        mockRunResult({
+          kind: 'send',
+          mode: 'dry-run',
+          tx: UNSIGNED_TX,
+          fee: {},
+          rawAmount: '1000000',
+          to: 'T...',
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'tx789' }),
+      )
       .mockResolvedValueOnce(mockRunResult({ state: 'failed', confirmed: false, failed: true }))
 
     const result = await signAndBroadcast(wallet, client, {
@@ -100,8 +136,19 @@ describe('signAndBroadcast', () => {
     const wallet = mockWallet(SIGNED_TX_JSON)
     const client = mockClient()
     ;(client.run as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(mockRunResult({ kind: 'send', mode: 'dry-run', tx: UNSIGNED_TX, fee: {}, rawAmount: '1000000', to: 'T...' }))
-      .mockResolvedValueOnce(mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'txMain' }))
+      .mockResolvedValueOnce(
+        mockRunResult({
+          kind: 'send',
+          mode: 'dry-run',
+          tx: UNSIGNED_TX,
+          fee: {},
+          rawAmount: '1000000',
+          to: 'T...',
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'txMain' }),
+      )
 
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
@@ -111,5 +158,30 @@ describe('signAndBroadcast', () => {
     })
 
     expect(result.txId).toBe('txMain')
+  })
+
+  it('returns timeout with the signed tx id when broadcast may still be in flight', async () => {
+    const wallet = mockWallet(SIGNED_TX_JSON)
+    const client = mockClient()
+    ;(client.run as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(
+        mockRunResult({
+          kind: 'send',
+          mode: 'dry-run',
+          tx: UNSIGNED_TX,
+          fee: {},
+          rawAmount: '1000000',
+          to: 'T...',
+        }),
+      )
+      .mockRejectedValueOnce(new WalletCliExecutionError('timed out', 'timeout'))
+
+    await expect(
+      signAndBroadcast(wallet, client, {
+        to: 'T...',
+        amount: '1',
+        network: 'tron:nile',
+      }),
+    ).resolves.toEqual({ txId: 'abc', stage: 'timeout' })
   })
 })

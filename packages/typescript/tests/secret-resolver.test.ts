@@ -108,6 +108,17 @@ describe('resolveSecret', () => {
     )
   })
 
+  it('never includes stdout in a failed script error', async () => {
+    const script = makeExecutable('leak.sh', '#!/bin/bash\necho "super-secret"\nexit 1')
+    try {
+      await resolveSecret({ exec: script }, 'test-label')
+      expect.fail('should have thrown')
+    } catch (error) {
+      expect((error as Error).message).not.toContain('super-secret')
+      expect((error as Error).message).toContain('(no stderr output)')
+    }
+  })
+
   it('throws when script produces no output', async () => {
     const script = makeExecutable('empty', emptyScript())
     await expect(resolveSecret({ exec: script }, 'test-label')).rejects.toThrow(

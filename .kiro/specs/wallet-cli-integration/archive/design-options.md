@@ -1,5 +1,7 @@
 # Design Options — wallet-cli 對接
 
+> **歷史文件註記（2026-08-01）**：選項比較保留當時背景；目前已移除 `local_secure`、公開 `signMessage`/`signRaw` 與 Python package，wallet-cli adapter 的現行能力為交易簽名與 typed-data 簽名。
+
 前提（使用者確認）：wallet-cli **後續將替代 `local_secure`** 成為 TRON 本地金鑰的簽名後端。故選項評估聚焦於「wallet-cli 如何成為 agent-wallet 的簽名來源」，並兼顧廣播/查詢編排。評估軸：① 對「只簽名」核心的尊重；② 金鑰擁有權與耦合風險；③ 與既有 adapter/provider 模式的一致性。
 
 ## 選項 A：子程序簽名適配器 + 選用編排層（建議）

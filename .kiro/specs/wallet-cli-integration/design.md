@@ -1,13 +1,15 @@
 # Design Document — wallet-cli 對接
 
+> **目前實作決策（2026-08-01）**：`local_secure`、自有加密 KV、Python package，以及公開 `Wallet.signRaw` / `Wallet.signMessage` 已移除。wallet-cli adapter 目前提供 `getAddress`、`signTransaction` 與 `signTypedData`。本文後續若出現 `local_secure`、`message sign` 或 `signRaw`，僅保留為早期設計沿革，不代表目前公開契約；現行驗收以 `requirements.md` 為準。
+
 ## Overview
 
-本設計讓 agent-wallet 對接同級目錄下的 wallet-cli。依使用者確認的方向：**wallet-cli 後續將替代 `local_secure`，成為 TRON 本地金鑰的簽名後端**。
+本設計讓 agent-wallet 對接 wallet-cli，作為 TRON 外部簽名後端。
 
-wallet-cli 是完整的 TRON 金鑰管理 + 簽名 + 鏈操作工具（自有加密 keystore、`tx sign` / `message sign` / `typed-data sign` / `current` / 建交易 / 廣播 / 查詢）。agent-wallet 則是跨來源簽名 SDK（EVM+TRON、Privy WaaS、多錢包切換、config/env 解析）。對接後：
+wallet-cli 是完整的 TRON 金鑰管理 + 簽名 + 鏈操作工具。agent-wallet 使用其 `tx sign`、`typed-data sign`、`current`、建交易、廣播與查詢能力。
 
-- **TRON 本地簽名**：由 wallet-cli keystore 擁有金鑰、agent-wallet 透過子程序委派簽名（替代 agent-wallet 自有的 `local_secure`/`local`/`raw_secret` TRON 路徑）。
-- **EVM 簽名 / Privy**：不變（wallet-cli 僅 TRON；`local_secure`/`raw_secret`/`privy` 仍負責 EVM）。
+- **TRON 外部簽名**：由 wallet-cli keystore 擁有金鑰、agent-wallet 透過子程序委派簽名。
+- **EVM 簽名 / Privy**：由 `raw_secret` 與 `privy` 負責；wallet-cli 目前僅支援 TRON。
 - **廣播 / 查詢 / 編排**：作為選用的 `integrations/` 層，復用同一 wallet-cli client。
 
 對接邊界採 wallet-cli 文件保證的穩定機器契約（`wallet-cli.result.v1` JSON 信封 + 退出碼 0/1/2），以**子程序 + JSON 解析**整合，不匯入 wallet-cli 未公開內部、不直接讀其 keystore。
@@ -18,14 +20,14 @@ wallet-cli 的 keystore 主密碼是**外部憑證**（用於解鎖 wallet-cli �
 
 - wallet-cli 密碼**直接存於 config params**（`wallets_config.json`，檔案 `0600`），如 `PrivyWalletParams.app_secret`。
 - 由 `WalletCliConfigResolver`（鏡像 `PrivyConfigResolver`）從 config source 解析、校驗必填。
-- **不**走 agent-wallet 的主密碼解析（`AGENT_WALLET_PASSWORD` / runtime secrets / 加密 KV）；`createAdapter` 的 `wallet_cli` 分支不使用 `password` 參數（與 Privy 分支一致）。
+- **不**走已移除的 agent-wallet 主密碼或加密 KV；`createAdapter` 的 `wallet_cli` 分支不接收額外主密碼參數。
 - 不支援 env 覆寫（與 Privy 一致：`EnvWalletProvider` 僅處理 `raw_secret`）。
 
 > 修正說明：先前設計曾提「單一主密碼慣例」（把 agent-wallet 主密碼同時當 wallet-cli 密碼），此為錯誤——兩者保護不同對象（agent-wallet KV store vs wallet-cli keystore），不應強制相同。改為 config-stored 憑證，與 Privy `app_secret` 一致。
 
 ### Goals
 - 新增 `wallet_cli` 錢包類型，由 wallet-cli keystore 擁有 TRON 金鑰、agent-wallet 委派簽名。
-- `WalletCliAdapter` 實作 `Wallet` + `Eip712Capable`，把 `signTransaction` / `signMessage` / `signTypedData` 委派給 wallet-cli 簽名指令，`getAddress` 用 `current`。
+- `WalletCliAdapter` 實作 `Wallet` + `Eip712Capable`，把 `signTransaction` / `signTypedData` 委派給 wallet-cli 簽名指令，`getAddress` 用 `current`。
 - 沿用既有 adapter/provider/config 模式（與 Privy 先例一致）：client 在 `core/clients/`、adapter 在 `core/adapters/`、config resolver 在 `core/providers/`、類型在 `core/config.ts`、`createAdapter` 分派。
 - 密碼模型鏡像 Privy `app_secret`：config-stored、resolver 解析、不涉 agent-wallet 主密碼。
 - 提供選用編排能力（`integrations/`）：wallet-cli 建交易 → agent-wallet 簽名 → wallet-cli 廣播 → wallet-cli 追蹤。
@@ -38,12 +40,12 @@ wallet-cli 的 keystore 主密碼是**外部憑證**（用於解鎖 wallet-cli �
 - 不為 wallet-cli 密碼引入 env 覆寫（與 Privy 一致；日後若有需求再評估）。
 - 不涵蓋 EVM 廣播或 EVM 本地簽名移轉（wallet-cli 僅 TRON）。
 - 不更動 wallet-cli 專案（僅消費其 CLI）。
-- 本期不強制廢棄 `local_secure`；`wallet_cli` 與 `local_secure` 先共存，後續再評估 TRON 路徑淘汰時程（見「演進與遷移」）。
+- `local_secure` 已移除；需要本地明文開發簽名時使用 `raw_secret`，需要外部 TRON keystore 時使用 `wallet_cli`。
 
 ### 關鍵假設（flagged）
-1. **「替代 local_secure」僅及 TRON**：wallet-cli 為 TRON-only，EVM 仍用既有 adapter。`wallet_cli` 類型為 TRON-only。
+1. **TRON-only**：`wallet_cli` 類型目前只處理 TRON；EVM 使用 `raw_secret` 或 `privy`。
 2. **密碼為 config-stored 憑證（鏡像 app_secret）**：wallet-cli keystore 密碼存於 config params，非 agent-wallet 主密碼。
-3. **共存優先、淘汰在後**：本期新增 `wallet_cli` 與既有型並存；`local_secure` 的 TRON 淘汰為後續獨立決策。
+3. **單一 keystore 擁有者**：TRON 外部 keystore 由 wallet-cli 擁有，agent-wallet 不再維護 `local_secure`。
 
 ## Architecture
 
@@ -51,7 +53,7 @@ wallet-cli 的 keystore 主密碼是**外部憑證**（用於解鎖 wallet-cli �
 - `core/adapters/*`：純簽名器。`core/clients/privy.ts`：外部簽名來源的 HTTP 傳輸 client（置於 core 的先例）。
 - `core/providers/privy-config.ts`：`PrivyConfigResolver` 從 config source 解析 `app_secret` 等，校驗必填，拋 `PrivyConfigError`。**config-only，無 env。**
 - `core/providers/wallet-builder.ts`：`createAdapter` 的 Privy 分支為 `resolver → resolve → client → adapter`，**不使用 `password` 參數**。
-- `core/providers/config-provider.ts`：`walletIsAvailableWithoutPassword` = `conf.type !== 'local_secure'`；即 privy（及將來的 wallet_cli）無需 agent-wallet 主密碼即可用。
+- `core/providers/config-provider.ts`：所有目前支援的 config wallet 均自含其解析所需資料，不依賴 agent-wallet 主密碼。
 - `core/config.ts`：`WalletConfigSchema`（zod discriminated union by `type` + `params`）。
 - steering（`structure.md`）：「Do not mix transaction broadcasting or RPC orchestration into this project; this project signs only.」
 
@@ -77,7 +79,7 @@ graph TB
 
 - **`core/clients/wallet-cli.ts`**：子程序傳輸 + `wallet-cli.result.v1` zod 校驗 + 退出碼分派。對齊 `PrivyClient` 先例。
 - **`core/providers/wallet-cli-config.ts`**：`WalletCliConfigResolver`（鏡像 `PrivyConfigResolver`）從 config params 解析密碼與帳戶。對齊 `privy-config.ts`。
-- **`core/adapters/wallet-cli.ts`**：`WalletCliAdapter implements Wallet, Eip712Capable`。僅用 client 的**簽名 / 位址**指令（`tx sign` / `message sign` / `typed-data sign` / `current`），不廣播。→ 核心維持「signs only」。
+- **`core/adapters/wallet-cli.ts`**：`WalletCliAdapter implements Wallet, Eip712Capable`。僅用 client 的**簽名 / 位址**指令（`tx sign` / `typed-data sign` / `current`），不廣播。→ 核心維持「signs only」。
 - **`integrations/wallet-cli/`**：廣播 / 查詢 / 編排。復用同一 client；標示選用、可安全移除、不為 `resolveWallet` 依賴。
 - **`core/config.ts`**：擴充 `WalletConfigSchema` 新增 `wallet_cli` 型 + `WalletCliWalletParamsSchema`。
 
@@ -89,7 +91,6 @@ graph TB
 |------|----------|--------|--------|
 | 取位址 | `current` → `addresses.tron`（base58） | wallet-cli | `WalletCliAdapter.getAddress` |
 | 簽交易 | `tx sign` → `data.signed`（完整已簽 tx，含 `signature[]`） | wallet-cli | `WalletCliAdapter.signTransaction` → `JSON.stringify(data.signed)` |
-| 簽訊息 | `message sign` → `data.signature`（`0x` 前綴） | wallet-cli | adapter 去 `0x` 前綴 |
 | 簽 typed-data | `typed-data sign` → `data.signature`（`0x` 前綴） | wallet-cli | adapter 去 `0x` 前綴 |
 | 建交易（編排） | `tx send --dry-run` → `data.tx`（未簽）+ `data.fee` | wallet-cli | `Wallet.signTransaction` |
 | 廣播（編排） | `tx broadcast --tx-stdin` → `data.txId` + `data.stage` | wallet-cli | caller |
@@ -106,7 +107,7 @@ graph TB
 
 ## Component Design
 
-### Part 1 — 核心簽名後端（替代 local_secure，TRON）
+### Part 1 — 核心 TRON 外部簽名後端
 
 #### 1.1 Config 擴充（`core/config.ts`）
 
@@ -164,7 +165,6 @@ interface WalletCliResult<T> {
 方法（簽名/位址相關，供 adapter 用）：
 - `currentAccount(accountRef?)` → `wallet-cli current [--account <ref>] -o json`（無密碼）。
 - `signTransaction(transactionJson, password, accountRef?)` → `tx sign --transaction <json> --password-stdin`（密碼走 stdin）。
-- `signMessage(message, password, accountRef?)` → `message sign --message <text> --password-stdin`。
 - `signTypedData(typedDataJson, password, accountRef?)` → `typed-data sign --typed-data <json> --password-stdin`。
 - 通用 `run(args, stdinPayload?)`：供 `integrations/` 與未來擴充。
 
@@ -187,9 +187,7 @@ class WalletCliAdapter implements Wallet, Eip712Capable {
 方法對應與正規化：
 - `getAddress()` → `client.currentAccount(config.account)` → `data.addresses.tron`；快取結果。不需密碼。
 - `signTransaction(payload)` → `client.signTransaction(JSON.stringify(payload), config.password, config.account)` → `JSON.stringify(data.signed)`（符合 agent-wallet 慣例：回已簽 tx JSON 字串）。
-- `signMessage(msg)` → 將 `Uint8Array` 以 UTF-8 解碼為文字 → `client.signMessage(text, config.password, config.account)` → `data.signature.slice(2)`（去 `0x` 前綴）。**語意注意**：wallet-cli `message sign` 簽的是 UTF-8 文字（EIP-191 personal_sign），非任意位元組；與 `TronSigner`（直接 keccak256 位元組）語意有別。純 ASCII 訊息一致；非 UTF-8 位元組簽名會不同。需簽名任意位元組應改用 `signTransaction` 或待 wallet-cli 支援 hex 輸入。
 - `signTypedData(data)` → `client.signTypedData(JSON.stringify(data), config.password, config.account)` → `data.signature.slice(2)`。
-- `signRaw(_rawTx)` → 拋 `UnsupportedOperationError('wallet-cli adapter does not support raw-digest signing; use signTransaction with an unsigned tx object')`（與 `PrivyAdapter.signRaw` 非 tron 行為一致；wallet-cli 無對應指令且語意不同）。
 
 **密碼處理**：
 - 密碼來自已解析 config（`params.password`），經 stdin（`--password-stdin`）傳 wallet-cli，**不進 argv/env/日誌**。
@@ -213,9 +211,7 @@ const builder = externalSignerRegistry.get(conf.type)
 if (builder) return builder(conf.params, { network })
 ```
 
-→ `ConfigWalletProvider` / `resolveWallet` **不需改動**；既有解析順序自動套用。`local_secure`/`raw_secret` 維持既有 if-else（需 password/configDir/secretLoader，語意不同）。
-
-**`walletIsAvailableWithoutPassword`**：`wallet_cli` 回 `true`（與 `privy` 一致，因 `conf.type !== 'local_secure'`）——即無需 agent-wallet 主密碼即可用（其密碼自含於 config params）。既有邏輯無需改動即正確。
+→ `ConfigWalletProvider` / `resolveWallet` 自動套用；`raw_secret` 維持既有 if-else，外部簽名器走註冊表。
 
 #### 1.6 匯出（`src/index.ts`）
 
@@ -309,7 +305,7 @@ const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
 function registerExternalSigner(type: string, builder: ExternalSignerBuilder): void
 ```
 
-`createAdapter` 對外部型走 `externalSignerRegistry.get(conf.type)`；`local_secure`/`raw_secret` 維持 if-else（需 password/configDir/secretLoader，語意不同）。config schema（zod union）仍需登錄新型的 params schema——這是型別安全所必需，無法迴避，但僅一處。
+`createAdapter` 對外部型走 `externalSignerRegistry.get(conf.type)`；`raw_secret` 維持 if-else。config schema（zod union）仍需登錄新型的 params schema，以維持型別安全。
 
 ### 新增外部錢包的步驟（擴充配方）
 
@@ -389,7 +385,7 @@ npm install -g @tron-walletcli/wallet-cli       # 兩者皆全域，PATH 可見
 
 ### 降級語意
 
-`wallet_cli` 錢包類型為**可選能力**：未安裝 wallet-cli 時，agent-wallet 其餘功能（EVM 簽名、Privy、`local_secure`/`raw_secret`）完全不受影響。僅當使用者實際配置 `wallet_cli` 條目並觸發簽名時，才需 binary 可用；否則零感知。
+`wallet_cli` 錢包類型為**可選能力**：未安裝 wallet-cli 時，agent-wallet 其餘功能（EVM 簽名、Privy、`raw_secret`）完全不受影響。建立或使用 `wallet_cli` 條目時才需 binary 可用。
 
 ## System Flows
 
@@ -418,28 +414,6 @@ sequenceDiagram
     Signer->>Signer: 快取 address
     Signer-->>App: "T..."
   end
-```
-
-### 流程 B：簽訊息（`signMessage`，密碼走 stdin 的標準範式）
-
-所有軟體帳戶簽名的典型模式：payload 走 argv（釋放 fd0），密碼走 stdin（`--password-stdin`）。回傳值需去 `0x` 前綴以對齊既有 `TronSigner` 慣例。
-
-```mermaid
-sequenceDiagram
-  participant App as Caller
-  participant Signer as WalletCliAdapter
-  participant Client as WalletCliClient
-  participant Cli as wallet-cli 子程序
-
-  App->>Signer: signMessage(Buffer.from("hello"))
-  Signer->>Client: signMessage(message="hello", password=<config>, account="main-1")
-  Client->>Cli: spawn: message sign --message "hello" --account main-1 --password-stdin -o json
-  Note over Client,Cli: argv: [message, sign, --message, "hello",<br/>--account, main-1, --password-stdin, -o, json]<br/>stdin: 寫入密碼（一次性，後關閉）<br/>stdout: 一個 result.v1 frame
-  Cli-->>Client: exit 0 + { data: { address, message, signature: "0x9f3c..." } }
-  Client->>Client: zod 校驗信封；退出碼 0 → success
-  Client-->>Signer: WalletCliResult<MessageSignResult>
-  Signer->>Signer: signature.slice(2) 去 0x 前綴
-  Signer-->>App: "9f3c..."（無 0x，與 TronSigner 一致）
 ```
 
 ### 流程 C：簽交易（`signTransaction`，payload 走 argv）
@@ -541,7 +515,6 @@ const ResultEnvelopeSchema = z.object({
 ### 命令資料模型（型別化介面）
 - `CurrentAccountResult`：`{ accountId, label, type, index, active, addresses: { tron }, seedId? }`
 - `TxSignResult`：`{ kind: 'sign', mode: 'sign-only', address, txId, signed: { ...tx, signature: string[] } }`
-- `MessageSignResult`：`{ address, message, signature }`（signature `0x` 前綴）
 - `TypedDataSignResult`：`{ address, primaryType, digest, signature }`（signature `0x` 前綴）
 - `BuildTransferResult`：`{ kind, mode: 'dry-run', tx: UnsignedTx, fee, rawAmount, to }`
 - `BroadcastResult`：`{ kind: 'broadcast', stage, txId, confirmed?, failed?, blockNumber? }`
@@ -556,10 +529,6 @@ const ResultEnvelopeSchema = z.object({
     "tron_main": {
       "type": "wallet_cli",
       "params": { "account": "main-1", "password": "Abc12345!@" }
-    },
-    "evm_secure": {
-      "type": "local_secure",
-      "params": { "secret_ref": "evm_secure" }
     },
     "default_privy": {
       "type": "privy",
@@ -592,8 +561,7 @@ const ResultEnvelopeSchema = z.object({
 
 ## 演進與遷移
 
-- **本期**：`wallet_cli` 為新增型，與 `local_secure` / `raw_secret` / `privy` 共存。使用者可將 TRON 錢包以 `wallet_cli` 配置（金鑰在 wallet-cli keystore，密碼存於 config）。
-- **後續（獨立決策）**：評估 TRON 路徑上 `local_secure` / `raw_secret` 的淘汰。EVM 不受影響。
+- **目前**：支援 `raw_secret` / `privy` / `wallet_cli`；`local_secure` 已移除。使用者可將 TRON 錢包以 `wallet_cli` 配置（金鑰在 wallet-cli keystore，密碼可直接存於 config 或由 exec script 解析）。
 - **遷移建議**：以 wallet-cli `create`/`import` 建立金鑰 → 於 agent-wallet config 加 `wallet_cli` 條目（`account` + `password`）。
 
 ## CLI Support（選用，後續階段）
@@ -606,9 +574,9 @@ const ResultEnvelopeSchema = z.object({
   - `WalletCliConfigResolver`：校驗密碼必填（缺失拋 `WalletCliConfigError`）、`account` 選填、正規化（鏡像 `PrivyConfigResolver` 測試）。
   - `WalletCliClient`：stub `spawn` 模擬 exit 0/1/2 與 ENOENT，驗證信封解析與錯誤分派；stdin 餵密碼/tx 的串流行為。
   - zod 信封校驗：合法/缺欄/未知 schema fixture。
-  - `WalletCliAdapter`：mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signMessage`/`signTypedData` 去 `0x`、`signRaw` 拋 `UnsupportedOperationError`、密碼經 stdin 傳遞。
+  - `WalletCliAdapter`：mock client，驗證 `getAddress` 快取、`signTransaction` 回 `JSON.stringify(data.signed)`、`signTypedData` 去 `0x`、密碼經 stdin 傳遞。
   - `createAdapter`：`wallet_cli` 分支正確建構 adapter（不使用 `password` 參數）；config schema 校驗 `wallet_cli` 條目。
-- **整合（可跳過的網路測試）**：以真實 wallet-cli binary（CI 預裝）對 `tron:nile`：`current` 取位址（無密碼）→ `message sign`（密碼走 stdin）→ 驗證簽名可由 agent-wallet 既有驗證邏輯復原。
+- **整合（可跳過的網路測試）**：以真實 wallet-cli binary（CI 預裝）對 `tron:nile`：`current` 取位址（無密碼）→ `typed-data sign`（密碼走 stdin）→ 驗證簽名。
 - **編排**：mock `Wallet` + mock `WalletCliClient`，驗證 `signAndBroadcast` 的建→簽→廣→追蹤順序與分支（confirmed/failed/timeout）。
 - **跨平台**：子程序啟動、stdin 串流、PATH 解析在 macOS/Linux 明確測試。
 - **Post-Change 驗證**（依 steering）：`pnpm test`、`pnpm lint`、`pnpm build` 需通過。
@@ -616,7 +584,7 @@ const ResultEnvelopeSchema = z.object({
 ## Security Considerations
 
 - **金鑰隔離**：金鑰只在 wallet-cli keystore；agent-wallet 不解密、不持有明文私鑰。
-- **密碼為 config 憑證（鏡像 app_secret）**：wallet-cli keystore 密碼存於 `wallets_config.json` params（`0600`），與 Privy `app_secret` 同一姿態；**非** agent-wallet 主密碼，不經 `AGENT_WALLET_PASSWORD` / runtime secrets。
+- **密碼為 config 憑證（鏡像 app_secret）**：wallet-cli keystore 密碼存於 `wallets_config.json` params（`0600`）或透過 exec script 解析，與 Privy `app_secret` 同一姿態。
 - **密碼傳遞**：密碼只在 adapter 內部經 stdin（`--password-stdin`）傳 wallet-cli，**不進 argv/env/日誌**；廣播/建交易不需密碼。
 - **不經 argv/env 傳機密**：已簽 tx 經 stdin（`--tx-stdin`）；payload（交易/typed-data/message）非機密，走 argv（對齊 wallet-cli 規範）。
 - **mainnet 防護**：編排助手在 `tron:mainnet` 動真錢時要求顯式確認旗標；預設測試用 `tron:nile`。
@@ -625,7 +593,7 @@ const ResultEnvelopeSchema = z.object({
 
 ## Performance & Scalability
 
-- 子程序往返成本可接受（軟體簽名本地無網路，`message sign` ~15ms）；`WalletCliClient` 無狀態。
+- 子程序往返成本可接受；`WalletCliClient` 無狀態。
 - `getAddress` 結果於 adapter 內快取，避免重複 `current` 呼叫。
 - 廣播/查詢結果由 caller 快取（client 本身不快取，避免跨網路污染）。
 
@@ -647,7 +615,7 @@ const ResultEnvelopeSchema = z.object({
 
 ## Supporting References
 
-- `research.md`：兩專案定位、wallet-cli 簽名後端能力、密碼模型（config-stored 鏡像 app_secret）、簽名格式正規化、風險點。
-- `design-options.md`：三選項（A: 子程序適配器／B: in-process 匯入／C: 直讀 keystore）比較，建議 A。
+- `archive/research.md`：整合前研究紀錄，已凍結。
+- `archive/design-options.md`：早期方案比較，已凍結。
 - wallet-cli：`ts/docs/machine-interface.md`、`ts/docs/commands/{tx/sign,tx/broadcast,tx/send,tx/status,message/sign,typed-data/sign,current,create,account/info,account/balance}.md`、`ts/docs/concepts/security.md`、`ts/skills/wallet-cli/SKILL.md`。
 - agent-wallet：`packages/typescript/src/core/adapters/{tron,privy}.ts`、`core/clients/privy.ts`、`core/providers/{privy-config,config-provider,wallet-builder}.ts`、`core/config.ts`、`core/resolver.ts`、`.kiro/steering/structure.md`。

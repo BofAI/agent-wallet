@@ -1,5 +1,7 @@
 # 需求審查報告
 
+> **歷史文件註記（2026-08-01）**：本報告驗證的是早期設計基線。其 `local_secure`、`signMessage` 與 `signRaw` 結論已被後續實作決策取代；目前狀態請參考更新後的 `requirements.md` 與 `design.md`。
+
 審查範圍：`requirements.md` ↔ `design.md` ↔ 既有程式碼庫。目標：找出缺口、矛盾、不可行項，並驗證可追溯性。
 
 ## 審查結論

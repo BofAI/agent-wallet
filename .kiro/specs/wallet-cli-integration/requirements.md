@@ -2,7 +2,7 @@
 
 ## 簡介
 
-本規格定義將 wallet-cli 整合為 agent-wallet 之 TRON 本地簽名後端的需求。wallet-cli 後續將替代 agent-wallet 自有的 `local_secure`/`local`/`raw_secret`（TRON 部分），成為 TRON 金鑰的擁有者與簽名來源；agent-wallet 透過子程序委派簽名，金鑰儲存交由 wallet-cli 的加密 keystore 擁有。整合範圍涵蓋簽名適配器、配置模型、子程序互動、錯誤處理、擴充性（為後續外部錢包預留）、安裝與相依，以及選用的鏈操作編排。EVM 簽名與 Privy 不受影響。
+本規格定義將 wallet-cli 整合為 agent-wallet 之 TRON 本地簽名後端的需求。agent-wallet 已移除 `local_secure`、自有加密 KV、Python package，以及公開 `signRaw`/`signMessage` 契約；目前支援 `raw_secret`、`privy` 與 `wallet_cli`。wallet-cli 成為 TRON 外部簽名來源，金鑰由其加密 keystore 單獨擁有。整合範圍涵蓋交易與 typed-data 簽名、配置模型、子程序互動、錯誤處理、擴充性、安裝相依，以及選用鏈操作編排。
 
 需求聚焦於可驗證的行為，並與 `design.md` 之設計決策一一對應。
 
@@ -15,15 +15,15 @@
 1. 當使用者配置 `wallet_cli` 錢包類型時，agent-wallet 系統應透過 `WalletCliAdapter`（實作 `Wallet` 與 `Eip712Capable` 介面）提供簽名能力。
 2. 當呼叫 `getAddress()` 時，agent-wallet 系統應以 `wallet-cli current` 子程序取得 TRON base58 位址，並快取結果以避免重複呼叫。
 3. 當呼叫 `signTransaction(payload)` 時，agent-wallet 系統應以 `wallet-cli tx sign` 子程序產生已簽名交易，並回傳 `JSON.stringify(data.signed)` 以符合既有 `TronSigner` 輸出慣例。
-4. 當呼叫 `signMessage(msg)` 時，agent-wallet 系統應將 `Uint8Array` 以 UTF-8 解碼為文字，以 `wallet-cli message sign` 子程序簽名，並去除回傳簽名的 `0x` 前綴。當呼叫 `signTypedData(data)` 時，應以 `wallet-cli typed-data sign` 子程序簽名（標準 EIP-712 JSON，形狀相容），並去除回傳簽名的 `0x` 前綴。**語意注意**：`signMessage` 簽的是 UTF-8 文字（EIP-191 personal_sign），與 `TronSigner`（直接 keccak256 位元組）語意有別；純 ASCII 訊息一致，非 UTF-8 位元組簽名會不同。
-5. 當呼叫 `signRaw(rawTx)` 時，agent-wallet 系統應拋出 `UnsupportedOperationError`，因 wallet-cli 無對應指令且其 `message sign`（EIP-191）與 `signRaw`（keccak256 後簽名）語意不同。
+4. 當呼叫 `signTypedData(data)` 時，應以 `wallet-cli typed-data sign` 子程序簽名（標準 EIP-712 JSON，形狀相容），並去除回傳簽名的 `0x` 前綴。
+5. 公開 `Wallet` 契約不提供 `signRaw` 或 `signMessage`；CLI 亦不提供 `sign msg`。
 6. 當 `wallet_cli` 錢包類型被選用時，agent-wallet 系統不應自行解密或持有 wallet-cli 的明文私鑰；金鑰應全程留在 wallet-cli 進程內。
 
 ### 需求 2：密碼模型——config-stored 憑證
 **目標：** 作為營運者，我希望能以與 Privy `app_secret` 一致的方式管理 wallet-cli keystore 密碼，以便密碼作為外部簽名後端憑證獨立於 agent-wallet 主密碼管理。
 
 #### 驗收準則
-1. agent-wallet 系統應將 wallet-cli keystore 密碼儲存於 `wallets_config.json` 的 `wallet_cli` 類型 params（`params.password`），而非經 agent-wallet 主密碼解析路徑（`AGENT_WALLET_PASSWORD` / runtime secrets / 加密 KV）。
+1. agent-wallet 系統應將 wallet-cli keystore 密碼儲存於 `wallets_config.json` 的 `wallet_cli` 類型 params（`params.password`），或以 `SecretRef.exec` 延遲解析；不使用已移除的 agent-wallet 主密碼與加密 KV 路徑。
 2. 當建構 `wallet_cli` adapter 時，`createAdapter` 應不使用 agent-wallet 主密碼參數（與 Privy 分支一致）。
 3. 當 `wallet_cli` 條目缺少 `password` 時，agent-wallet 系統應在 config 解析階段（resolver）fail-fast 拋出 `WalletCliConfigError`，早於任何簽名呼叫。
 4. agent-wallet 系統不應為 wallet-cli 密碼提供環境變數覆寫（與 Privy `app_secret` 一致：`EnvWalletProvider` 僅處理 `raw_secret`）。
@@ -69,7 +69,7 @@
 1. agent-wallet 系統應提供 `ExternalSignerConfigResolver` 泛型基底，封裝 config-only 解析、正規化與必填校驗共用邏輯。
 2. agent-wallet 系統應提供 `registerExternalSigner(type, builder)` 註冊機制，使外部簽名器自行註冊 builder。
 3. 當 `createAdapter` 遇到外部簽名器類型時，應經註冊表分派（`externalSignerRegistry.get(conf.type)`），而非逐型 if-else。
-4. 當 `local_secure`/`raw_secret` 類型被使用時，應維持既有 if-else 分支（因其需 password/configDir/secretLoader，語意不同）。
+4. 當 `raw_secret` 類型被使用時，應維持既有 if-else 分支；外部簽名器走註冊表。
 5. 當新增外部錢包時，應可僅透過「`core/base.ts` 新增 `WalletType` enum 值 + `core/config.ts` 新增 params schema + extend 共享基底 + 註冊 builder + 匯出」完成，無需修改 `createAdapter` 主幹。
 6. agent-wallet 系統不應引入犧牲 zod discriminated union 編譯期型別安全的完全動態 plugin 系統。
 
@@ -78,7 +78,7 @@
 
 #### 驗收準則
 1. agent-wallet 系統應將 `@tron-walletcli/wallet-cli` 宣告為 optional peer dependency（非 `dependencies` 硬依賴）。
-2. 當未安裝 wallet-cli 時，agent-wallet 的 EVM 簽名、Privy、`local_secure`/`raw_secret` 功能應完全不受影響（零感知）。
+2. 當未安裝 wallet-cli 時，agent-wallet 的 EVM 簽名、Privy 與 `raw_secret` 功能應完全不受影響（零感知）。僅建立或使用 `wallet_cli` 配置時才要求 binary。
 3. 當 `WalletCliClient` 首次呼叫解析 binary 時，應依序嘗試：顯式 `binary` 選項 → `AGENT_WALLET_WALLET_CLI_PATH` 環境變數 → PATH 上的 `wallet-cli` → 皆無拋 `WalletCliNotFoundError`。
 4. 當 `WalletCliClient` 首次呼叫且偵測到 Node 版本 < 20 時，應拋出明確錯誤提示 wallet-cli 需 Node ≥20。
 5. agent-wallet 系統的 `engines` 應維持 Node ≥18（不因 wallet-cli 相依而抬升整體下限）。
@@ -114,7 +114,7 @@
 
 #### 驗收準則
 1. 當處理鏈上金額時，agent-wallet 系統應一律以十進位字串處理，絕不轉為 JS number。
-2. 當 `signMessage`/`signTypedData` 回傳簽名時，應去除 `0x` 前綴以對齊既有 `TronSigner` 慣例。
+2. 當 `signTypedData` 回傳簽名時，應去除 `0x` 前綴以對齊既有 `TronSigner` 慣例。
 3. 當 `signTransaction` 回傳已簽交易時，應為 `JSON.stringify(data.signed)`，且 `signature[]` 結構應與既有 `TronSigner` 一致（TRON `r||s||v`）。
 4. 當未簽/已簽 TRON 交易物件在 agent-wallet 與 wallet-cli 間傳遞時，應無需格式轉換即可接合。
 5. 當 `wallet_cli` 錢包被使用時，金鑰的單一擁有者應為 wallet-cli keystore，agent-wallet 不應重複簽名或二次解鎖。
