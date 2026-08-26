@@ -50,6 +50,16 @@ describe('WalletCliConfigResolver', () => {
     })
     await expect(resolver.resolve()).rejects.toThrow(WalletCliConfigError)
   })
+
+  it('preserves an exec reference without executing it during resolve', async () => {
+    const resolver = new WalletCliConfigResolver({
+      source: { password: { exec: '  /path/that/is/not/executed  ', timeout: 1234 } },
+    })
+    await expect(resolver.resolve()).resolves.toEqual({
+      account: undefined,
+      password: { exec: '/path/that/is/not/executed', timeout: 1234 },
+    })
+  })
 })
 
 describe('WalletConfigSchema — wallet_cli type', () => {

@@ -1,6 +1,12 @@
 // Core types
 export { Network, WalletType } from './core/base.js'
-export type { Wallet, Eip712Capable, WalletProvider, SignOptions } from './core/base.js'
+export type {
+  Wallet,
+  Eip712Capable,
+  MessageSigningCapable,
+  WalletProvider,
+  SignOptions,
+} from './core/base.js'
 
 // Error classes
 export {
@@ -43,6 +49,20 @@ export type { WalletCliConfig, WalletCliConfigSource } from './core/providers/wa
 // Secret resolver
 export type { SecretRef, SecretValue } from './core/secret-resolver.js'
 export { resolveSecret, isSecretRef, DEFAULT_EXEC_TIMEOUT_MS } from './core/secret-resolver.js'
+export {
+  StaticSecretProvider,
+  ExecSecretProvider,
+  defaultSecretProviderFactory,
+  DEFAULT_SECRET_STDOUT_LIMIT,
+  DEFAULT_SECRET_STDERR_LIMIT,
+} from './core/secret-provider.js'
+export type {
+  SecretProvider,
+  SecretLease,
+  SecretProviderFactory,
+  SecretContext,
+  ExecSecretProviderOptions,
+} from './core/secret-provider.js'
 
 // Resolver
 export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
@@ -65,9 +85,30 @@ export { WalletCliClient } from './core/clients/wallet-cli.js'
 export type {
   WalletCliClientOptions,
   WalletCliResult,
+  WalletCliSuccessResult,
+  WalletCliFailureResult,
+  WalletCliWarning,
+  WalletCliLaunchTarget,
+  WalletCliRunContract,
+  WalletCliCompatibility,
+  WalletCliCatalog,
+  WalletCliCatalogCommand,
+  WalletCliNetworkRow,
   WalletCliCurrentAccountData,
   WalletCliTxSignData,
+  WalletCliTronTxSignData,
+  WalletCliEvmTxSignData,
+  WalletCliMessageSignData,
   WalletCliTypedDataSignData,
 } from './core/clients/wallet-cli.js'
-export { registerExternalSigner, isRegisteredExternalSigner } from './core/providers/wallet-builder.js'
-export type { ExternalSignerBuilder } from './core/providers/wallet-builder.js'
+export {
+  registerExternalSigner,
+  isRegisteredExternalSigner,
+} from './core/providers/wallet-builder.js'
+export type {
+  ExternalSignerBuilder,
+  WalletDependencies,
+  WalletCliDependencies,
+} from './core/providers/wallet-builder.js'
+export { parseWalletCliNetwork, assertTronWalletCliNetwork } from './core/wallet-cli-network.js'
+export type { WalletCliNetworkTarget, WalletCliFamily } from './core/wallet-cli-network.js'

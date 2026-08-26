@@ -1,193 +1,354 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { EventEmitter } from 'node:events'
+import { PassThrough, Writable } from 'node:stream'
 
-// Mock child_process.spawn — we control the fake child per-test
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+
 const { mockSpawn } = vi.hoisted(() => ({ mockSpawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: mockSpawn }))
 
-import { WalletCliClient } from '../src/core/clients/wallet-cli.js'
+import {
+  WalletCliClient,
+  assertWalletCliNodeRuntime,
+  validateWalletCliLaunchTarget,
+  walletCliLaunchTargetFromPath,
+} from '../src/core/clients/wallet-cli.js'
 import {
   WalletCliExecutionError,
-  WalletCliUsageError,
   WalletCliNotFoundError,
+  WalletCliUsageError,
 } from '../src/core/errors.js'
 
-// ---------------------------------------------------------------------------
-// Fake child process — properly handles event ordering:
-// stdout/stderr on() → stdin.write() → stdin.end() → on('error'/'close')
-// stdin.end() schedules stdout emission + close via process.nextTick,
-// so all handlers are registered before events fire.
-// ---------------------------------------------------------------------------
+const DataSchema = z.object({ address: z.string() })
+const contract = { command: 'current', dataSchema: DataSchema, chain: 'none' as const }
 
-function makeFakeChild(stdout: string, exitCode: number, error?: NodeJS.ErrnoException) {
-  const handlers: Record<string, ((...args: unknown[]) => void) | undefined> = {}
-  const stdinWrites: string[] = []
-
-  const child = {
-    stdin: {
-      write: vi.fn((data: string) => {
-        stdinWrites.push(data)
-      }),
-      on: vi.fn(),
-      end: vi.fn(() => {
-        process.nextTick(() => {
-          if (error) {
-            handlers.error?.(error)
-            return
-          }
-          if (stdout) handlers.data?.(Buffer.from(stdout))
-          handlers.close?.(exitCode)
-        })
-      }),
-    },
-    stdout: {
-      on(event: string, cb: (...args: unknown[]) => void) {
-        if (event === 'data') handlers.data = cb
-      },
-    },
-    stderr: { on: vi.fn() },
-    on(event: string, cb: (...args: unknown[]) => void) {
-      handlers[event] = cb
-    },
-    kill: vi.fn(),
-  }
-
-  return { child, stdinWrites }
-}
-
-function setSpawnResult(stdout: string, exitCode: number, error?: NodeJS.ErrnoException) {
-  const { child, stdinWrites } = makeFakeChild(stdout, exitCode, error)
-  mockSpawn.mockImplementationOnce(() => child)
-  return { child, stdinWrites }
-}
-
-const ENVELOPE_OK = (data: unknown, command = 'test') =>
-  JSON.stringify({
+function envelope(data: unknown, overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
     schema: 'wallet-cli.result.v1',
     success: true,
-    command,
+    command: 'current',
     data,
-    meta: { durationMs: 10, warnings: [] },
+    meta: { durationMs: 1, warnings: [] },
+    ...overrides,
   })
+}
 
-const ENVELOPE_ERR = (code: string, message: string, command = 'test') =>
-  JSON.stringify({
+function failure(code: string, message: string, overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
     schema: 'wallet-cli.result.v1',
     success: false,
-    command,
+    command: 'current',
     error: { code, message },
-    meta: { durationMs: 10, warnings: [] },
+    meta: { durationMs: 1, warnings: [] },
+    ...overrides,
+  })
+}
+
+function fakeChild(options: {
+  stdout?: string | Buffer
+  stderr?: string | Buffer
+  exitCode?: number
+  spawnError?: NodeJS.ErrnoException
+  neverClose?: boolean
+}) {
+  const events = new EventEmitter()
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  const stdinChunks: Buffer[] = []
+  let completed = false
+
+  const complete = () => {
+    if (completed || options.neverClose) return
+    completed = true
+    process.nextTick(() => {
+      if (options.spawnError) {
+        events.emit('error', options.spawnError)
+        return
+      }
+      if (options.stdout) stdout.write(options.stdout)
+      if (options.stderr) stderr.write(options.stderr)
+      stdout.end()
+      stderr.end()
+      events.emit('close', options.exitCode ?? 0)
+    })
+  }
+  const stdin = new Writable({
+    write(chunk, _encoding, callback) {
+      stdinChunks.push(Buffer.from(chunk))
+      callback()
+    },
+    final(callback) {
+      complete()
+      callback()
+    },
+  })
+  const child = Object.assign(events, {
+    stdin,
+    stdout,
+    stderr,
+    kill: vi.fn((signal: string) => {
+      if (!completed && options.neverClose && signal === 'SIGKILL') {
+        completed = true
+        events.emit('close', null)
+      } else if (!completed && !options.neverClose) {
+        complete()
+      }
+      return true
+    }),
+  })
+  return { child, stdinChunks }
+}
+
+describe('WalletCliClient bounded runner', () => {
+  beforeEach(() => mockSpawn.mockReset())
+
+  it('maps JavaScript paths to Node and rejects unsafe Windows shell shims', () => {
+    expect(
+      walletCliLaunchTargetFromPath('C:\\wallet\\dist\\index.js', 'win32', 'node.exe'),
+    ).toEqual({
+      command: 'node.exe',
+      argsPrefix: ['C:\\wallet\\dist\\index.js'],
+    })
+    expect(() => validateWalletCliLaunchTarget({ command: 'wallet-cli.cmd' }, 'win32')).toThrow(
+      /JavaScript entrypoint/,
+    )
+    expect(() =>
+      assertWalletCliNodeRuntime(
+        { command: 'node.exe', argsPrefix: ['index.js'] },
+        'v18.20.0',
+        'node.exe',
+      ),
+    ).toThrow(/Node\.js >=20/)
   })
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('WalletCliClient', () => {
-  beforeEach(() => {
-    mockSpawn.mockReset()
+  it('accepts a valid success envelope and always uses shell:false', async () => {
+    const { child } = fakeChild({ stdout: envelope({ address: 'T123' }) })
+    mockSpawn.mockReturnValueOnce(child)
+    const result = await new WalletCliClient({ binary: '/safe/wallet-cli' }).run(
+      ['current', '-o', 'json'],
+      contract,
+    )
+    expect(result.data.address).toBe('T123')
+    expect(mockSpawn.mock.calls[0][2]).toMatchObject({ shell: false })
   })
 
-  it('returns data on exit code 0', async () => {
-    setSpawnResult(ENVELOPE_OK({ address: 'T123' }), 0)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    const result = await client.run(['current', '-o', 'json'])
-    expect(result.success).toBe(true)
-    expect(result.data).toEqual({ address: 'T123' })
-  })
-
-  it('throws WalletCliExecutionError on exit code 1', async () => {
-    setSpawnResult(ENVELOPE_ERR('auth_failed', 'wrong password'), 1)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    try {
-      await client.run(['message', 'sign'])
-      expect.fail('should have thrown')
-    } catch (e) {
-      expect(e).toBeInstanceOf(WalletCliExecutionError)
-      expect((e as WalletCliExecutionError).code).toBe('auth_failed')
+  it('resolves launch target precedence before binary and environment overrides', async () => {
+    const env = {
+      ...process.env,
+      AGENT_WALLET_WALLET_CLI_PATH: '/environment/wallet-cli',
     }
-  })
-
-  it('throws WalletCliUsageError on exit code 2', async () => {
-    setSpawnResult(ENVELOPE_ERR('missing_option', 'missing --message'), 2)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    await expect(client.run(['message', 'sign'])).rejects.toThrow(WalletCliUsageError)
-  })
-
-  it('throws WalletCliNotFoundError on ENOENT', async () => {
-    const err = new Error('spawn ENOENT') as NodeJS.ErrnoException
-    err.code = 'ENOENT'
-    setSpawnResult('', -1, err)
-    const client = new WalletCliClient({ binary: 'nonexistent-binary' })
-    await expect(client.run(['current'])).rejects.toThrow(WalletCliNotFoundError)
-  })
-
-  it('writes stdin payload (password) then closes', async () => {
-    const { stdinWrites } = setSpawnResult(ENVELOPE_OK({ signed: {} }), 0)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    await client.run(['tx', 'sign', '--password-stdin'], 'my-secret-password')
-    expect(stdinWrites).toContain('my-secret-password')
-  })
-
-  it('rejects invalid JSON output', async () => {
-    setSpawnResult('not json at all', 0)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    await expect(client.run(['current'])).rejects.toThrow()
-  })
-
-  it('rejects output with wrong schema', async () => {
-    setSpawnResult(JSON.stringify({ schema: 'wrong.version', success: true, command: 'test' }), 0)
-    const client = new WalletCliClient({ binary: 'wallet-cli' })
-    await expect(client.run(['current'])).rejects.toThrow()
-  })
-
-  it('uses custom binary path when provided', async () => {
-    setSpawnResult(ENVELOPE_OK({ ok: true }), 0)
-    const client = new WalletCliClient({ binary: '/custom/path/wallet-cli' })
-    await client.run(['current'])
-    expect(mockSpawn.mock.calls[0][0]).toBe('/custom/path/wallet-cli')
-  })
-  it('kills with SIGTERM then SIGKILL on timeout', async () => {
-    vi.useFakeTimers()
-
-    // "Zombie" child: never emits stdout/close until killed
-    const killCalls: string[] = []
-    let closeHandler: ((code: number | null) => void) | undefined
-    const zombieChild = {
-      stdin: { write: vi.fn(), on: vi.fn(), end: vi.fn() },
-      stdout: {
-        on: vi.fn(),
+    for (const options of [
+      {
+        launchTarget: { command: '/explicit/node', argsPrefix: ['/explicit/index.js'] },
+        binary: '/binary/wallet-cli',
+        env,
+        expected: ['/explicit/node', '/explicit/index.js'],
       },
-      stderr: { on: vi.fn() },
-      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === 'close') closeHandler = cb as (code: number | null) => void
-      }),
-      kill: vi.fn((sig: string) => {
-        killCalls.push(sig)
-        // Real timed-out processes commonly close without a JSON envelope.
-        if (sig === 'SIGKILL') {
-          closeHandler?.(1)
-        }
-      }),
+      {
+        binary: '/binary/wallet-cli',
+        env,
+        expected: ['/binary/wallet-cli'],
+      },
+      {
+        env,
+        expected: ['/environment/wallet-cli'],
+      },
+    ]) {
+      mockSpawn.mockReturnValueOnce(fakeChild({ stdout: envelope({ address: 'T123' }) }).child)
+      const { expected, ...clientOptions } = options
+      await new WalletCliClient(clientOptions).run(['current'], contract)
+      const call = mockSpawn.mock.calls.at(-1)!
+      expect(call[0]).toBe(expected[0])
+      expect(call[1]).toEqual([...(expected.slice(1) as string[]), 'current'])
     }
-    mockSpawn.mockImplementationOnce(() => zombieChild)
+  })
 
-    const client = new WalletCliClient({ binary: 'wallet-cli', timeoutMs: 50 })
-    const promise = client.run(['current'])
-    // Attach catch handler early to prevent unhandled rejection when
-    // the timeout reject fires inside advanceTimersByTimeAsync
-    const resultPromise = promise.catch((e: unknown) => e)
+  it('preserves structured warnings and additive fields', async () => {
+    const { child } = fakeChild({
+      stdout: envelope(
+        { address: 'T123', future: true },
+        { meta: { durationMs: 1, warnings: [{ code: 'future', message: 'notice' }] } },
+      ),
+    })
+    mockSpawn.mockReturnValueOnce(child)
+    const result = await new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract)
+    expect(result.meta.warnings).toEqual([{ code: 'future', message: 'notice' }])
+  })
 
-    // Fire the timeout → triggers SIGTERM + schedules SIGKILL escalation
-    await vi.advanceTimersByTimeAsync(50)
-    // Fire the 5s SIGKILL escalation delay
-    await vi.advanceTimersByTimeAsync(5000)
+  it('dispatches exit 1/2 by class and tolerates unknown error codes', async () => {
+    mockSpawn.mockReturnValueOnce(
+      fakeChild({ stdout: failure('future_error', 'runtime failure'), exitCode: 1 }).child,
+    )
+    await expect(
+      new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract),
+    ).rejects.toMatchObject({ code: 'future_error' } satisfies Partial<WalletCliExecutionError>)
 
-    const caught = await resultPromise
-    expect(caught).toBeInstanceOf(WalletCliExecutionError)
-    expect((caught as WalletCliExecutionError).code).toBe('timeout')
-    expect(killCalls[0]).toBe('SIGTERM')
-    expect(killCalls).toContain('SIGKILL')
+    mockSpawn.mockReturnValueOnce(
+      fakeChild({ stdout: failure('future_usage', 'bad invocation'), exitCode: 2 }).child,
+    )
+    await expect(
+      new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract),
+    ).rejects.toBeInstanceOf(WalletCliUsageError)
+  })
 
+  it('rejects command and chain mismatches in failure envelopes', async () => {
+    for (const sample of [
+      failure('auth_failed', 'wrong password', { command: 'account.remove' }),
+      failure('auth_failed', 'wrong password', {
+        chain: { family: 'tron', network: 'tron:nile', chainId: 'nile' },
+      }),
+    ]) {
+      mockSpawn.mockReturnValueOnce(fakeChild({ stdout: sample, exitCode: 1 }).child)
+      await expect(
+        new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract),
+      ).rejects.toMatchObject({ code: 'contract_mismatch' })
+    }
+  })
+
+  it('removes control characters and bounds a valid failure-envelope message', async () => {
+    const rawMessage = `bad\0line\n${'x'.repeat(600)}`
+    mockSpawn.mockReturnValueOnce(
+      fakeChild({ stdout: failure('future_error', rawMessage), exitCode: 1 }).child,
+    )
+    let caught: WalletCliExecutionError | undefined
+    try {
+      await new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract)
+    } catch (error) {
+      caught = error as WalletCliExecutionError
+    }
+    expect(caught?.message).not.toContain('\0')
+    expect(caught?.message).not.toContain('\n')
+    expect(caught?.message).toHaveLength(512)
+  })
+
+  it('rejects command, neutral-chain, data and success/exit mismatches', async () => {
+    for (const sample of [
+      envelope({ address: 'T123' }, { command: 'list' }),
+      envelope(
+        { address: 'T123' },
+        { chain: { family: 'tron', network: 'tron:nile', chainId: 'nile' } },
+      ),
+      envelope({ wrong: true }),
+    ]) {
+      mockSpawn.mockReturnValueOnce(fakeChild({ stdout: sample }).child)
+      await expect(
+        new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract),
+      ).rejects.toMatchObject({ code: 'contract_mismatch' })
+    }
+
+    mockSpawn.mockReturnValueOnce(
+      fakeChild({ stdout: envelope({ address: 'T123' }), exitCode: 1 }).child,
+    )
+    await expect(
+      new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], contract),
+    ).rejects.toMatchObject({ code: 'contract_mismatch' })
+  })
+
+  it('maps ENOENT without exposing the OS command line', async () => {
+    const error = new Error('spawn /secret/path ENOENT') as NodeJS.ErrnoException
+    error.code = 'ENOENT'
+    mockSpawn.mockReturnValueOnce(fakeChild({ spawnError: error }).child)
+    let caught: Error | undefined
+    try {
+      await new WalletCliClient({ binary: '/secret/path' }).run(['current'], contract)
+    } catch (value) {
+      caught = value as Error
+    }
+    expect(caught).toBeInstanceOf(WalletCliNotFoundError)
+    expect(caught?.message).not.toContain('/secret/path')
+  })
+
+  it('writes the configured stdin payload exactly once', async () => {
+    const { child, stdinChunks } = fakeChild({ stdout: envelope({ address: 'T123' }) })
+    mockSpawn.mockReturnValueOnce(child)
+    await new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], {
+      ...contract,
+      stdin: 'signed-transaction',
+    })
+    expect(Buffer.concat(stdinChunks).toString('utf8')).toBe('signed-transaction')
+  })
+
+  it('classifies a lease stdin write failure without exposing the underlying message', async () => {
+    const { child } = fakeChild({})
+    mockSpawn.mockReturnValueOnce(child)
+    const lease = {
+      writeTo: vi.fn().mockRejectedValue(new Error('fixture-password leaked here')),
+      dispose: vi.fn(),
+    }
+    let caught: WalletCliExecutionError | undefined
+    try {
+      await new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], {
+        ...contract,
+        stdin: lease,
+      })
+    } catch (error) {
+      caught = error as WalletCliExecutionError
+    }
+    expect(caught?.code).toBe('stdin_write')
+    expect(caught?.message).not.toContain('fixture-password')
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+  })
+
+  it('bounds stdout without including its contents in the error', async () => {
+    const secretOutput = 'leaked-wallet-output'
+    mockSpawn.mockReturnValueOnce(
+      fakeChild({ stdout: Buffer.from(secretOutput.repeat(100)), exitCode: 0 }).child,
+    )
+    let caught: WalletCliExecutionError | undefined
+    try {
+      await new WalletCliClient({ binary: 'wallet-cli', maxStdoutBytes: 32 }).run(
+        ['current'],
+        contract,
+      )
+    } catch (error) {
+      caught = error as WalletCliExecutionError
+    }
+    expect(caught?.code).toBe('output_limit')
+    expect(caught?.message).not.toContain(secretOutput)
+  })
+
+  it('escalates timeout from TERM to KILL and settles once', async () => {
+    vi.useFakeTimers()
+    const { child } = fakeChild({ neverClose: true })
+    mockSpawn.mockReturnValueOnce(child)
+    const promise = new WalletCliClient({
+      binary: 'wallet-cli',
+      timeoutMs: 10,
+      killGraceMs: 20,
+    })
+      .run(['current'], contract)
+      .catch((error: unknown) => error)
+
+    await vi.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(20)
+    const error = await promise
+    expect(error).toMatchObject({ code: 'timeout' })
+    expect(child.kill).toHaveBeenNthCalledWith(1, 'SIGTERM')
+    expect(child.kill).toHaveBeenNthCalledWith(2, 'SIGKILL')
+    vi.useRealTimers()
+  })
+
+  it('aborts with TERM then KILL and removes the abort listener after settling', async () => {
+    vi.useFakeTimers()
+    const { child } = fakeChild({ neverClose: true })
+    mockSpawn.mockReturnValueOnce(child)
+    const controller = new AbortController()
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener')
+    const promise = new WalletCliClient({
+      binary: 'wallet-cli',
+      timeoutMs: 1_000,
+      killGraceMs: 20,
+    })
+      .run(['current'], { ...contract, signal: controller.signal })
+      .catch((error: unknown) => error)
+
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(20)
+    const error = await promise
+    expect(error).toMatchObject({ code: 'aborted' })
+    expect(child.kill).toHaveBeenNthCalledWith(1, 'SIGTERM')
+    expect(child.kill).toHaveBeenNthCalledWith(2, 'SIGKILL')
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
     vi.useRealTimers()
   })
 })

@@ -30,8 +30,14 @@ export interface Eip712Capable {
   signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string>
 }
 
+/** Additive capability for wallets that can preserve UTF-8 message semantics. */
+export interface MessageSigningCapable {
+  signMessage(message: Uint8Array, options?: SignOptions): Promise<string>
+}
+
 export type SignOptions = {
   authorizationSignature?: string
+  signal?: AbortSignal
 }
 
 export interface WalletProvider {

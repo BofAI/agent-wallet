@@ -36,6 +36,7 @@ Commands:
   remove <id>       Remove a wallet
   sign tx <data>    Sign a transaction (JSON payload)
   sign typed-data <data>  Sign EIP-712 typed data (JSON)
+  sign message --message <utf8>  Sign a UTF-8 message
   reset             Delete all wallet data
 
 Options:
@@ -53,12 +54,12 @@ Use `agent-wallet start --help`, `agent-wallet start raw_secret --help`, or `age
 
 ## 2. Concepts
 
-| Concept | Meaning |
-|--------|---------|
-| **Wallet types** | `raw_secret` — private key or mnemonic stored in **plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID; `wallet_cli` — Keys managed by the `@tron-walletcli/wallet-cli` binary, signing delegated via subprocess (TRON now, BSC planned) (see [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)). |
-| **Signing network** | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:nile`). The CLI picks EVM vs Tron **adapter** from this string. |
-| **Active wallet** | Used when you omit `--wallet-id` / `-w` on `sign`. Set with `use <id>`. |
-| **Exec script credentials** | For `privy` and `wallet_cli` wallets, credentials can reference an executable script instead of storing plaintext in config. See [Exec Script Credentials](#exec-script-credentials) below. |
+| Concept                     | Meaning                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Wallet types**            | `raw_secret` — private key or mnemonic stored in **plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID; `wallet_cli` — 金鑰由相容的 `@tron-walletcli/wallet-cli` 4.x 管理，透過受限子程序委派 TRON/EVM 簽章（見 [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)）。 |
+| **Signing network**         | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:nile`). The CLI picks EVM vs Tron **adapter** from this string.                                                                                                                                                                                                   |
+| **Active wallet**           | Used when you omit `--wallet-id` / `-w` on `sign`. Set with `use <id>`.                                                                                                                                                                                                                                                                       |
+| **Exec script credentials** | For `privy` and `wallet_cli` wallets, credentials can reference an executable script instead of storing plaintext in config. See [Exec Script Credentials](#exec-script-credentials) below.                                                                                                                                                   |
 
 ## 3. Quick start (`start`)
 
@@ -74,41 +75,46 @@ agent-wallet start wallet_cli [options]
 
 Shared `start` options:
 
-| Option | Description |
-|--------|-------------|
+| Option               | Description                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------ |
 | `--wallet-id` / `-w` | Wallet config ID (default in prompts: `default_raw`, `default_privy`, `default_cli`) |
-| `-d` / `--dir` | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`) |
-| `--override` | Skip the "already initialized" confirmation when wallets already exist |
+| `-d` / `--dir`       | Secrets directory (default `~/.agent-wallet` or `AGENT_WALLET_DIR`)                  |
+| `--override`         | Skip the "already initialized" confirmation when wallets already exist               |
 
 `start raw_secret` options:
 
-| Option | Description |
-|--------|-------------|
-| `-k` / `--private-key` | Import hex private key |
-| `-m` / `--mnemonic` | Import mnemonic |
-| `-mi` / `--mnemonic-index` | Mnemonic account index (default `0`) |
-| `--derive-as` | `eip155` or `tron` — mnemonic derivation when not prompted |
+| Option                     | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| `-k` / `--private-key`     | Import hex private key                                     |
+| `-m` / `--mnemonic`        | Import mnemonic                                            |
+| `-mi` / `--mnemonic-index` | Mnemonic account index (default `0`)                       |
+| `--derive-as`              | `eip155` or `tron` — mnemonic derivation when not prompted |
 
 **`raw_secret`:** warns about plaintext storage. Private key or mnemonic is stored directly in `wallets_config.json`.
 
 `start privy` options:
 
-| Option | Description |
-|--------|-------------|
-| `--app-id` | Privy app id |
-| `--app-secret` | Privy app secret |
+| Option              | Description                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `--app-id`          | Privy app id                                                                               |
+| `--app-secret`      | Privy app secret                                                                           |
 | `--app-secret-exec` | Privy app secret via exec script (see [Exec Script Credentials](#exec-script-credentials)) |
-| `--privy-wallet-id` | Privy wallet id |
+| `--privy-wallet-id` | Existing Privy wallet id                                                                   |
 
 `start wallet_cli` options:
 
-| Option | Description |
-|--------|-------------|
-| `--account` | wallet-cli account label (optional; uses active account if omitted) |
-| `--cli-password` | wallet-cli keystore password |
+| Option                | Description                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `--account`           | Existing wallet-cli account label/id (optional; resolves the active account if omitted)       |
+| `--cli-password`      | 只供互動提示內部使用；CLI 會拒絕明文 argv                                                     |
 | `--cli-password-exec` | wallet-cli password via exec script (see [Exec Script Credentials](#exec-script-credentials)) |
 
-**`wallet_cli`:** adds a TRON wallet whose keys are owned by wallet-cli. Requires the `@tron-walletcli/wallet-cli` binary on PATH (or set `AGENT_WALLET_WALLET_CLI_PATH`). See [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md).
+**`wallet_cli`：** 連結由 wallet-cli 持有金鑰的既有 TRON/EVM account；不建立或匯入
+wallet-cli key。CLI 會在詢問 password 前驗證 account descriptor，並把 canonical accountId
+寫入新 config。需要穩定版
+`@tron-walletcli/wallet-cli >=4.12.0 <5.0.0` 位於 PATH，或設定
+`AGENT_WALLET_WALLET_CLI_PATH`。Windows 建議指定 package JavaScript entrypoint；詳見
+[how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)。
 
 When **`start` creates a new wallet**, that wallet is set as **active** (`set_active`). Re-running `start` for an **existing** wallet id only lists it — active wallet is unchanged unless you use `use`.
 
@@ -119,14 +125,15 @@ agent-wallet add [options]
 agent-wallet add <raw_secret|privy|wallet_cli> [options]
 ```
 
-Adds a new wallet to the config. Storage is created automatically if needed.
+Adds a wallet configuration. `privy` and `wallet_cli` link existing external wallets; they do not
+create wallets in those systems. Storage is created automatically if needed.
 
 `add` shares the same subcommand options as `start` (see above), plus:
 
-| Option | Description |
-|--------|-------------|
-| `--wallet-id` / `-w` | Wallet config ID |
-| `-d` / `--dir` | Secrets directory |
+| Option               | Description       |
+| -------------------- | ----------------- |
+| `--wallet-id` / `-w` | Wallet config ID  |
+| `-d` / `--dir`       | Secrets directory |
 
 The added wallet becomes active if no active wallet was previously set.
 
@@ -163,7 +170,8 @@ Resolves and prints the wallet address or addresses without signing.
 - If `wallet_id` is omitted, the CLI prompts you to select a wallet interactively.
 - `raw_secret` wallets print both EVM and TRON addresses derived from the same secret material.
 - `privy` wallets print the hosted wallet address returned by Privy.
-- `wallet_cli` wallets print the TRON address from wallet-cli `current` (requires the wallet-cli binary).
+- `wallet_cli` 直接透過 handshake/`current` 解析地址，不取得 password；descriptor 同時含
+  EVM/TRON 時顯示兩個 whitelist entries，只有一個 family 時顯示單一地址。
 
 ## 9. `remove`
 
@@ -177,22 +185,26 @@ If you remove the active wallet and other wallets still exist, the CLI can optio
 
 ## 10. `sign`
 
-All subcommands require **`--network` / `-n`**.
+簽章 subcommand 都接受 **`--network` / `-n`**；`raw_secret` 與 `wallet_cli` 需要此值，
+Privy EVM 可依 payload chainId 運作。
 
 ```bash
 agent-wallet sign tx '<json>' -n eip155:1 [-w WALLET_ID] ...
 agent-wallet sign typed-data '<json>' -n eip155:1 [-w WALLET_ID] ...
+agent-wallet sign message --message '<utf8>' -n eip155:1 [-w WALLET_ID] ...
 ```
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--wallet-id` | `-w` | Wallet id (defaults to active) |
-| `--network` | `-n` | **Required** — `eip155`, `eip155:1`, `tron:nile`, etc. |
-| `--dir` | `-d` | Secrets directory |
+| Option        | Short | Description                                                    |
+| ------------- | ----- | -------------------------------------------------------------- |
+| `--wallet-id` | `-w`  | Wallet id (defaults to active)                                 |
+| `--network`   | `-n`  | `raw_secret` / `wallet_cli` 必填；例如 `eip155:1`、`tron:nile` |
+| `--dir`       | `-d`  | Secrets directory                                              |
 
 - **`raw_secret` wallets:** signs directly with the stored private key.
 - **`privy` wallets:** delegates signing to the Privy API. EVM does not require `--network`; it follows the `chainId` in the payload.
-- **`wallet_cli` wallets:** delegates signing to the wallet-cli binary (TRON only).
+- **`wallet_cli` wallets：** 支援 TRON/EVM transaction、typed-data 與 UTF-8 message。
+  必須使用完整 `tron:<name>` 或 `eip155:<positive-chain-id>`；裸 family、alias 與省略值會
+  在子程序及 secret acquire 前 fail-fast。簽章結果會核對固定 account/network/signer。
 
 Signed tx: if the result parses as JSON it is pretty-printed; otherwise hex is printed as text.
 
@@ -208,13 +220,13 @@ Requires config to exist; otherwise prints that no wallet data was found.
 
 ## 12. Environment variables
 
-| Variable | Role |
-|----------|------|
-| `AGENT_WALLET_DIR` | Default secrets directory |
-| `AGENT_WALLET_WALLET_CLI_PATH` | Override wallet-cli binary path (used by `wallet_cli` wallets; default: auto-resolve from PATH) |
-| `AGENT_WALLET_PRIVATE_KEY` | Private key for SDK env fallback |
-| `AGENT_WALLET_MNEMONIC` | Mnemonic for SDK env fallback |
-| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index for mnemonic derivation |
+| Variable                              | Role                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `AGENT_WALLET_DIR`                    | Default secrets directory                                                                |
+| `AGENT_WALLET_WALLET_CLI_PATH`        | 覆寫 wallet-cli executable 或 JavaScript entrypoint；未設定時依 optional peer、PATH 解析 |
+| `AGENT_WALLET_PRIVATE_KEY`            | Private key for SDK env fallback                                                         |
+| `AGENT_WALLET_MNEMONIC`               | Mnemonic for SDK env fallback                                                            |
+| `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index for mnemonic derivation                                                    |
 
 ## 13. File layout
 
@@ -270,7 +282,9 @@ This lets you integrate with secret management tools (1Password CLI, etc.) witho
 1. Create an executable script that prints the secret to stdout.
 2. Reference it in config via `{ "exec": "/path/to/script.sh" }` or pass it via CLI flags `--cli-password-exec` / `--app-secret-exec`.
 
-The script's stdout (trimmed) is used as the credential value. Scripts time out after 10 seconds by default.
+script stdout 會 trim 後作為 credential。對 wallet-cli 而言，exec 在每次簽章時重新執行，
+形成只可寫入一次的 secret lease；成功、失敗、timeout 或取消都會 dispose。預設 10 秒
+timeout，並有 stdout/stderr 上限，錯誤不附原始輸出。
 
 ### Interactive prompt
 
@@ -291,7 +305,7 @@ op read 'op://Private/wallet-cli-password/password'
 
 ```bash
 agent-wallet start wallet_cli \
-  --wallet-id my_tron_cli \
+  --wallet-id my_cli_wallet \
   --account main-1 \
   --cli-password-exec /path/to/fetch-password.sh
 ```
@@ -299,7 +313,8 @@ agent-wallet start wallet_cli \
 ## 14. Non-interactive tips
 
 - Pass `-k`, `-m`, `--derive-as`, `--wallet-id`, and `-n` so scripts never prompt.
-- Use `--cli-password-exec` / `--app-secret-exec` to avoid passing secrets on the command line in CI.
+- CI 使用 `--cli-password-exec` / `--app-secret-exec`，不要把秘密放進 command line；
+  `--cli-password <plaintext>` 會被拒絕。
 - TTY-only prompts: use explicit flags in CI.
 
 ## Next steps

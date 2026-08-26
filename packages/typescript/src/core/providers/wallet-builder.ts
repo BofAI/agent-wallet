@@ -18,18 +18,32 @@ import type { WalletCliWalletParams } from '../config.js'
 import { WalletCliConfigResolver } from './wallet-cli-config.js'
 import { WalletCliClient } from '../clients/wallet-cli.js'
 import { WalletCliAdapter } from '../adapters/wallet-cli.js'
+import { defaultSecretProviderFactory, type SecretProviderFactory } from '../secret-provider.js'
+
+export interface WalletCliDependencies {
+  readonly clientFactory?: (context: {
+    network?: string
+    purpose: 'signing' | 'address-resolution'
+  }) => WalletCliClient
+  readonly secretProviderFactory?: SecretProviderFactory
+}
+
+export interface WalletDependencies {
+  readonly walletCli?: WalletCliDependencies
+}
 
 export async function createAdapter(
   conf: WalletConfig,
   configDir: string,
   network: string | undefined,
+  dependencies?: WalletDependencies,
 ): Promise<Wallet> {
   // External signers (privy, wallet_cli, and future types) use the registry;
   // they carry their own credentials in params and don't need
   // password/configDir.
   const externalBuilder = externalSignerRegistry.get(conf.type)
   if (externalBuilder) {
-    return externalBuilder(conf.params, { network })
+    return externalBuilder(conf.params, { network, dependencies })
   }
   if (conf.type === WalletType.RAW_SECRET) {
     return new RawSecretSigner(
@@ -47,7 +61,7 @@ export async function createAdapter(
 
 export type ExternalSignerBuilder = (
   params: unknown,
-  ctx: { network?: string },
+  ctx: { network?: string; dependencies?: WalletDependencies },
 ) => Promise<Wallet>
 
 const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
@@ -89,8 +103,14 @@ registerExternalSigner('wallet_cli', async (params, ctx) => {
     source: params as WalletCliWalletParams,
   })
   const resolved = await resolver.resolve()
-  const client = new WalletCliClient()
-  return new WalletCliAdapter(resolved, client, ctx.network)
+  const walletCliDependencies = ctx.dependencies?.walletCli
+  const client =
+    walletCliDependencies?.clientFactory?.({ network: ctx.network, purpose: 'signing' }) ??
+    new WalletCliClient()
+  const providerFactory =
+    walletCliDependencies?.secretProviderFactory ?? defaultSecretProviderFactory
+  const secretProvider = providerFactory(resolved.password, { label: 'wallet-cli password' })
+  return new WalletCliAdapter(resolved, client, secretProvider, ctx.network!)
 })
 
 export type EnvWalletResolved = {

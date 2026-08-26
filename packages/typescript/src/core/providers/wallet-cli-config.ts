@@ -17,7 +17,7 @@ import type { SecretValue } from '../secret-resolver.js'
 
 export type WalletCliConfig = {
   account?: string
-  password: string
+  password: SecretValue
 }
 
 export type WalletCliConfigSource = {
@@ -38,11 +38,9 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
       )
     }
 
-    const password = await this.resolveCredential(merged.password, 'wallet-cli password')
-
     return {
       account: merged.account,
-      password: password!,
+      password: normalizePassword(merged.password),
     }
   }
 
@@ -52,5 +50,20 @@ export class WalletCliConfigResolver extends ExternalSignerConfigResolver<
       account: normalizeValue(source?.account),
       password: source?.password,
     }
+  }
+}
+
+function normalizePassword(value: SecretValue | undefined): SecretValue {
+  if (typeof value === 'string') {
+    const normalized = normalizeValue(value)
+    if (!normalized) throw new WalletCliConfigError('wallet-cli password must not be empty')
+    return normalized
+  }
+  if (!value || !value.exec.trim()) {
+    throw new WalletCliConfigError('wallet-cli password exec path must not be empty')
+  }
+  return {
+    exec: value.exec.trim(),
+    ...(value.timeout === undefined ? {} : { timeout: value.timeout }),
   }
 }

@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 
-import { WalletType, type Eip712Capable } from '../core/base.js'
+import { WalletType, type Eip712Capable, type MessageSigningCapable } from '../core/base.js'
 import {
   type PrivyWalletParams,
   type RawSecretMnemonicParams,
@@ -215,8 +215,8 @@ async function selectWalletType(
   const choices = Object.values(WalletType) as string[]
   const descriptions: Record<string, string> = {
     raw_secret: 'Private key/mnemonic saved in plaintext config',
-    privy: 'Privy API-backed wallet',
-    wallet_cli: 'wallet-cli managed wallet (TRON, BSC planned)',
+    privy: 'Existing Privy API-backed wallet',
+    wallet_cli: 'Existing wallet-cli account (TRON + EVM signer)',
   }
   const selected = await selectInput(
     io,
@@ -525,27 +525,16 @@ async function buildPrivyConfigWithFlags(
 
 async function buildWalletCliConfigWithFlags(
   io: CliIO,
-  opts?: {
-    account?: string
+  opts: {
+    account: string
     cliPassword?: string
     cliPasswordExec?: string
   },
 ): Promise<WalletConfig> {
-  const account =
-    opts?.account ??
-    (
-      await promptInput(
-        io,
-        'wallet-cli account label (optional, press Enter to use active)',
-        {},
-        'wallet-cli account',
-      )
-    ).trim()
-
   let password: SecretValue
-  if (opts?.cliPasswordExec) {
+  if (opts.cliPasswordExec) {
     password = { exec: opts.cliPasswordExec }
-  } else if (opts?.cliPassword) {
+  } else if (opts.cliPassword) {
     password = opts.cliPassword
   } else {
     password = await promptCredential(io, 'wallet-cli keystore password')
@@ -554,7 +543,7 @@ async function buildWalletCliConfigWithFlags(
   return {
     type: 'wallet_cli',
     params: {
-      ...(account ? { account } : {}),
+      account: opts.account,
       password,
     } as WalletCliWalletParams,
   }
@@ -566,17 +555,52 @@ async function buildWalletCliConfigWithFlags(
  * keystore password without a wallet-cli keystore would produce a useless
  * config entry.
  */
-async function probeWalletCli(io: CliIO): Promise<void> {
+async function probeWalletCli(io: CliIO): Promise<WalletCliClient> {
   const client = new WalletCliClient()
   try {
-    // `list` needs no keystore unlock — purely checks binary availability
-    await client.run(['list', '-o', 'json'])
+    // Version, catalog, networks and current capability only; never acquires a password.
+    await client.ensureCompatible()
+    return client
   } catch (e) {
     if (e instanceof WalletCliNotFoundError) {
-      io.print('wallet-cli not found. Please install (npm i -g @tron-walletcli/wallet-cli) and add your account first.')
+      io.print(
+        'wallet-cli not found. Please install (npm i -g @tron-walletcli/wallet-cli) and add your account first.',
+      )
       throw new CliExit(1)
     }
     io.print(`\nWarning: could not reach wallet-cli: ${(e as Error).message}`)
+    throw new CliExit(1)
+  }
+}
+
+async function resolveWalletCliAccount(
+  io: CliIO,
+  client: WalletCliClient,
+  requestedAccount?: string,
+): Promise<string> {
+  const accountRef =
+    requestedAccount?.trim() ||
+    (
+      await promptInput(
+        io,
+        'Existing wallet-cli account label (optional, press Enter to use active)',
+        {},
+        'wallet-cli account',
+      )
+    ).trim() ||
+    undefined
+
+  try {
+    const result = await client.currentAccount(accountRef)
+    io.print(`Using existing wallet-cli account '${result.data.accountId}'.`)
+    return result.data.accountId
+  } catch (error) {
+    const accountLabel = accountRef ? `'${accountRef}'` : '(active)'
+    const reason = error instanceof WalletError ? `: ${error.message}` : ''
+    io.print(`Could not link wallet-cli account ${accountLabel}${reason}`)
+    io.print(
+      'Create or import the account with wallet-cli, then rerun agent-wallet start/add wallet_cli.',
+    )
     throw new CliExit(1)
   }
 }
@@ -659,14 +683,14 @@ export async function cmdStart(
       mnemonicIndex: opts?.mnemonicIndex ?? 0,
     })
 
-   provider.ensureStorage()
-   try {
-     provider.addWallet(targetName, rawConfig)
-     provider.setActive(targetName)
-   } catch (e) {
+    provider.ensureStorage()
+    try {
+      provider.addWallet(targetName, rawConfig)
+      provider.setActive(targetName)
+    } catch (e) {
       io.print((e as Error).message)
-     throw new CliExit(1)
-   }
+      throw new CliExit(1)
+    }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'raw_secret']])
@@ -689,19 +713,19 @@ export async function cmdStart(
       privyWalletId: opts?.privyWalletId,
     })
 
-   provider.ensureStorage()
-   try {
-     provider.addWallet(targetName, privyConfig)
-     provider.setActive(targetName)
-   } catch (e) {
+    provider.ensureStorage()
+    try {
+      provider.addWallet(targetName, privyConfig)
+      provider.setActive(targetName)
+    } catch (e) {
       io.print((e as Error).message)
-     throw new CliExit(1)
-   }
+      throw new CliExit(1)
+    }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'privy']])
   } else if (wtype === WalletType.WALLET_CLI) {
-    await probeWalletCli(io)
+    const client = await probeWalletCli(io)
     provider = getProvider(dir)
     if (opts?.walletId) {
       try {
@@ -713,20 +737,21 @@ export async function cmdStart(
       }
     }
     const targetName = opts?.walletId ?? (await promptWalletId(io, 'default_cli', provider))
+    const account = await resolveWalletCliAccount(io, client, opts?.cliAccount)
     const cliConfig = await buildWalletCliConfigWithFlags(io, {
-      account: opts?.cliAccount,
+      account,
       cliPassword: opts?.cliPassword,
       cliPasswordExec: opts?.cliPasswordExec,
     })
 
-   provider.ensureStorage()
-   try {
-     provider.addWallet(targetName, cliConfig)
-     provider.setActive(targetName)
-   } catch (e) {
+    provider.ensureStorage()
+    try {
+      provider.addWallet(targetName, cliConfig)
+      provider.setActive(targetName)
+    } catch (e) {
       io.print((e as Error).message)
-     throw new CliExit(1)
-   }
+      throw new CliExit(1)
+    }
 
     io.print(`\nWallet '${targetName}' created:`)
     printWalletTable(io, [[targetName, 'wallet_cli']])
@@ -802,12 +827,13 @@ export async function cmdAdd(
       }),
     )
   } else if (wtype === WalletType.WALLET_CLI) {
-    await probeWalletCli(io)
+    const client = await probeWalletCli(io)
     targetName = opts?.walletId ?? (await promptWalletId(io, 'default_cli', provider))
+    const account = await resolveWalletCliAccount(io, client, opts?.cliAccount)
     provider.addWallet(
       targetName,
       await buildWalletCliConfigWithFlags(io, {
-        account: opts?.cliAccount,
+        account,
         cliPassword: opts?.cliPassword,
         cliPasswordExec: opts?.cliPasswordExec,
       }),
@@ -1137,6 +1163,39 @@ export async function cmdSignTypedData(
   }
 }
 
+export async function cmdSignMessage(
+  wallet: string | undefined,
+  message: string,
+  network: string | undefined,
+  dir: string,
+  io: CliIO,
+): Promise<void> {
+  const walletId = resolveWalletId(wallet, dir, io)
+  const provider = getProvider(dir)
+
+  try {
+    const w = await provider.getWallet(walletId, network)
+    if (!('signMessage' in w)) {
+      io.print('This wallet does not support message signing.')
+      throw new CliExit(1)
+    }
+    const signature = await (w as unknown as MessageSigningCapable).signMessage(
+      new TextEncoder().encode(message),
+    )
+    io.print(`Signature: ${signature}`)
+  } catch (e) {
+    if (e instanceof WalletError) {
+      io.print(e.message)
+      throw new CliExit(1)
+    }
+    if (e instanceof Error) {
+      io.print(e.message)
+      throw new CliExit(1)
+    }
+    throw e
+  }
+}
+
 // --- Helpers (output) ---
 
 function printWalletTable(io: CliIO, rows: [string, string][]): void {
@@ -1221,6 +1280,12 @@ function parseArgs(argv: string[]): ParsedArgs {
   while (i < argv.length) {
     const arg = argv[i]
     if (arg.startsWith('--')) {
+      const separator = arg.indexOf('=')
+      if (separator > 2) {
+        options[arg.slice(2, separator)] = arg.slice(separator + 1)
+        i += 1
+        continue
+      }
       const key = arg.slice(2)
       const next = argv[i + 1]
       if (next && !next.startsWith('-')) {
@@ -1263,9 +1328,9 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
   const NETWORK_OPT = '  --network, -n <net>   Target network (e.g. eip155:1, tron:nile)'
   const PRIVY_APP_ID_OPT = '  --app-id <id>         Privy app id'
   const PRIVY_APP_SECRET_OPT = '  --app-secret <secret>  Privy app secret'
-  const PRIVY_WALLET_ID_OPT = '  --privy-wallet-id <id>  Privy wallet id'
-  const CLI_ACCOUNT_OPT = '  --account <label>     wallet-cli account label (optional)'
-  const CLI_PASSWORD_OPT = '  --cli-password <pw>   wallet-cli keystore password'
+  const PRIVY_WALLET_ID_OPT = '  --privy-wallet-id <id>  Existing Privy wallet id'
+  const CLI_ACCOUNT_OPT =
+    '  --account <label>     Existing wallet-cli account label/id (uses active if omitted)'
   const CLI_PASSWORD_EXEC_OPT = '  --cli-password-exec <path>  wallet-cli password via exec script'
   const PRIVY_APP_SECRET_EXEC_OPT = '  --app-secret-exec <path>  Privy app secret via exec script'
 
@@ -1291,7 +1356,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'privy') {
           io.print('Usage: agent-wallet start privy [options]')
           io.print('')
-          io.print('Quick start with a Privy-backed wallet.')
+          io.print('Quick start by linking an existing Privy wallet.')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1307,14 +1372,14 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'wallet_cli') {
           io.print('Usage: agent-wallet start wallet_cli [options]')
           io.print('')
-          io.print('Quick start with a wallet-cli managed wallet (TRON; BSC planned).')
+          io.print('Link an existing wallet-cli account as a TRON + EVM signer.')
+          io.print('This does not create or import wallet-cli keys.')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
           io.print('  --override            Skip confirmation when wallets already exist')
           io.print(CLI_PASSWORD_EXEC_OPT)
           io.print(CLI_ACCOUNT_OPT)
-          io.print(CLI_PASSWORD_OPT)
           io.print(DIR_OPT)
           io.print(HELP_OPT)
           break
@@ -1322,7 +1387,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('Usage: agent-wallet start [options]')
         io.print('       agent-wallet start <raw_secret|privy|wallet_cli> [options]')
         io.print('')
-        io.print('Quick setup: create and activate your first wallet.')
+        io.print('Quick setup: configure and activate your first wallet.')
         io.print('')
         io.print('Options:')
         io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1332,10 +1397,8 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('')
         io.print('Subcommands:')
         io.print('  raw_secret          Quick start with a plaintext raw secret wallet')
-        io.print('  privy               Quick start with a Privy-backed wallet')
-        io.print(
-          '  wallet_cli          Quick start with a wallet-cli managed wallet (TRON; BSC planned)',
-        )
+        io.print('  privy               Link an existing Privy wallet')
+        io.print('  wallet_cli          Link an existing wallet-cli account (TRON + EVM)')
         break
       case 'add':
         if (subcommand === 'raw_secret') {
@@ -1356,7 +1419,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'privy') {
           io.print('Usage: agent-wallet add privy [options]')
           io.print('')
-          io.print('Add a Privy-backed wallet.')
+          io.print('Add an existing Privy wallet to agent-wallet.')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1371,13 +1434,13 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         if (subcommand === 'wallet_cli') {
           io.print('Usage: agent-wallet add wallet_cli [options]')
           io.print('')
-          io.print('Add a wallet-cli managed wallet (TRON; BSC planned).')
+          io.print('Add an existing wallet-cli account as a TRON + EVM signer.')
+          io.print('This does not create or import wallet-cli keys.')
           io.print('')
           io.print('Options:')
           io.print('  --wallet-id, -w <id>  Wallet ID')
           io.print(CLI_PASSWORD_EXEC_OPT)
           io.print(CLI_ACCOUNT_OPT)
-          io.print(CLI_PASSWORD_OPT)
           io.print(DIR_OPT)
           io.print(HELP_OPT)
           break
@@ -1385,7 +1448,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('Usage: agent-wallet add [options]')
         io.print('       agent-wallet add <raw_secret|privy|wallet_cli> [options]')
         io.print('')
-        io.print('Add a new wallet.')
+        io.print('Add a wallet configuration to agent-wallet.')
         io.print('')
         io.print('Options:')
         io.print('  --wallet-id, -w <id>  Wallet ID')
@@ -1394,8 +1457,8 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('')
         io.print('Subcommands:')
         io.print('  raw_secret          Add a plaintext raw secret wallet')
-        io.print('  privy               Add a Privy-backed wallet')
-        io.print('  wallet_cli          Add a wallet-cli managed wallet (TRON; BSC planned)')
+        io.print('  privy               Add an existing Privy wallet')
+        io.print('  wallet_cli          Add an existing wallet-cli account (TRON + EVM)')
         break
       case 'list':
         io.print('Usage: agent-wallet list [options]')
@@ -1452,6 +1515,10 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           io.print('Usage: agent-wallet sign typed-data <data> [options]')
           io.print('')
           io.print('Sign EIP-712 typed data. Data is a JSON string.')
+        } else if (subcommand === 'message') {
+          io.print('Usage: agent-wallet sign message --message <utf8> [options]')
+          io.print('')
+          io.print('Sign a UTF-8 message when the selected wallet exposes that capability.')
         } else {
           io.print('Usage: agent-wallet sign <subcommand> <data> [options]')
           io.print('')
@@ -1460,6 +1527,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           io.print('Subcommands:')
           io.print('  tx <payload>        Sign a transaction (JSON)')
           io.print('  typed-data <data>   Sign EIP-712 typed data (JSON)')
+          io.print('  message --message <utf8>  Sign a UTF-8 message')
           io.print('')
           io.print('Run agent-wallet sign <subcommand> --help for more info.')
           break
@@ -1485,8 +1553,8 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('Usage: agent-wallet <command> [options]')
         io.print('')
         io.print('Commands:')
-        io.print('  start             Quick setup: init + create wallet')
-        io.print('  add               Add a new wallet')
+        io.print('  start             Quick setup: init + configure wallet')
+        io.print('  add               Add a wallet configuration')
         io.print('  list              List all configured wallets')
         io.print('  use [id]          Set the active wallet (interactive if omitted)')
         io.print('  inspect <id>      Show wallet details')
@@ -1494,6 +1562,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         io.print('  remove <id>       Remove a wallet')
         io.print('  sign tx <data>    Sign a transaction (JSON payload)')
         io.print('  sign typed-data <data>  Sign EIP-712 typed data (JSON)')
+        io.print('  sign message --message <utf8>  Sign a UTF-8 message')
         io.print('  reset             Delete all wallet data')
         io.print('')
         io.print('Options:')
@@ -1511,6 +1580,13 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
   }
 
   const { command, subcommand, args, options } = parseArgs(rawArgs)
+
+  if (options['cli-password'] !== undefined) {
+    cliIO.print(
+      '--cli-password is not supported because secrets must not be passed in argv; use an interactive prompt or --cli-password-exec <path>.',
+    )
+    return 1
+  }
 
   if (options.help === true || options.h === true) {
     return showCommandHelp(command, subcommand, cliIO)
@@ -1535,7 +1611,6 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           privyWalletId: options['privy-wallet-id'] as string | undefined,
           override: options.override === true,
           cliAccount: options.account as string | undefined,
-          cliPassword: options['cli-password'] as string | undefined,
           cliPasswordExec: options['cli-password-exec'] as string | undefined,
           appSecretExec: options['app-secret-exec'] as string | undefined,
         })
@@ -1554,7 +1629,6 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
           appSecret: options['app-secret'] as string | undefined,
           privyWalletId: options['privy-wallet-id'] as string | undefined,
           cliAccount: options.account as string | undefined,
-          cliPassword: options['cli-password'] as string | undefined,
           cliPasswordExec: options['cli-password-exec'] as string | undefined,
           appSecretExec: options['app-secret-exec'] as string | undefined,
         })
@@ -1586,7 +1660,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         break
       case 'sign':
         if (!subcommand) {
-          cliIO.print('Usage: agent-wallet sign <tx|typed-data> <data> [options]')
+          cliIO.print('Usage: agent-wallet sign <tx|typed-data|message> <data> [options]')
           return 1
         }
         switch (subcommand) {
@@ -1608,6 +1682,21 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
               cliIO,
             )
             break
+          case 'message': {
+            const message = options.message
+            if (typeof message !== 'string' || message.length === 0) {
+              cliIO.print('Usage: agent-wallet sign message --message <utf8> [options]')
+              return 1
+            }
+            await cmdSignMessage(
+              (options['wallet-id'] ?? options.w) as string,
+              message,
+              (options.network ?? options.n) as string | undefined,
+              dir,
+              cliIO,
+            )
+            break
+          }
           default:
             cliIO.print(`Unknown sign subcommand: ${subcommand}`)
             return 1
@@ -1620,20 +1709,20 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
         cliIO.print(`Unknown command: ${command}`)
         return 1
     }
- } catch (e) {
-   if (e instanceof CliExit) {
-     return e.code
-   }
+  } catch (e) {
+    if (e instanceof CliExit) {
+      return e.code
+    }
     if (e instanceof WalletError) {
       cliIO.print(e.message)
       return 1
     }
-   if (e instanceof Error && e.message.startsWith('Invalid wallet config in ')) {
-     cliIO.print(e.message)
-     return 1
-   }
-   throw e
- }
+    if (e instanceof Error && e.message.startsWith('Invalid wallet config in ')) {
+      cliIO.print(e.message)
+      return 1
+    }
+    throw e
+  }
 
   return 0
 }

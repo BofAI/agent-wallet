@@ -7,14 +7,11 @@ import { join } from 'node:path'
 
 import type { Wallet } from './base.js'
 import { ENV_AGENT_WALLET_DIR } from './base.js'
-import {
-  ConfigNotFoundError,
-  loadConfig,
-  type WalletsTopology,
-} from './config.js'
+import { ConfigNotFoundError, loadConfig, type WalletsTopology } from './config.js'
 import { ConfigWalletProvider } from './providers/config-provider.js'
 import { EnvWalletProvider } from './providers/env-provider.js'
 import { cleanEnvValue } from './utils/env.js'
+import type { WalletDependencies } from './providers/wallet-builder.js'
 
 const DEFAULT_SECRETS_DIR = join(homedir(), '.agent-wallet')
 
@@ -23,6 +20,7 @@ export type ResolvedWalletProvider = ConfigWalletProvider | EnvWalletProvider
 export function resolveWalletProvider(options?: {
   network?: string
   dir?: string
+  dependencies?: WalletDependencies
 }): ResolvedWalletProvider {
   const resolvedDir = resolveDir(options?.dir)
 
@@ -30,6 +28,7 @@ export function resolveWalletProvider(options?: {
   if (hasAvailableConfigWallet(config)) {
     return new ConfigWalletProvider(resolvedDir, {
       network: options?.network,
+      dependencies: options?.dependencies,
     })
   }
 
@@ -42,8 +41,13 @@ export async function resolveWallet(options?: {
   network?: string
   dir?: string
   walletId?: string
+  dependencies?: WalletDependencies
 }): Promise<Wallet> {
-  const provider = resolveWalletProvider({ network: options?.network, dir: options?.dir })
+  const provider = resolveWalletProvider({
+    network: options?.network,
+    dir: options?.dir,
+    dependencies: options?.dependencies,
+  })
 
   if (provider instanceof ConfigWalletProvider) {
     return options?.walletId

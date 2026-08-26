@@ -18,20 +18,31 @@ import {
 import { WALLETS_CONFIG_FILENAME } from '../constants.js'
 import { createAdapter } from './wallet-builder.js'
 import { resolveNetwork } from '../utils/network.js'
+import type { WalletDependencies } from './wallet-builder.js'
 
 export class ConfigWalletProvider implements WalletProvider {
   private readonly configDir: string
   private readonly network: string | undefined
+  private readonly dependencies: WalletDependencies | undefined
   private readonly configPath: string
   private config: WalletsTopology
   private readonly wallets = new Map<string, Map<WalletType, Map<string | undefined, Wallet>>>()
 
   constructor(
     configDir: string,
-    options?: { network?: string },
+    options?: { network?: string; dependencies?: WalletDependencies },
   ) {
     this.configDir = configDir
     this.network = options?.network
+    const walletCli = options?.dependencies?.walletCli
+    this.dependencies = walletCli
+      ? {
+          walletCli: {
+            clientFactory: walletCli.clientFactory,
+            secretProviderFactory: walletCli.secretProviderFactory,
+          },
+        }
+      : undefined
     this.configPath = join(configDir, WALLETS_CONFIG_FILENAME)
 
     try {
@@ -112,11 +123,7 @@ export class ConfigWalletProvider implements WalletProvider {
       conf.type === 'privy' ? undefined : resolveNetwork(network, this.network)
     const cached = this.getWalletCache(walletId, conf.type as WalletType, resolvedNetwork)
     if (!cached) {
-      const wallet = await createAdapter(
-        conf,
-        this.configDir,
-        resolvedNetwork,
-      )
+      const wallet = await createAdapter(conf, this.configDir, resolvedNetwork, this.dependencies)
       this.setWalletCache(walletId, conf.type as WalletType, resolvedNetwork, wallet)
       return wallet
     }
@@ -183,4 +190,3 @@ export class ConfigWalletProvider implements WalletProvider {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-

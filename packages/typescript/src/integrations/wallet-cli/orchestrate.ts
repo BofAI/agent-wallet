@@ -14,6 +14,7 @@ import type { Wallet } from '../../core/base.js'
 import type { WalletCliClient } from '../../core/clients/wallet-cli.js'
 import { WalletCliExecutionError } from '../../core/errors.js'
 import { buildTransfer, broadcast, getTxStatus } from './chain-ops.js'
+import { assertTronWalletCliNetwork } from '../../core/wallet-cli-network.js'
 
 export interface SignAndBroadcastParams {
   to: string
@@ -22,7 +23,7 @@ export interface SignAndBroadcastParams {
   token?: string
   contract?: string
   assetId?: string
-  network: string
+  network: `tron:${string}`
   wait?: boolean
   waitTimeoutMs?: number
   confirmMainnet?: boolean
@@ -45,6 +46,7 @@ export async function signAndBroadcast(
   client: WalletCliClient,
   params: SignAndBroadcastParams,
 ): Promise<SignAndBroadcastResult> {
+  assertTronWalletCliNetwork(params.network)
   // Mainnet safety guard
   if (params.network === MAINNET && !params.confirmMainnet) {
     throw new Error(
@@ -62,8 +64,8 @@ export async function signAndBroadcast(
     assetId: params.assetId,
     network: params.network,
   })
-  if (!buildResult.success || !buildResult.data?.tx) {
-    throw new Error(`Failed to build transaction: ${buildResult.error?.message}`)
+  if (!buildResult.data?.tx) {
+    throw new Error('Failed to build transaction: wallet-cli returned no transaction')
   }
 
   // Step 2: Sign with agent-wallet (password used internally by the adapter)
@@ -80,8 +82,8 @@ export async function signAndBroadcast(
     }
     throw error
   }
-  if (!broadcastResult.success || !broadcastResult.data?.txId) {
-    throw new Error(`Failed to broadcast: ${broadcastResult.error?.message}`)
+  if (!broadcastResult.data?.txId) {
+    throw new Error('Failed to broadcast: wallet-cli returned no transaction id')
   }
 
   const txId = broadcastResult.data.txId
@@ -94,7 +96,7 @@ export async function signAndBroadcast(
   const deadline = Date.now() + (params.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
   while (Date.now() < deadline) {
     const statusResult = await getTxStatus(client, txId, params.network)
-    if (!statusResult.success || !statusResult.data) {
+    if (!statusResult.data) {
       await sleep(POLL_INTERVAL_MS)
       continue
     }

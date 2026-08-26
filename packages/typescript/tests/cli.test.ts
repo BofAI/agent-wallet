@@ -23,6 +23,7 @@ import {
   cmdReset,
   cmdStart,
   cmdSignTypedData,
+  cmdSignMessage,
   cmdUse,
   expandTilde,
   main,
@@ -30,6 +31,7 @@ import {
 import { saveConfig } from '../src/core/config.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { WalletCliClient } from '../src/core/clients/wallet-cli.js'
+import { WalletCliExecutionError } from '../src/core/errors.js'
 
 const TEST_PRIVATE_KEY = '4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
 const TEST_MNEMONIC = 'test test test test test test test test test test test junk'
@@ -82,10 +84,39 @@ beforeEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.spyOn(WalletCliClient.prototype, 'run').mockResolvedValue({
+    schema: 'wallet-cli.result.v1',
     success: true,
     command: 'list',
     data: {},
+    meta: { durationMs: 1, warnings: [] },
   })
+  vi.spyOn(WalletCliClient.prototype, 'ensureCompatible').mockResolvedValue({
+    version: '4.12.0',
+    catalog: {
+      tool: 'wallet-cli',
+      version: '4.12.0',
+      globalFlags: [],
+      commands: [{ id: 'current', kind: 'neutral', path: ['current'] }],
+    },
+    networks: [],
+  })
+  vi.spyOn(WalletCliClient.prototype, 'currentAccount').mockImplementation(async (accountRef) => ({
+    schema: 'wallet-cli.result.v1',
+    success: true,
+    command: 'current',
+    data: {
+      accountId: accountRef ?? 'active-account-id',
+      label: accountRef ?? 'active',
+      type: 'seed',
+      index: 0,
+      active: accountRef === undefined,
+      addresses: {
+        tron: 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH',
+        evm: '0x1111111111111111111111111111111111111111',
+      },
+    },
+    meta: { durationMs: 1, warnings: [] },
+  }))
 })
 
 afterEach(() => {
@@ -155,6 +186,15 @@ describe('cmdStart', () => {
     const code2 = await main(['start', 'raw_secret', '--help'], io2)
     expect(code2).toBe(0)
     expect(out(io2)).toContain('Usage: agent-wallet start raw_secret [options]')
+  })
+
+  it('describes wallet_cli as a TRON + EVM signer without planned labels', async () => {
+    const io = mockIO()
+    await main(['start', 'wallet_cli', '--help'], io)
+    expect(out(io)).toContain('TRON + EVM')
+    expect(out(io)).toContain('existing wallet-cli account')
+    expect(out(io)).toContain('does not create or import')
+    expect(out(io)).not.toContain('planned')
   })
 
   it('starts raw_secret with private key', async () => {
@@ -312,7 +352,9 @@ describe('cmdStart', () => {
 })
 
 describe('cmdStart override behavior', () => {
-  it('accepts explicit flags in start wallet_cli', async () => {
+  it('accepts an explicit password exec flag in start wallet_cli', async () => {
+    const scriptPath = join(secretsDir, 'start-password.sh')
+    writeFileSync(scriptPath, '#!/bin/sh\nprintf KsPass123!\n', { mode: 0o755 })
     const io = mockIO()
     const code = await main(
       [
@@ -322,8 +364,8 @@ describe('cmdStart override behavior', () => {
         'cli1',
         '--account',
         'main-1',
-        '--cli-password',
-        'KsPass123!',
+        '--cli-password-exec',
+        scriptPath,
         '-d',
         secretsDir,
       ],
@@ -335,7 +377,7 @@ describe('cmdStart override behavior', () => {
     expect(config.active_wallet).toBe('cli1')
     expect(config.wallets.cli1.type).toBe('wallet_cli')
     expect(config.wallets.cli1.params.account).toBe('main-1')
-    expect(config.wallets.cli1.params.password).toBe('KsPass123!')
+    expect(config.wallets.cli1.params.password).toEqual({ exec: scriptPath })
   })
 
   it('prompts for missing wallet_cli password in start wallet_cli', async () => {
@@ -349,7 +391,7 @@ describe('cmdStart override behavior', () => {
     const config = readConfig(secretsDir)
     expect(config.wallets.cli2.type).toBe('wallet_cli')
     expect(config.wallets.cli2.params.password).toBe('KsPass123!')
-    expect(config.wallets.cli2.params.account).toBeUndefined()
+    expect(config.wallets.cli2.params.account).toBe('active-account-id')
   })
 
   it('exits when wallets exist and user selects exit', async () => {
@@ -465,6 +507,7 @@ describe('cmdAdd / active wallet', () => {
     const code2 = await main(['add', 'privy', '--help'], io2)
     expect(code2).toBe(0)
     expect(out(io2)).toContain('Usage: agent-wallet add privy [options]')
+    expect(out(io2)).toContain('existing Privy wallet')
     expect(out(io2)).toContain('--app-id')
     expect(out(io2)).toContain('--privy-wallet-id')
   })
@@ -474,8 +517,11 @@ describe('cmdAdd / active wallet', () => {
     const code = await main(['add', 'wallet_cli', '--help'], io)
     expect(code).toBe(0)
     expect(out(io)).toContain('Usage: agent-wallet add wallet_cli [options]')
+    expect(out(io)).toContain('existing wallet-cli account')
+    expect(out(io)).toContain('does not create or import')
     expect(out(io)).toContain('--account')
-    expect(out(io)).toContain('--cli-password')
+    expect(out(io)).toContain('--cli-password-exec')
+    expect(out(io)).not.toContain('--cli-password <pw>')
   })
 
   it('adds wallet_cli wallet from explicit flags', async () => {
@@ -491,6 +537,7 @@ describe('cmdAdd / active wallet', () => {
     expect(config.wallets['cli-add'].type).toBe('wallet_cli')
     expect(config.wallets['cli-add'].params.account).toBe('main-1')
     expect(config.wallets['cli-add'].params.password).toBe('KsPass123!')
+    expect(WalletCliClient.prototype.currentAccount).toHaveBeenCalledWith('main-1')
   })
 
   it('adds wallet_cli wallet prompting for password when omitted', async () => {
@@ -503,10 +550,32 @@ describe('cmdAdd / active wallet', () => {
     const config = readConfig(secretsDir)
     expect(config.wallets['cli-prompt'].type).toBe('wallet_cli')
     expect(config.wallets['cli-prompt'].params.password).toBe('Prompted123!')
-    expect(config.wallets['cli-prompt'].params.account).toBeUndefined()
+    expect(config.wallets['cli-prompt'].params.account).toBe('active-account-id')
+    expect(WalletCliClient.prototype.currentAccount).toHaveBeenCalledWith(undefined)
   })
 
-  it('accepts wallet_cli via main with --cli-password and no account', async () => {
+  it('rejects an unavailable wallet-cli account before collecting its password', async () => {
+    vi.mocked(WalletCliClient.prototype.currentAccount).mockRejectedValueOnce(
+      new WalletCliExecutionError('account not found', 'account_not_found'),
+    )
+    const io = mockIO()
+    const prompt = vi.spyOn(io, 'prompt')
+
+    await expect(
+      cmdAdd(secretsDir, io, {
+        walletType: 'wallet_cli',
+        walletId: 'missing-cli',
+        cliAccount: 'missing-account',
+      }),
+    ).rejects.toMatchObject({ code: 1 })
+
+    expect(prompt).not.toHaveBeenCalled()
+    expect(out(io)).toContain("Could not link wallet-cli account 'missing-account'")
+    expect(out(io)).toContain('Create or import the account with wallet-cli')
+    expect(readConfig(secretsDir).wallets).not.toHaveProperty('missing-cli')
+  })
+
+  it('rejects a plaintext wallet-cli password passed through argv', async () => {
     const io = mockIO()
     const code = await main(
       [
@@ -522,11 +591,9 @@ describe('cmdAdd / active wallet', () => {
       io,
     )
 
-    expect(code).toBe(0)
-    const config = readConfig(secretsDir)
-    expect(config.wallets['cli-main'].type).toBe('wallet_cli')
-    expect(config.wallets['cli-main'].params.password).toBe('Main123!')
-    expect(config.wallets['cli-main'].params.account).toBeUndefined()
+    expect(code).toBe(1)
+    expect(out(io)).toContain('secrets must not be passed in argv')
+    expect(existsSync(join(secretsDir, 'wallets_config.json'))).toBe(false)
   })
 
   it('adds raw_secret wallet from mnemonic', async () => {
@@ -886,6 +953,75 @@ describe('sign commands', () => {
     )
     expect(code).toBe(0)
     expect(out(io)).toContain('Signature:')
+  })
+
+  it('signs a UTF-8 message through capability detection', async () => {
+    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
+      getAddress: vi.fn(),
+      signTransaction: vi.fn(),
+      signMessage: vi.fn().mockResolvedValue('aabbcc'),
+    })
+    const io = mockIO()
+    await cmdSignMessage('signer', 'hello 世界', 'eip155:1', secretsDir, io)
+    expect(out(io)).toContain('Signature: aabbcc')
+  })
+
+  it('documents and parses sign message --message', async () => {
+    const help = mockIO()
+    expect(await main(['sign', 'message', '--help'], help)).toBe(0)
+    expect(out(help)).toContain('--message <utf8>')
+
+    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
+      getAddress: vi.fn(),
+      signTransaction: vi.fn(),
+      signMessage: vi.fn().mockResolvedValue('deadbeef'),
+    })
+    const io = mockIO()
+    const code = await main(
+      [
+        'sign',
+        'message',
+        '--message',
+        'hello',
+        '--wallet-id',
+        'signer',
+        '--network',
+        'eip155:1',
+        '-d',
+        secretsDir,
+      ],
+      io,
+    )
+    expect(code).toBe(0)
+    expect(out(io)).toContain('Signature: deadbeef')
+  })
+
+  it('parses an equals-form message whose value starts with a hyphen', async () => {
+    const signMessage = vi.fn().mockResolvedValue('deadbeef')
+    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
+      getAddress: vi.fn(),
+      signTransaction: vi.fn(),
+      signMessage,
+    })
+    const io = mockIO()
+
+    const code = await main(
+      [
+        'sign',
+        'message',
+        '--message=-hello',
+        '--wallet-id',
+        'signer',
+        '--network',
+        'eip155:1',
+        '-d',
+        secretsDir,
+      ],
+      io,
+    )
+
+    expect(code).toBe(0)
+    expect(signMessage).toHaveBeenCalledWith(new TextEncoder().encode('-hello'))
   })
 })
 

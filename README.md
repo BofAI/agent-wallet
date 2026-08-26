@@ -11,8 +11,8 @@
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
-   - [SDK Integrated](#sdk-integrated)
-   - [CLI](#cli)
+  - [SDK Integrated](#sdk-integrated)
+  - [CLI](#cli)
 - [Exec Script Credentials](#exec-script-credentials)
 - [Examples](#examples)
 - [Documentation](#documentation)
@@ -32,11 +32,11 @@ With **agent-wallet** you can:
 
 ### Wallet Types
 
-| Wallet Type | Source | Networks | Notes |
-|-------------|--------|----------|-------|
-| `raw_secret` | CLI config / env | EVM + TRON | Plaintext private key or mnemonic in config (dev only). |
-| `privy` | CLI config | EVM + TRON | Uses Privy app credentials + wallet ID. See [doc/how-to-add-privy-wallet.md](./doc/how-to-add-privy-wallet.md). |
-| `wallet_cli` | CLI config | TRON | Keys managed by wallet-cli; agent-wallet delegates signing via subprocess (TRON now, BSC planned). Requires `@tron-walletcli/wallet-cli` installed. See [doc/how-to-add-wallet-cli-wallet.md](./doc/how-to-add-wallet-cli-wallet.md). |
+| Wallet Type  | Source           | Networks   | Notes                                                                                                                                                                                                                           |
+| ------------ | ---------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `raw_secret` | CLI config / env | EVM + TRON | Plaintext private key or mnemonic in config (dev only).                                                                                                                                                                         |
+| `privy`      | CLI config       | EVM + TRON | Uses Privy app credentials + wallet ID. See [doc/how-to-add-privy-wallet.md](./doc/how-to-add-privy-wallet.md).                                                                                                                 |
+| `wallet_cli` | CLI config       | TRON + EVM | 金鑰由 wallet-cli 管理；agent-wallet 透過受限子程序委派交易、typed-data 與 UTF-8 message 簽章。需要相容的 `@tron-walletcli/wallet-cli` 4.x。詳見 [doc/how-to-add-wallet-cli-wallet.md](./doc/how-to-add-wallet-cli-wallet.md)。 |
 
 ## Quick Start
 
@@ -54,10 +54,10 @@ Set up wallets with the [CLI](#cli) first, then let the SDK resolve from your lo
 
 If no usable CLI wallet config is available, the SDK can resolve directly from environment variables:
 
-| Environment variable | Purpose |
-|----------------------|---------|
-| `AGENT_WALLET_PRIVATE_KEY` | Private key used for SDK wallet resolution. |
-| `AGENT_WALLET_MNEMONIC` | Mnemonic used for SDK wallet resolution. |
+| Environment variable                  | Purpose                                                        |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `AGENT_WALLET_PRIVATE_KEY`            | Private key used for SDK wallet resolution.                    |
+| `AGENT_WALLET_MNEMONIC`               | Mnemonic used for SDK wallet resolution.                       |
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index used when deriving from `AGENT_WALLET_MNEMONIC`. |
 
 - The SDK also remains compatible with legacy `TRON_PRIVATE_KEY`, `TRON_MNEMONIC`, and `TRON_ACCOUNT_INDEX` environment variables.
@@ -152,10 +152,10 @@ For `privy` and `wallet_cli` wallets, you can reference credentials via an **exe
 
 ### CLI Flags
 
-| Flag | Wallet Type | Description |
-|------|------------|-------------|
-| `--app-secret-exec <path>` | privy | Privy app secret via exec script |
-| `--cli-password-exec <path>` | wallet_cli | wallet-cli keystore password via exec script |
+| Flag                         | Wallet Type | Description                                  |
+| ---------------------------- | ----------- | -------------------------------------------- |
+| `--app-secret-exec <path>`   | privy       | Privy app secret via exec script             |
+| `--cli-password-exec <path>` | wallet_cli  | wallet-cli keystore password via exec script |
 
 ### Config Format
 
@@ -194,48 +194,53 @@ Create a script that fetches the secret from 1Password:
 op read 'op://Private/wallet-cli-password/password'
 ```
 
-Then add the wallet:
+After creating or importing the account with wallet-cli, link that existing account. agent-wallet
+validates it without acquiring the password and stores its canonical account ID:
 
 ```bash
-agent-wallet start wallet_cli   --wallet-id my_tron_cli   --account main-1   --cli-password-exec /path/to/fetch-password.sh
+agent-wallet start wallet_cli \
+  --wallet-id my_cli_wallet \
+  --account main-1 \
+  --cli-password-exec /path/to/fetch-password.sh
 ```
 
 ## Examples
 
 TypeScript samples under [`packages/typescript/examples/`](./packages/typescript/examples/).
 
-| What | Example |
-|------|---------|
-| TRON sign & broadcast | [tron-sign-and-broadcast.ts](./packages/typescript/examples/tron-sign-and-broadcast.ts) |
-| BSC sign & broadcast | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts) |
-| Switch active wallet | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts) |
-| x402 typed data (TRON / BSC) | [tron-x402-sign-typed-data.ts](./packages/typescript/examples/tron-x402-sign-typed-data.ts), [bsc-x402-sign-typed-data.ts](./packages/typescript/examples/bsc-x402-sign-typed-data.ts) |
-| One env key → TRON + EVM typed data | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts) |
-| Privy sign consistency (EVM / TRON) | [compare-sign-consistency.ts](./packages/typescript/examples/compare-sign-consistency.ts) |
-| Privy TRON typed-data verification | [verify-tron-privy-typed-data.ts](./packages/typescript/examples/verify-tron-privy-typed-data.ts) |
+| What                                | Example                                                                                                                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TRON sign & broadcast               | [tron-sign-and-broadcast.ts](./packages/typescript/examples/tron-sign-and-broadcast.ts)                                                                                                |
+| BSC sign & broadcast                | [bsc-sign-and-broadcast.ts](./packages/typescript/examples/bsc-sign-and-broadcast.ts)                                                                                                  |
+| Switch active wallet                | [switch-active-wallet.ts](./packages/typescript/examples/switch-active-wallet.ts)                                                                                                      |
+| x402 typed data (TRON / BSC)        | [tron-x402-sign-typed-data.ts](./packages/typescript/examples/tron-x402-sign-typed-data.ts), [bsc-x402-sign-typed-data.ts](./packages/typescript/examples/bsc-x402-sign-typed-data.ts) |
+| One env key → TRON + EVM typed data | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts)                                                                    |
+| Privy sign consistency (EVM / TRON) | [compare-sign-consistency.ts](./packages/typescript/examples/compare-sign-consistency.ts)                                                                                              |
+| Privy TRON typed-data verification  | [verify-tron-privy-typed-data.ts](./packages/typescript/examples/verify-tron-privy-typed-data.ts)                                                                                      |
 
 ## Documentation
 
-| Doc | Audience |
-|-----|----------|
-| [文件導覽](./doc/README.md) | 現行文件責任、維護規則與歷史封存入口 |
-| [**Getting started (CLI)**](./doc/getting-started.md) | Step-by-step CLI walkthrough |
-| [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md) | Use existing Privy App + Wallet ID in the CLI |
-| [How to add a wallet-cli wallet](./doc/how-to-add-wallet-cli-wallet.md) | Use wallet-cli managed TRON keys in the CLI |
-| [TypeScript package](./packages/typescript/README.md) | `npm` / SDK usage |
+| Doc                                                                     | Audience                                      |
+| ----------------------------------------------------------------------- | --------------------------------------------- |
+| [文件導覽](./doc/README.md)                                             | 現行文件責任、維護規則與歷史封存入口          |
+| [**Getting started (CLI)**](./doc/getting-started.md)                   | Step-by-step CLI walkthrough                  |
+| [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md)           | Use existing Privy App + Wallet ID in the CLI |
+| [How to add a wallet-cli wallet](./doc/how-to-add-wallet-cli-wallet.md) | 使用 wallet-cli 管理的 TRON/EVM 帳戶簽章      |
+| [TypeScript package](./packages/typescript/README.md)                   | `npm` / SDK usage                             |
 
 Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), and flag reference live in **getting-started** and the package README — you don't need them for the first run.
 
 ## Security
 
-- **`raw_secret`** — private key or mnemonic stored in **plaintext** inside config; **dev / low-value only**. For production signing, use `wallet_cli` (BSC support planned) or `privy`.
+- **`raw_secret`** — private key or mnemonic stored in **plaintext** inside config; **dev / low-value only**. For production signing, use `wallet_cli` or `privy`.
 - **`privy` / `wallet_cli`** — credentials stored in config. Use [exec script credentials](#exec-script-credentials) to avoid storing secrets in plaintext.
+- **`wallet_cli`** — 簽章一律固定完整 network 與 account identity；exec password 每次簽章重新取得，只經 stdin 傳給子程序。選用的 build/broadcast/status integration 仍限定 TRON。
 - Secrets are **not** sent over the network by this SDK; still protect your machine, backups, and env files.
 
 ## Packages & development
 
-| Package | Path |
-|---------|------|
+| Package                               | Path                                             |
+| ------------------------------------- | ------------------------------------------------ |
 | TypeScript (`@bankofai/agent-wallet`) | [`packages/typescript/`](./packages/typescript/) |
 
 ```bash

@@ -12,7 +12,21 @@ function mockWallet(signedTxJson: string): Wallet {
 }
 
 function mockClient(): WalletCliClient {
-  return { run: vi.fn() } as unknown as WalletCliClient
+  return {
+    ensureCompatible: vi.fn(
+      async (target: { family: string; cliNetwork: string; requestedChainId?: string }) => ({
+        version: '4.12.0',
+        catalog: { tool: 'wallet-cli', version: '4.12.0', globalFlags: [], commands: [] },
+        networks: [],
+        network: {
+          id: target.cliNetwork,
+          family: target.family,
+          chainId: target.requestedChainId ?? target.cliNetwork.split(':')[1],
+        },
+      }),
+    ),
+    run: vi.fn(),
+  } as unknown as WalletCliClient
 }
 
 const UNSIGNED_TX = { txID: 'abc', raw_data_hex: 'deadbeef' }
