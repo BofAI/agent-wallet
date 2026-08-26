@@ -11,7 +11,7 @@
   - _Requirements: 5.1-5.6_
 
 - [x] 1.2 config schema、共享 resolver、builder registry 與 `wallet_cli` 類型已存在
-  - 保留中央靜態 Zod union；P2 動態 params schema registry 明確不在本期
+  - 保留中央靜態 Zod discriminated union；builder registry 收斂為不公開的封閉分派
   - `raw_secret` 維持原分支；Privy/wallet-cli 維持 registry 分派
   - _Requirements: 3.1, 6.1-6.7_
 
@@ -81,7 +81,7 @@
   - _Requirements: 1.2-1.5, 3.3, 4.4, 5.6, 11.2_
 
 - [x] 4.2 將 TRON transaction / typed-data 改為 explicit context + per-sign lease
-  - TRON transaction 維持 JSON input 與 `JSON.stringify(data.signed)` output；驗證 signature array
+  - TRON transaction 維持 JSON input，output 改為 `family: "tron"` typed artifact；驗證 signature array
   - typed-data 維持去 `0x` public contract，改傳 pinned account/network
   - readiness/codec/identity 在 acquire 前完成；每次 signing `acquire()` 一次並在 success/error/timeout 的 `finally` dispose
   - 更新既有 TRON/x402 tests，驗證簽名結果相容且 exec secret 每次重取
@@ -126,7 +126,7 @@
   - _Requirements: 1.2, 1.9, 2.6, 3.6, 3.8, 5.4, 9.3-9.4_
 
 - [x] 5.4 更新公開 exports 與 optional peer 契約
-  - 匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver`、`SecretProvider`/`SecretLease`、dependency options、`MessageSigningCapable`、launch/network/warning 型別及相關錯誤
+  - 從 `@bankofai/agent-wallet/advanced` 匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver`、`SecretProvider`/`SecretLease` 與 launch/network/warning 型別；root 保留穩定 SDK 契約
   - `@tron-walletcli/wallet-cli` optional peer 限制為 `>=4.12.0 <5.0.0`；不得新增硬 dependency 或依賴 CI 全域安裝
   - agent-wallet `engines` 維持 Node ≥18；以 import/module smoke test 驗證未安裝 peer 時非 wallet-cli 功能仍可載入
   - _Requirements: 3.7, 7.1-7.2, 7.6, 10.6_
@@ -163,7 +163,7 @@
 - [x] 7.3 完成跨平台與完整回歸矩陣
   - 覆蓋 Linux/macOS PATH/package launch、Windows JS entrypoint、unsafe `.cmd` shim 拒絕及 SecretRef `.cmd/.bat` 固定 launcher
   - 執行 config/resolver/client/adapter/CLI/chain-ops/x402 測試，確認 `raw_secret`、Privy、TRON、EVM、optional integration 及公開輸出格式均相容
-  - 驗證 P2 動態 params schema registry 未混入本次變更
+  - 驗證未引入動態 params schema plugin，內部 registry 與中央 schema 維持同步
   - _Requirements: 6.7, 7.2, 7.5-7.7, 10.2-10.6, 11.6_
 
 ## 8. 品質閘與驗證摘要
@@ -179,6 +179,7 @@
   - 2026-08-25：四個 pnpm scripts 都在執行前被 pnpm 11 modules-layout 檢查攔下（現有 node_modules 與新 `autoInstallPeers:false` 不同，非 TTY 禁止 purge，且 registry metadata fetch 失敗）；未重裝或修改 sibling
   - 2026-08-25 onboarding 補強後：Vitest 21 files passed、1 file skipped，263 tests passed、2 opt-in skipped；`tsc --noEmit`、ESLint、tsup build 與本次變更檔 Prettier check 均通過
   - 完整 `prettier --check src/ tests/` 另列出 11 個未由本期修改的既有格式檔案，未批次重排無關程式
+  - 2026-08-26 架構收斂後：Vitest 22 files passed、1 file skipped，268 tests passed、2 opt-in skipped；src/examples TypeScript、ESLint、完整 Prettier check 與 ESM/CJS/DTS build 均通過
   - _Requirements: 全域品質閘_
 
 - [x] 8.3 執行或明確 skip 上一級本地 wallet-cli 實測
@@ -189,9 +190,9 @@
   - _Requirements: 11.4-11.5_
 
 - [x] 8.4 完成變更範圍與安全檢查
-  - 執行 formatter、`git diff --check`，檢查沒有 secret/output 洩漏、沒有私鑰匯入/解密/二次簽名路徑、沒有 P2 registry 重構、沒有意外變更 archive 或 sibling repository
+  - 執行 formatter、`git diff --check`，檢查沒有 secret/output 洩漏、沒有私鑰匯入/解密/二次簽名路徑、沒有公開半套 registry API、沒有意外變更 archive 或 sibling repository
   - 逐項核對本文件 checkbox 與 requirements trace，僅將實際完成且驗證過的任務標為 `[x]`
-  - 2026-08-25：`git diff --check` 通過；`.kiro/steering/`、`doc/archive/` 與 `../wallet-cli` 無變更，P2 registry 保持延後；使用者既有未追蹤 package-lock 檔案未修改
+  - 2026-08-25：`git diff --check` 通過；`.kiro/steering/`、`doc/archive/` 與 `../wallet-cli` 無變更；使用者既有未追蹤 package-lock 檔案未修改
   - _Requirements: 1.10, 6.7, 9.1-9.10, 10.7, 11.5-11.6_
 
 ## 9. 使用者文件與 readiness 結案
@@ -207,6 +208,6 @@
   - _Requirements: 1.1-1.9, 2.1-2.8, 7.1-7.7, 8.1-8.9, 9.1-9.10, 11.4-11.5_
 
 - [x] 9.3 更新 readiness review 的修復與驗證狀態
-  - 在 `doc/wallet-cli-x402-readiness-review.md` 將已修復項目連回唯一需求/設計/測試來源，記錄仍延後的 P2 dynamic schema registry
+  - 在 `doc/wallet-cli-x402-readiness-review.md` 將已修復項目連回唯一需求/設計/測試來源，記錄封閉 registry 與 discriminated union 的收斂結果
   - 記錄上一級 wallet-cli source 4.12.0 具 EVM 能力但既有 dist/全域 artifact 漂移，以及最終 opt-in probe 結果；不得把未執行的實測標為通過
   - _Requirements: 6.7, 7.3-7.7, 11.4-11.6_

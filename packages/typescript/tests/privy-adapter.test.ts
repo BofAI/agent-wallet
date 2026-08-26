@@ -1,22 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { PrivyAdapter } from '../src/core/adapters/privy.js'
-import { keccak256 } from 'viem'
-import { secp256k1 } from '@noble/curves/secp256k1'
-import bs58checkModule from 'bs58check'
 
 type RpcCall = { walletId: string; method: string; params: Record<string, unknown> }
-
-type Bs58checkLike = {
-  encode?: (input: Uint8Array) => string
-  default?: typeof bs58checkModule
-}
-
-const bs58checkInterop = bs58checkModule as Bs58checkLike
-const bs58check: typeof bs58checkModule =
-  typeof bs58checkInterop.encode === 'function'
-    ? bs58checkModule
-    : (bs58checkInterop.default ?? bs58checkModule)
 
 class FakePrivyClient {
   calls: RpcCall[] = []
@@ -61,7 +47,6 @@ class FakePrivyClient {
 }
 
 describe('PrivyAdapter', () => {
-
   it('maps signTransaction to eth_signTransaction', async () => {
     const client = new FakePrivyClient()
     const adapter = new PrivyAdapter(
@@ -84,7 +69,7 @@ describe('PrivyAdapter', () => {
         value: 0,
       },
     })
-    expect(signed).toBe('signed')
+    expect(signed).toEqual({ family: 'evm', rawTransaction: 'signed' })
     expect(client.calls[0].method).toBe('eth_signTransaction')
     expect(client.calls[0].params.transaction.chain_id).toBe('0x1')
     expect(client.calls[0].params.transaction.gas_limit).toBe('0x5208')
@@ -114,7 +99,7 @@ describe('PrivyAdapter', () => {
       value: 0,
     })
 
-    expect(signed).toBe('signed')
+    expect(signed).toEqual({ family: 'evm', rawTransaction: 'signed' })
     expect(client.calls[0].method).toBe('eth_signTransaction')
     expect(client.calls[0].params.transaction.chain_id).toBe('0x1')
     expect(client.calls[0].params.transaction.gas_limit).toBe('0x5208')
@@ -146,8 +131,6 @@ describe('PrivyAdapter', () => {
     expect(client.calls[0].params.typed_data.primary_type).toBe('Message')
   })
 
-
-
   it('caches getAddress', async () => {
     const client = new FakePrivyClient()
     const adapter = new PrivyAdapter(
@@ -163,12 +146,21 @@ describe('PrivyAdapter', () => {
     await adapter.getAddress()
     expect(client.walletCalls).toHaveLength(1)
   })
-})
 
-function toTronAddress(pubkey: Uint8Array): string {
-  const uncompressed = pubkey[0] === 4 ? pubkey.slice(1) : pubkey
-  const addrHash = keccak256(uncompressed)
-  const addrBytes = Buffer.from(addrHash.slice(2), 'hex').slice(-20)
-  const tronAddrBytes = Buffer.concat([Buffer.from([0x41]), addrBytes])
-  return bs58check.encode(tronAddrBytes)
-}
+  it('rejects a Privy wallet whose chain family does not match the requested network', async () => {
+    const client = new FakePrivyClient({ chainType: 'ethereum' })
+    const adapter = new PrivyAdapter(
+      {
+        appId: 'app',
+        appSecret: 'secret',
+        walletId: 'wallet-1',
+      },
+      client,
+      'tron:mainnet',
+    )
+
+    await expect(adapter.getAddress()).rejects.toThrow(
+      "Privy wallet chain 'evm' does not match requested network family 'tron'",
+    )
+  })
+})

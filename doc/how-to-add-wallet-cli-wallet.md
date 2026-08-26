@@ -208,7 +208,8 @@ mismatch、EIP-4844 與 EIP-7702 會被明確拒絕。raw digest signing 不在�
 刻意只支援 TRON，不提供 EVM RPC。以下 helper 維持 build → sign → broadcast → status：
 
 ```ts
-import { resolveWallet, WalletCliClient } from "@bankofai/agent-wallet";
+import { resolveWallet } from "@bankofai/agent-wallet";
+import { WalletCliClient } from "@bankofai/agent-wallet/advanced";
 import { signAndBroadcast } from "@bankofai/agent-wallet/integrations/wallet-cli";
 
 const client = new WalletCliClient();

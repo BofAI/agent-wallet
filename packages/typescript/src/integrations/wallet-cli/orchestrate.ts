@@ -69,7 +69,14 @@ export async function signAndBroadcast(
   }
 
   // Step 2: Sign with agent-wallet (password used internally by the adapter)
-  const signedTxJson = await wallet.signTransaction(buildResult.data.tx as Record<string, unknown>)
+  const signed = await wallet.signTransaction(buildResult.data.tx as Record<string, unknown>)
+  if (signed.family !== 'tron') {
+    throw new WalletCliExecutionError(
+      'TRON orchestration requires a TRON signed transaction artifact',
+      'contract_mismatch',
+    )
+  }
+  const signedTxJson = JSON.stringify(signed.transaction)
 
   // Step 3: Broadcast (signed tx via stdin, no password)
   let broadcastResult
@@ -77,7 +84,7 @@ export async function signAndBroadcast(
     broadcastResult = await broadcast(client, signedTxJson, params.network)
   } catch (error) {
     if (error instanceof WalletCliExecutionError && error.code === 'timeout') {
-      const txId = extractTxId(signedTxJson) ?? extractTxId(buildResult.data.tx)
+      const txId = extractTxId(signed.transaction) ?? extractTxId(buildResult.data.tx)
       if (txId) return { txId, stage: 'timeout' }
     }
     throw error

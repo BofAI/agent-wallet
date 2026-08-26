@@ -3,20 +3,22 @@
  * and privy wallets (privy_evm / privy_tron_2).
  *
  * Usage:
- *   AGENT_WALLET_DIR=/tmp/test-wallet \
- *   AGENT_WALLET_PASSWORD='Abc12345!@' \
- *   npx tsx examples/compare-sign-consistency.ts
+ *   AGENT_WALLET_DIR=/tmp/test-wallet npx tsx examples/compare-sign-consistency.ts
  */
 
-import { ConfigWalletProvider, type Eip712Capable, resolveWalletProvider } from '../src/index.js'
+import {
+  ConfigWalletProvider,
+  resolveWalletProvider,
+  type SignedTransactionArtifact,
+} from '../src/index.js'
+import { requireEip712Wallet } from './example-utils.js'
 
 const DIR = process.env.AGENT_WALLET_DIR ?? '/tmp/test-wallet'
 const RAW_SECRET_ID = process.env.RAW_SECRET_WALLET_ID ?? 'default_raw'
 const PRIVY_EVM_ID = process.env.PRIVY_EVM_WALLET_ID ?? 'privy_evm'
 const PRIVY_TRON_ID = process.env.PRIVY_TRON_WALLET_ID ?? 'privy_tron_2'
 const EVM_NETWORK = process.env.EVM_NETWORK ?? 'eip155:1'
-const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron'
-
+const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron:mainnet'
 
 const provider = resolveWalletProvider({ dir: DIR })
 if (!(provider instanceof ConfigWalletProvider)) {
@@ -85,6 +87,12 @@ function describeOutput(value: string): SignOutput {
   }
 }
 
+function describeTransactionOutput(artifact: SignedTransactionArtifact): SignOutput {
+  return describeOutput(
+    artifact.family === 'evm' ? artifact.rawTransaction : JSON.stringify(artifact.transaction),
+  )
+}
+
 function compareHex(a: SignOutput, b: SignOutput) {
   return a.kind === 'hex' && b.kind === 'hex' && a.has0x === b.has0x
 }
@@ -106,12 +114,13 @@ async function signAll() {
   console.log('TRON tx payload (both):', JSON.stringify(tronTxPayload))
   console.log()
 
-
   console.log('== sign tx ==')
-  const txDefaultEvm = describeOutput(await rawSecretEvm.signTransaction(evmTxPayload))
-  const txPrivyEvm = describeOutput(await privyEvm.signTransaction(evmTxPayload))
-  const txDefaultTron = describeOutput(await rawSecretTron.signTransaction(tronTxPayload))
-  const txPrivyTron = describeOutput(await privyTron.signTransaction(tronTxPayload))
+  const txDefaultEvm = describeTransactionOutput(await rawSecretEvm.signTransaction(evmTxPayload))
+  const txPrivyEvm = describeTransactionOutput(await privyEvm.signTransaction(evmTxPayload))
+  const txDefaultTron = describeTransactionOutput(
+    await rawSecretTron.signTransaction(tronTxPayload),
+  )
+  const txPrivyTron = describeTransactionOutput(await privyTron.signTransaction(tronTxPayload))
   console.log('EVM raw_secret:', txDefaultEvm)
   console.log('EVM privy:', txPrivyEvm)
   console.log('TRON raw_secret:', txDefaultTron)
@@ -122,16 +131,16 @@ async function signAll() {
 
   console.log('== sign typed-data ==')
   const tdDefaultEvm = describeOutput(
-    await (rawSecretEvm as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(rawSecretEvm).signTypedData(cloneTypedData()),
   )
   const tdPrivyEvm = describeOutput(
-    await (privyEvm as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(privyEvm).signTypedData(cloneTypedData()),
   )
   const tdDefaultTron = describeOutput(
-    await (rawSecretTron as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(rawSecretTron).signTypedData(cloneTypedData()),
   )
   const tdPrivyTron = describeOutput(
-    await (privyTron as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(privyTron).signTypedData(cloneTypedData()),
   )
   console.log('EVM raw_secret:', tdDefaultEvm)
   console.log('EVM privy:', tdPrivyEvm)

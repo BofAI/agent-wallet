@@ -35,7 +35,7 @@ describe('config schemas', () => {
       },
     })
     expect(parsed.type).toBe('raw_secret')
-    expect((parsed.params as { source: string }).source).toBe('private_key')
+    expect(parsed.params.source).toBe('private_key')
   })
 
   it('accepts raw_secret mnemonic config', () => {
@@ -46,8 +46,8 @@ describe('config schemas', () => {
         mnemonic: 'test test test test test test test test test test test junk',
       },
     })
-    expect((parsed.params as { source: string }).source).toBe('mnemonic')
-    expect((parsed.params as { account_index: number }).account_index).toBe(0)
+    expect(parsed.params.source).toBe('mnemonic')
+    expect(parsed.params.account_index).toBe(0)
   })
 
   it('rejects invalid wallet type', () => {
@@ -72,7 +72,6 @@ describe('config schemas', () => {
   })
 
   it('parses params sub-schemas independently', () => {
-
     const pkp = RawSecretPrivateKeyParamsSchema.parse({ source: 'private_key', private_key: '0x1' })
     expect(pkp.source).toBe('private_key')
 
@@ -95,7 +94,7 @@ describe('config schemas', () => {
     })
 
     expect(parsed.type).toBe('privy')
-    expect((parsed.params as PrivyWalletParams).app_id).toBe('app')
+    expect(parsed.params.app_id).toBe('app')
   })
 })
 
@@ -172,7 +171,6 @@ describe('loadConfig / saveConfig', () => {
     expect(raw.active_wallet).toBeUndefined()
   })
 })
-
 
 describe('wallet topology schema', () => {
   it('defaults active_wallet to null', () => {

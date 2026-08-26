@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveWalletAddresses } from '../src/core/address-resolution.js'
 import type { WalletCliClient } from '../src/core/clients/wallet-cli.js'
 import { saveConfig, type WalletConfig } from '../src/core/config.js'
+import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { resolveWallet, resolveWalletProvider } from '../src/core/resolver.js'
 import type { SecretProvider } from '../src/core/secret-provider.js'
 
@@ -170,5 +171,41 @@ describe('wallet-cli standard resolver dependencies', () => {
     await expect(wallet.getAddress()).resolves.toBe(TRON_ADDRESS)
     expect(firstClient.currentAccount).toHaveBeenCalledTimes(1)
     expect(secondClient.currentAccount).not.toHaveBeenCalled()
+  })
+
+  it('recreates wallet-cli dependencies after removing and re-adding the same wallet id', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-recreate-'))
+    dirs.push(dir)
+    const oldPassword = { exec: '/old-password' }
+    const newPassword = { exec: '/new-password' }
+    saveConfig(dir, {
+      active_wallet: 'cli',
+      wallets: {
+        cli: { type: 'wallet_cli', params: { account: 'old-account', password: oldPassword } },
+      },
+    })
+    const secretProvider = { acquire: vi.fn() } as unknown as SecretProvider
+    const secretProviderFactory = vi.fn(() => secretProvider)
+    const provider = new ConfigWalletProvider(dir, {
+      dependencies: {
+        walletCli: { clientFactory: () => client(), secretProviderFactory },
+      },
+    })
+
+    const first = await provider.getWallet('cli', 'tron:nile')
+    provider.removeWallet('cli')
+    provider.addWallet('cli', {
+      type: 'wallet_cli',
+      params: { account: 'new-account', password: newPassword },
+    })
+    const recreated = await provider.getWallet('cli', 'tron:nile')
+
+    expect(recreated).not.toBe(first)
+    expect(secretProviderFactory).toHaveBeenNthCalledWith(1, oldPassword, {
+      label: 'wallet-cli password',
+    })
+    expect(secretProviderFactory).toHaveBeenNthCalledWith(2, newPassword, {
+      label: 'wallet-cli password',
+    })
   })
 })

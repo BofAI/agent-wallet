@@ -5,6 +5,10 @@
 
 Universal multi-chain signing SDK for AI agents — TypeScript implementation.
 
+從 2.x 升級請先閱讀
+[3.0 遷移指南](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)與
+[變更記錄](https://github.com/BofAI/agent-wallet/blob/main/CHANGELOG.md)。
+
 ## Install
 
 ```bash
@@ -25,6 +29,7 @@ import { resolveWallet } from '@bankofai/agent-wallet'
 
 const wallet = await resolveWallet({ network: 'tron:nile' })
 const signedTx = await wallet.signTransaction({ txID: '...', raw_data: {} })
+if (signedTx.family === 'tron') console.log(signedTx.transaction)
 ```
 
 `resolveWallet` automatically finds your wallet config in `~/.agent-wallet` (or `AGENT_WALLET_DIR`).
@@ -37,12 +42,15 @@ import {
   resolveWalletProvider, // → ConfigWalletProvider | EnvWalletProvider
   ConfigWalletProvider, // 檔案配置 provider（raw_secret / privy / wallet_cli）
   EnvWalletProvider, // env-var-backed provider (AGENT_WALLET_PRIVATE_KEY)
+} from '@bankofai/agent-wallet'
+
+import {
   WalletCliAdapter, // TRON/EVM signing via wallet-cli subprocess
   WalletCliClient, // bounded wallet-cli transport + contract handshake
   StaticSecretProvider,
   ExecSecretProvider,
   ExternalSignerConfigResolver, // base class for external signer config resolvers
-} from '@bankofai/agent-wallet'
+} from '@bankofai/agent-wallet/advanced'
 ```
 
 wallet-cli 的選用鏈操作從獨立 subpath 匯出，而且刻意維持 **TRON-only**：
@@ -62,7 +70,8 @@ Returns a ready-to-sign `Wallet` for the given network:
 
 ```ts
 const wallet = await resolveWallet({ network: 'eip155:1' })
-const sig = await wallet.signTransaction({ to: '0x...', value: 0 })
+const signed = await wallet.signTransaction({ to: '0x...', value: 0 })
+if (signed.family === 'evm') console.log(signed.rawTransaction)
 ```
 
 ### resolveWalletProvider
@@ -89,7 +98,10 @@ const wallet2 = await provider.getWallet('my_wallet', 'tron:nile')
 ```ts
 interface Wallet {
   getAddress(): Promise<string>
-  signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string>
+  signTransaction(
+    payload: TransactionPayload,
+    options?: SignOptions,
+  ): Promise<SignedTransactionArtifact>
 }
 
 interface Eip712Capable {
@@ -100,6 +112,9 @@ interface MessageSigningCapable {
   signMessage(message: Uint8Array, options?: SignOptions): Promise<string>
 }
 ```
+
+`SignedTransactionArtifact` 以 `family` 作為 discriminator：EVM 結果位於
+`rawTransaction`，TRON 結果位於 `transaction`，呼叫端不需解析多態字串。
 
 需要 EIP-712 或 message 簽章的 adapter 分別實作加法性的 `Eip712Capable` 與
 `MessageSigningCapable`；`signMessage` 沒有變成所有 `Wallet` 的必要方法。
@@ -125,6 +140,9 @@ master password。設定可保存明文字串以維持相容，但建議使用
 | ------------------------------ | ------------------- | ------------------------- |
 | `eip155` or `eip155:<chainId>` | EVM                 | `m/44'/60'/0'/0/{index}`  |
 | `tron` or `tron:<chain>`       | TRON (`raw_secret`) | `m/44'/195'/0'/0/{index}` |
+
+Privy wallet 會以遠端 `chain_type` 驗證呼叫端要求的 network family；例如 EVM Privy
+wallet 不可透過 `network: 'tron:mainnet'` 使用。
 
 `wallet_cli` 不使用本機 mnemonic routing，並且比其他 adapter 更嚴格：必須傳完整
 `tron:<name>` 或 `eip155:<positive-chain-id>`。裸 `tron`、裸 `eip155`、alias 與預設
@@ -172,6 +190,7 @@ npm install '@tron-walletcli/wallet-cli@^4.12.0'
 - [bsc-x402-sign-typed-data.ts](./examples/bsc-x402-sign-typed-data.ts)
 - [dual-sign-typed-data-from-private-key.ts](./examples/dual-sign-typed-data-from-private-key.ts)
 - [switch-active-wallet.ts](./examples/switch-active-wallet.ts)
+- [wallet-cli-sign.ts](./examples/wallet-cli-sign.ts)
 
 ## Development
 

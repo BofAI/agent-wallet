@@ -46,7 +46,7 @@ wallet-cli keystore 密碼是外部簽名憑證，不是 agent-wallet 主密碼�
 - 不為 wallet-cli 密碼引入 env 覆寫（與 Privy 一致；日後若有需求再評估）。
 - 不在 `integrations/wallet-cli/` 新增 EVM 建交易、RPC、廣播或追蹤。
 - 不更動 wallet-cli 專案（僅消費其 CLI）。
-- 不在本次重構動態 params schema registry（P2）；中央 Zod union 保持不變。
+- 不引入動態 params schema registry；中央 Zod discriminated union 與內部 builder registry 保持同步。
 - 不承諾高吞吐常駐 signer；每筆簽章仍會啟動一個 wallet-cli 子程序。
 
 ### 關鍵假設（flagged）
@@ -109,17 +109,17 @@ graph TB
 
 ### 對接接合點（handoff）
 
-| 階段           | 資料形狀                                                              | 產生者               | 消費者                                      |
-| -------------- | --------------------------------------------------------------------- | -------------------- | ------------------------------------------- |
-| 相容檢查       | `--version` + root `--json-schema` + `networks -o json`               | wallet-cli           | client handshake cache                      |
-| 固定身分       | `current [--account]` → canonical `accountId` + partial addresses     | wallet-cli           | adapter identity promise / address resolver |
-| TRON 簽交易    | `tx sign --transaction <json>` → `data.signed`                        | wallet-cli           | adapter → `JSON.stringify(data.signed)`     |
-| EVM 簽交易     | viem transaction → unsigned hex → `tx sign --hex` → `data.signed.raw` | adapter + wallet-cli | adapter → 去除 `0x` 的 serialized tx        |
-| 簽訊息         | UTF-8 bytes → `message sign --message` → `data.signature`             | adapter + wallet-cli | `MessageSigningCapable.signMessage`         |
-| 簽 typed-data  | `typed-data sign --typed-data <json>` → `data.signature`              | wallet-cli           | adapter 去除 `0x` 前綴                      |
-| 建交易（編排） | `tx send --dry-run` → `data.tx`（未簽）+ `data.fee`                   | wallet-cli           | `Wallet.signTransaction`                    |
-| 廣播（編排）   | `tx broadcast --tx-stdin` → `data.txId` + `data.stage`                | wallet-cli           | caller                                      |
-| 確認（編排）   | `tx status` → `data.state` 四態                                       | wallet-cli           | caller                                      |
+| 階段           | 資料形狀                                                              | 產生者               | 消費者                                        |
+| -------------- | --------------------------------------------------------------------- | -------------------- | --------------------------------------------- |
+| 相容檢查       | `--version` + root `--json-schema` + `networks -o json`               | wallet-cli           | client handshake cache                        |
+| 固定身分       | `current [--account]` → canonical `accountId` + partial addresses     | wallet-cli           | adapter identity promise / address resolver   |
+| TRON 簽交易    | `tx sign --transaction <json>` → `data.signed`                        | wallet-cli           | adapter → `{ family: "tron", transaction }`   |
+| EVM 簽交易     | viem transaction → unsigned hex → `tx sign --hex` → `data.signed.raw` | adapter + wallet-cli | adapter → `{ family: "evm", rawTransaction }` |
+| 簽訊息         | UTF-8 bytes → `message sign --message` → `data.signature`             | adapter + wallet-cli | `MessageSigningCapable.signMessage`           |
+| 簽 typed-data  | `typed-data sign --typed-data <json>` → `data.signature`              | wallet-cli           | adapter 去除 `0x` 前綴                        |
+| 建交易（編排） | `tx send --dry-run` → `data.tx`（未簽）+ `data.fee`                   | wallet-cli           | `Wallet.signTransaction`                      |
+| 廣播（編排）   | `tx broadcast --tx-stdin` → `data.txId` + `data.stage`                | wallet-cli           | caller                                        |
+| 確認（編排）   | `tx status` → `data.state` 四態                                       | wallet-cli           | caller                                        |
 
 ### Technology Stack
 
@@ -324,7 +324,7 @@ EVM transaction codec 使用既有 `viem.serializeTransaction`：
 2. 支援 agent-wallet 現有的 legacy、EIP-2930、EIP-1559 交易形狀；無法序列化或 family 欄位混用時 fail-fast。EIP-4844 不在本期承諾。
 3. unsigned serialized hex 保留 `0x` 傳入 wallet-cli `--hex`；結果要求 `{ signed: { raw, hash }, address }`，回 caller 前只移除 raw 的 `0x`。
 
-TRON codec 保留 transaction JSON 與完整 `signed.signature[]`；結果回 `JSON.stringify(signed)`。
+TRON codec 保留 transaction object 與完整 `signed.signature[]`；結果以 typed artifact 回傳，不再要求呼叫端解析 JSON 字串。
 
 所有 signing result 都必須：`command` 精確匹配、chain 與 handshake network row 一致、`data.address` 等於 identity address。EVM 地址先正規化 checksum 後比較，TRON base58 精確比較；任何不一致視為 `contract_mismatch`，不回傳簽章。
 
@@ -374,9 +374,10 @@ provider instance 捕捉固定 dependencies；每次不同 dependencies 會建�
 
 Privy 與 raw-secret 路徑維持現行行為。
 
-#### 1.10 匯出（`src/index.ts`）
+#### 1.10 匯出（`src/index.ts` 與 `src/advanced.ts`）
 
 ```ts
+// @bankofai/agent-wallet/advanced
 export { WalletCliAdapter } from "./core/adapters/wallet-cli.js";
 export { WalletCliClient } from "./core/clients/wallet-cli.js";
 export { WalletCliConfigResolver } from "./core/providers/wallet-cli-config.js";
@@ -397,6 +398,8 @@ export type {
   SecretProviderFactory,
   SecretContext,
 } from "...";
+
+// @bankofai/agent-wallet（穩定 root）
 export type {
   WalletDependencies,
   WalletCliDependencies,
@@ -488,7 +491,7 @@ abstract class ExternalSignerConfigResolver<TConfig, TSource> {
 
 ### 註冊表分派（`core/providers/wallet-builder.ts`）
 
-外部簽名器改註冊制，新增型別不必編輯 `createAdapter` 主幹：
+外部簽名器以內部 registry 集中分派，新增型別不必編輯 `createAdapter` 主幹：
 
 ```ts
 type ExternalSignerBuilder = (
@@ -502,7 +505,7 @@ function registerExternalSigner(
 ): void;
 ```
 
-`createAdapter` 對外部型走 `externalSignerRegistry.get(conf.type)`；`raw_secret` 維持 if-else。config schema（zod union）仍需登錄新型的 params schema，以維持型別安全。
+`registerExternalSigner` 與 registry 都是模組內部實作，不從 root 或 advanced entry point 匯出。`createAdapter` 對外部型走 `externalSignerRegistry.get(conf.type)`；`raw_secret` 維持 if-else。config schema（Zod discriminated union）仍需登錄新型的 params schema，以維持型別安全，避免形成 builder 可註冊但 config 永遠無法通過的半套 plugin API。
 
 ### 新增外部錢包的步驟（擴充配方）
 
@@ -511,12 +514,10 @@ function registerExternalSigner(
 3. `core/clients/<name>.ts`：實作傳輸 client（HTTP / 子程序 / 其他）。
 4. `core/adapters/<name>.ts`：實作 `Wallet`（+ `Eip712Capable`），委派給 client，做簽名格式正規化。
 5. `core/errors.ts`：錯誤 extend 共享 `ExternalSigner*` 基底（不再各造基底）。
-6. `core/providers/wallet-builder.ts`：`registerExternalSigner('<type>', builder)`。
-7. `src/index.ts`：匯出。
+6. `core/providers/wallet-builder.ts`：在模組內登錄 `registerExternalSigner('<type>', builder)`。
+7. `src/advanced.ts`：只在需要時匯出具體 adapter/client；不匯出內部 registry。
 
-> 取捨：不引入完全動態的 plugin 系統（如單一 `external` 型 + dispatch）——那會犧牲 zod discriminated union 的編譯期型別安全，且各外部簽名器的 params 形狀確實不同。註冊表 + 共享基底在「集中分派/複用」與「保留型別安全」間取得平衡。
-
-本期只把 dependencies 加入既有 builder context；不讓 `registerExternalSigner` 動態註冊 config params schema。這個已知 P2 缺口在程式註解與 readiness 文件標為 deferred。
+> 取捨：不引入完全動態的 plugin 系統（如單一 `external` 型 + dispatch）——那會犧牲 Zod discriminated union 的編譯期型別安全，且各外部簽名器的 params 形狀確實不同。內部註冊表 + 共享基底在「集中分派/複用」與「保留型別安全」間取得平衡；新增 signer 是明確的中央 schema 變更，不是假裝成 runtime plugin。
 
 ## Installation & Dependency
 
@@ -654,7 +655,7 @@ sequenceDiagram
     Cli-->>Client: result.v1 + chain + { data:{ address, signed:{ signature:[] } } }
     Client-->>Signer: validated TronTxSignData
     Signer->>Signer: 驗證 signer == pinned TRON address
-    Signer-->>App: JSON.stringify(data.signed)
+    Signer-->>App: { family: "tron", transaction: data.signed }
   else 完整性不符
     Cli-->>Client: exit 1 + { error: { code:"tx_integrity", message } }
     Client-->>Signer: 拋 WalletCliExecutionError(code:"tx_integrity")

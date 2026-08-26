@@ -7,7 +7,10 @@ import { WalletCliExecutionError } from '../src/core/errors.js'
 function mockWallet(signedTxJson: string): Wallet {
   return {
     getAddress: vi.fn().mockResolvedValue('TTest123'),
-    signTransaction: vi.fn().mockResolvedValue(signedTxJson),
+    signTransaction: vi.fn().mockResolvedValue({
+      family: 'tron',
+      transaction: JSON.parse(signedTxJson) as Record<string, unknown>,
+    }),
   }
 }
 

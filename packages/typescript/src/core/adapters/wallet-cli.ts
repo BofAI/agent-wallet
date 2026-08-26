@@ -6,7 +6,14 @@ import {
   type TransactionSerialized,
 } from 'viem'
 
-import type { Eip712Capable, MessageSigningCapable, SignOptions, Wallet } from '../base.js'
+import type {
+  Eip712Capable,
+  MessageSigningCapable,
+  SignedTransactionArtifact,
+  SignOptions,
+  TransactionPayload,
+  Wallet,
+} from '../base.js'
 import type { WalletCliClient, WalletCliCurrentAccountData } from '../clients/wallet-cli.js'
 import { SigningError, WalletCliExecutionError } from '../errors.js'
 import type { SecretLease, SecretProvider } from '../secret-provider.js'
@@ -36,7 +43,10 @@ export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCa
     return this.addressFor(identity)
   }
 
-  async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    options?: SignOptions,
+  ): Promise<SignedTransactionArtifact> {
     if (this.target.family === 'tron') {
       const transactionJson = stringifyPayload(payload, 'TRON transaction')
       const identity = await this.getIdentity()
@@ -58,7 +68,7 @@ export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCa
             'contract_mismatch',
           )
         }
-        return JSON.stringify(result.data.signed)
+        return { family: 'tron', transaction: result.data.signed }
       })
     }
 
@@ -86,7 +96,7 @@ export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCa
         )
       }
       this.assertSigner(recovered, identity)
-      return strip0x(raw)
+      return { family: 'evm', rawTransaction: strip0x(raw) }
     })
   }
 

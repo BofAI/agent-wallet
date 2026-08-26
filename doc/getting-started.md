@@ -206,7 +206,8 @@ agent-wallet sign message --message '<utf8>' -n eip155:1 [-w WALLET_ID] ...
   必須使用完整 `tron:<name>` 或 `eip155:<positive-chain-id>`；裸 family、alias 與省略值會
   在子程序及 secret acquire 前 fail-fast。簽章結果會核對固定 account/network/signer。
 
-Signed tx: if the result parses as JSON it is pretty-printed; otherwise hex is printed as text.
+Signed tx 使用 typed artifact：TRON transaction object 會 pretty-print，EVM
+`rawTransaction` 會直接輸出 hex。
 
 ## 11. `reset`
 

@@ -59,24 +59,20 @@ export const WalletCliWalletParamsSchema = z.object({
 // Zod schemas — WalletConfig (unified type + params)
 // ---------------------------------------------------------------------------
 
-export const WalletConfigSchema = z
-  .object({
-    type: z.enum(['raw_secret', 'privy', 'wallet_cli']),
-    params: z.union([
-      RawSecretParamsSchema,
-      PrivyWalletParamsSchema,
-      WalletCliWalletParamsSchema,
-    ]),
-  })
-  .refine(
-    (data) => {
-      if (data.type === 'raw_secret') return 'source' in data.params
-      if (data.type === 'privy') return 'app_id' in data.params
-      if (data.type === 'wallet_cli') return 'password' in data.params
-      return false
-    },
-    { message: 'params must match wallet type' },
-  )
+export const WalletConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('raw_secret'),
+    params: RawSecretParamsSchema,
+  }),
+  z.object({
+    type: z.literal('privy'),
+    params: PrivyWalletParamsSchema,
+  }),
+  z.object({
+    type: z.literal('wallet_cli'),
+    params: WalletCliWalletParamsSchema,
+  }),
+])
 
 export const WalletsTopologySchema = z.object({
   active_wallet: z.string().nullable().optional().default(null),

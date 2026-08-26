@@ -1,5 +1,11 @@
 import { privateKeyToAccount } from 'viem/accounts'
-import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
+import type {
+  Eip712Capable,
+  EvmSignedTransactionArtifact,
+  SignOptions,
+  TransactionPayload,
+  Wallet,
+} from '../base.js'
 import { SigningError } from '../errors.js'
 
 export class EvmSigner implements Wallet, Eip712Capable {
@@ -16,12 +22,15 @@ export class EvmSigner implements Wallet, Eip712Capable {
     return this.account.address
   }
 
-  async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    _options?: SignOptions,
+  ): Promise<EvmSignedTransactionArtifact> {
     try {
       const sig = await this.account.signTransaction(
         payload as Parameters<typeof this.account.signTransaction>[0],
       )
-      return sig.slice(2)
+      return { family: 'evm', rawTransaction: sig.slice(2) }
     } catch (e) {
       throw new SigningError(`EVM sign_transaction failed: ${e}`)
     }

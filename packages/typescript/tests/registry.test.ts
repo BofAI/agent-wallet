@@ -11,6 +11,7 @@ import { WalletNotFoundError } from '../src/core/errors.js'
 import { createAdapter } from '../src/core/providers/wallet-builder.js'
 
 const TEST_PRIVATE_KEY = '0x4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b'
+const REPLACEMENT_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 const TEST_MNEMONIC = 'test test test test test test test test test test test junk'
 const TEST_EVM_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 const TEST_EVM_ADDRESS_INDEX_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
@@ -26,9 +27,6 @@ function resetWalletEnv(): void {
     'AGENT_WALLET_PRIVATE_KEY',
     'AGENT_WALLET_MNEMONIC',
     'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
-    'TRON_PRIVATE_KEY',
-    'TRON_MNEMONIC',
-    'TRON_ACCOUNT_INDEX',
     'PRIVY_APP_ID',
     'PRIVY_APP_SECRET',
     'PRIVY_WALLET_ID',
@@ -181,6 +179,24 @@ describe('ConfigWalletProvider', () => {
     expect(reloaded.getActiveId()).toBe('b')
   })
 
+  it('evicts cached adapters when a wallet id is removed and recreated', async () => {
+    const provider = new ConfigWalletProvider(secretsDir, {})
+    const first = await provider.getWallet('hot', 'eip155:1')
+
+    provider.removeWallet('hot')
+    provider.addWallet('hot', {
+      type: 'raw_secret',
+      params: {
+        source: 'private_key',
+        private_key: REPLACEMENT_PRIVATE_KEY,
+      },
+    })
+
+    const recreated = await provider.getWallet('hot', 'eip155:1')
+    expect(recreated).not.toBe(first)
+    await expect(recreated.getAddress()).resolves.toBe(TEST_EVM_ADDRESS)
+  })
+
   it('throws on invalid config instead of treating it as empty', () => {
     writeFileSync(
       join(secretsDir, 'wallets_config.json'),
@@ -227,13 +243,6 @@ describe('EnvWalletProvider', () => {
     const provider = new EnvWalletProvider({ network: 'eip155' })
     const wallet = await provider.getWallet()
     expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS_INDEX_1)
-  })
-
-  it('resolves tron-prefixed env vars', async () => {
-    process.env.TRON_PRIVATE_KEY = TEST_PRIVATE_KEY
-    const provider = new EnvWalletProvider({ network: 'tron' })
-    const wallet = await provider.getWallet()
-    expect(await wallet.getAddress()).toMatch(/^T/)
   })
 
   it('rejects when both private key and mnemonic are set', async () => {

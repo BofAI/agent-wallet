@@ -66,9 +66,11 @@ describe('wallet-cli deterministic process integration', () => {
       'tron:nile',
     )
     const unsigned = { txID: 'abc', raw_data: { contract: [] }, raw_data_hex: 'deadbeef' }
-    const signed = JSON.parse(await adapter.signTransaction(unsigned))
-    expect(signed).toMatchObject(unsigned)
-    expect(signed.signature).toEqual(['fixture-signature'])
+    const signed = await adapter.signTransaction(unsigned)
+    expect(signed.family).toBe('tron')
+    if (signed.family !== 'tron') throw new Error('Expected TRON artifact')
+    expect(signed.transaction).toMatchObject(unsigned)
+    expect(signed.transaction.signature).toEqual(['fixture-signature'])
   })
 
   it.each([
@@ -117,8 +119,10 @@ describe('wallet-cli deterministic process integration', () => {
       'eip155:1',
     )
     const signed = await adapter.signTransaction(transaction)
-    expect(signed).not.toMatch(/^0x/)
-    expect(parseTransaction(`0x${signed}`)).toMatchObject({ chainId: 1 })
+    expect(signed.family).toBe('evm')
+    if (signed.family !== 'evm') throw new Error('Expected EVM artifact')
+    expect(signed.rawTransaction).not.toMatch(/^0x/)
+    expect(parseTransaction(`0x${signed.rawTransaction}`)).toMatchObject({ chainId: 1 })
   })
 
   it('signs UTF-8 messages and typed data for both families', async () => {

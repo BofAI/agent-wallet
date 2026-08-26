@@ -43,15 +43,42 @@ function script(contents: string): { dir: string; path: string } {
 
 describe('SecretProvider', () => {
   it('uses a fixed ComSpec argv for Windows cmd/bat sources while keeping shell:false viable', () => {
-    expect(resolveSecretLaunchTarget('C:\\secrets\\password.cmd', 'win32', 'cmd.exe')).toEqual({
-      command: 'cmd.exe',
-      args: ['/d', '/s', '/c', 'C:\\secrets\\password.cmd'],
-    })
+    for (const path of [
+      'C:\\secrets\\password.cmd',
+      'C:\\secret store\\password.BAT',
+      'C:\\Program Files (x86)\\secret tools\\password.cmd',
+      'C:\\secrets&tools\\password.cmd',
+    ]) {
+      expect(resolveSecretLaunchTarget(path, 'win32', 'cmd.exe')).toEqual({
+        command: 'cmd.exe',
+        args: ['/d', '/s', '/c', `""${path}""`],
+        windowsVerbatimArguments: true,
+      })
+    }
     expect(resolveSecretLaunchTarget('/opt/secret.sh', 'linux')).toEqual({
       command: '/opt/secret.sh',
       args: [],
     })
   })
+
+  it.each([
+    'C:\\secrets^tools\\password.cmd',
+    'C:\\%TEMP%\\password.cmd',
+    'C:\\!SECRET_DIR!\\password.cmd',
+    'C:\\secrets\\password\n.cmd',
+    'C:\\secrets\\password".cmd',
+  ])('rejects a Windows cmd path that could alter the command string: %s', (path) => {
+    expect(() => resolveSecretLaunchTarget(path, 'win32', 'cmd.exe')).toThrow('unsafe characters')
+  })
+
+  it.each([' C:\\secrets\\password.cmd', 'C:\\secrets\\password.cmd ', 'C:\\password.cmd.'])(
+    'rejects an ambiguous Windows secret path: %s',
+    (path) => {
+      expect(() => resolveSecretLaunchTarget(path, 'win32', 'cmd.exe')).toThrow(
+        /surrounding whitespace|trailing dot/,
+      )
+    },
+  )
   it('creates one-shot static leases and makes dispose idempotent', async () => {
     const provider = new StaticSecretProvider('  fixture-password\n')
     const lease = await provider.acquire(context)

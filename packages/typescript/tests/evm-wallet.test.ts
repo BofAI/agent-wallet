@@ -162,8 +162,8 @@ describe('signTransaction', () => {
       type: 'eip1559' as const,
     }
 
-    const signedHex = await wallet.signTransaction(tx)
-    expect(signedHex.startsWith('02')).toBe(true)
+    const signed = await wallet.signTransaction(tx)
+    expect(signed.rawTransaction.startsWith('02')).toBe(true)
   })
 
   it('should match viem direct signing', async () => {
@@ -185,7 +185,7 @@ describe('signTransaction', () => {
     const ourSigned = await wallet.signTransaction(tx)
     const viemSigned = await account.signTransaction(tx)
 
-    expect(ourSigned).toBe(viemSigned.slice(2))
+    expect(ourSigned).toEqual({ family: 'evm', rawTransaction: viemSigned.slice(2) })
   })
 })
 

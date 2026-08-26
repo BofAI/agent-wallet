@@ -3,11 +3,7 @@
  */
 
 import type { Wallet, WalletProvider } from '../base.js'
-import {
-  ENV_ACCOUNT_INDEX_KEYS,
-  ENV_MNEMONIC_KEYS,
-  ENV_PRIVATE_KEY_KEYS,
-} from '../base.js'
+import { ENV_ACCOUNT_INDEX_KEYS, ENV_MNEMONIC_KEYS, ENV_PRIVATE_KEY_KEYS } from '../base.js'
 import type { RawSecretPrivateKeyParams, RawSecretMnemonicParams } from '../config.js'
 import { createEnvAdapter, type EnvWalletResolved } from './wallet-builder.js'
 import { firstEnv, parseAccountIndex } from '../utils/env.js'
@@ -17,10 +13,7 @@ export class EnvWalletProvider implements WalletProvider {
   private readonly _network: string | undefined
   private readonly _env: NodeJS.ProcessEnv
 
-  constructor(options: {
-    network?: string
-    env?: NodeJS.ProcessEnv
-  }) {
+  constructor(options: { network?: string; env?: NodeJS.ProcessEnv }) {
     this._network = options.network
     this._env = options.env ?? process.env
   }

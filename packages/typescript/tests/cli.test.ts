@@ -12,22 +12,19 @@ import { join } from 'node:path'
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { cmdAdd, cmdStart } from '../src/delivery/cli.js'
+import { CliExit, expandTilde, type CliIO } from '../src/delivery/cli-io.js'
 import {
-  CliExit,
-  type CliIO,
-  cmdAdd,
   cmdInspect,
   cmdList,
   cmdRemove,
   cmdResolveAddress,
   cmdReset,
-  cmdStart,
-  cmdSignTypedData,
   cmdSignMessage,
+  cmdSignTypedData,
   cmdUse,
-  expandTilde,
-  main,
-} from '../src/delivery/cli.js'
+} from '../src/delivery/cli-wallet-commands.js'
+import { main } from '../src/delivery/cli-main.js'
 import { saveConfig } from '../src/core/config.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { WalletCliClient } from '../src/core/clients/wallet-cli.js'

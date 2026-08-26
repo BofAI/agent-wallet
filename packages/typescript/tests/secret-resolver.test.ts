@@ -52,9 +52,7 @@ function sleepScript(seconds: number): string {
 }
 
 function envCheckScript(): string {
-  return isWindows
-    ? '@echo off\r\necho %PATH%'
-    : '#!/bin/sh\necho "$PATH" | head -c 1'
+  return isWindows ? '@echo off\r\necho %PATH%' : '#!/bin/sh\necho "$PATH" | head -c 1'
 }
 
 describe('isSecretRef', () => {
@@ -104,7 +102,7 @@ describe('resolveSecret', () => {
       ExternalSignerConfigError,
     )
     await expect(resolveSecret({ exec: script }, 'test-label')).rejects.toThrow(
-      /test-label.*exited with code 1.*error msg/,
+      /test-label.*exited with code 1/,
     )
   })
 
@@ -115,7 +113,7 @@ describe('resolveSecret', () => {
       expect.fail('should have thrown')
     } catch (error) {
       expect((error as Error).message).not.toContain('super-secret')
-      expect((error as Error).message).toContain('(no stderr output)')
+      expect((error as Error).message).not.toContain('stderr')
     }
   })
 

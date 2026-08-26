@@ -2,7 +2,13 @@
  * Local signer facade — dispatches to EVM or TRON signer by network.
  */
 
-import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
+import type {
+  Eip712Capable,
+  SignedTransactionArtifact,
+  SignOptions,
+  TransactionPayload,
+  Wallet,
+} from '../base.js'
 import { Network } from '../base.js'
 import { UnsupportedOperationError } from '../errors.js'
 import { parseNetworkFamily } from '../utils/network.js'
@@ -22,7 +28,10 @@ export class LocalSigner implements Wallet, Eip712Capable {
     return this._impl.getAddress()
   }
 
-  async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    options?: SignOptions,
+  ): Promise<SignedTransactionArtifact> {
     return this._impl.signTransaction(payload, options)
   }
 

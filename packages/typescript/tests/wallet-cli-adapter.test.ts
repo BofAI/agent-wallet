@@ -130,7 +130,10 @@ describe('WalletCliAdapter', () => {
     const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
     const signed = await adapter.signTransaction({ txID: 'abc', raw_data_hex: 'deadbeef' })
 
-    expect(JSON.parse(signed).signature).toEqual(['fixture'])
+    expect(signed).toMatchObject({
+      family: 'tron',
+      transaction: { signature: ['fixture'] },
+    })
     expect(secret.acquire).toHaveBeenCalledWith({
       label: 'wallet-cli password',
       accountId: 'wlt_fixture.0',

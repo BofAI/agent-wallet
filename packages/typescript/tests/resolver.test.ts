@@ -18,11 +18,8 @@ import { saveConfig, type WalletsTopology } from '../src/core/config.js'
 const ENV_KEYS = [
   'AGENT_WALLET_DIR',
   'AGENT_WALLET_PRIVATE_KEY',
-  'TRON_PRIVATE_KEY',
   'AGENT_WALLET_MNEMONIC',
-  'TRON_MNEMONIC',
   'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
-  'TRON_ACCOUNT_INDEX',
   'PRIVY_APP_ID',
   'PRIVY_APP_SECRET',
   'PRIVY_WALLET_ID',
@@ -106,7 +103,8 @@ describe('resolver – no valid wallet source', () => {
     })
 
     it('throws when network is missing even with a valid mnemonic', async () => {
-      process.env.AGENT_WALLET_MNEMONIC = 'test test test test test test test test test test test junk'
+      process.env.AGENT_WALLET_MNEMONIC =
+        'test test test test test test test test test test test junk'
       const provider = new EnvWalletProvider({})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
@@ -170,8 +168,7 @@ describe('resolver – no valid wallet source', () => {
       }
       saveConfig(tempDir, config)
       // No network in constructor or getActiveWallet call
-      const provider = new ConfigWalletProvider(tempDir, {
-      })
+      const provider = new ConfigWalletProvider(tempDir, {})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
 

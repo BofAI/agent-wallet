@@ -16,7 +16,13 @@ const bs58check: typeof bs58checkModule =
     ? bs58checkModule
     : (bs58checkInterop.default ?? bs58checkModule)
 
-import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
+import type {
+  Eip712Capable,
+  SignOptions,
+  TransactionPayload,
+  TronSignedTransactionArtifact,
+  Wallet,
+} from '../base.js'
 import { SigningError } from '../errors.js'
 import { stripHexPrefix } from '../utils/hex.js'
 
@@ -48,7 +54,10 @@ export class TronSigner implements Wallet, Eip712Capable {
    * If txID is missing, compute SHA256(raw_data_hex) locally.
    * Sign the txID directly with secp256k1 and return the signed tx with signature attached.
    */
-  async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    _options?: SignOptions,
+  ): Promise<TronSignedTransactionArtifact> {
     try {
       if (!payload.raw_data_hex) {
         throw new Error(
@@ -62,7 +71,7 @@ export class TronSigner implements Wallet, Eip712Capable {
       const txIdBytes = Buffer.from(txIdHex, 'hex')
       const signature = this.signDigest(txIdBytes)
       const signedTx = { ...payload, txID: txIdHex, signature: [signature] }
-      return JSON.stringify(signedTx)
+      return { family: 'tron', transaction: signedTx }
     } catch (e) {
       if (e instanceof SigningError) throw e
       throw new SigningError(`Tron sign_transaction failed: ${e}`)

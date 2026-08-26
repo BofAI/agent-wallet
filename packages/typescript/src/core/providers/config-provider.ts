@@ -109,18 +109,15 @@ export class ConfigWalletProvider implements WalletProvider {
     if (this.config.active_wallet === walletId) {
       this.config.active_wallet = null
     }
-    // Evict cached wallets for this id
-    for (const key of this.wallets.keys()) {
-      if (key.startsWith(`${walletId}:`)) this.wallets.delete(key)
-    }
+    // The top-level cache key is the wallet id; evict every type/network entry.
+    this.wallets.delete(walletId)
     this.persist()
     return conf
   }
 
   async getWallet(walletId: string, network?: string): Promise<Wallet> {
     const conf = this.getWalletConfig(walletId) // throws if not found
-    const resolvedNetwork =
-      conf.type === 'privy' ? undefined : resolveNetwork(network, this.network)
+    const resolvedNetwork = resolveNetwork(network, this.network)
     const cached = this.getWalletCache(walletId, conf.type as WalletType, resolvedNetwork)
     if (!cached) {
       const wallet = await createAdapter(conf, this.configDir, resolvedNetwork, this.dependencies)

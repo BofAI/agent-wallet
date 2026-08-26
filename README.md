@@ -60,7 +60,6 @@ If no usable CLI wallet config is available, the SDK can resolve directly from e
 | `AGENT_WALLET_MNEMONIC`               | Mnemonic used for SDK wallet resolution.                       |
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index used when deriving from `AGENT_WALLET_MNEMONIC`. |
 
-- The SDK also remains compatible with legacy `TRON_PRIVATE_KEY`, `TRON_MNEMONIC`, and `TRON_ACCOUNT_INDEX` environment variables.
 - If CLI config resolution is unavailable, the SDK falls back to these environment variables.
 
 ### CLI
@@ -217,11 +216,14 @@ TypeScript samples under [`packages/typescript/examples/`](./packages/typescript
 | One env key → TRON + EVM typed data | [dual-sign-typed-data-from-private-key.ts](./packages/typescript/examples/dual-sign-typed-data-from-private-key.ts)                                                                    |
 | Privy sign consistency (EVM / TRON) | [compare-sign-consistency.ts](./packages/typescript/examples/compare-sign-consistency.ts)                                                                                              |
 | Privy TRON typed-data verification  | [verify-tron-privy-typed-data.ts](./packages/typescript/examples/verify-tron-privy-typed-data.ts)                                                                                      |
+| wallet-cli signing                  | [wallet-cli-sign.ts](./packages/typescript/examples/wallet-cli-sign.ts)                                                                                                                |
 
 ## Documentation
 
 | Doc                                                                     | Audience                                      |
 | ----------------------------------------------------------------------- | --------------------------------------------- |
+| [3.0 migration guide](./doc/migration-v3.md)                            | 從 2.x 升級與 breaking API 對照               |
+| [Changelog](./CHANGELOG.md)                                             | 版本層級的使用者可見變更                      |
 | [文件導覽](./doc/README.md)                                             | 現行文件責任、維護規則與歷史封存入口          |
 | [**Getting started (CLI)**](./doc/getting-started.md)                   | Step-by-step CLI walkthrough                  |
 | [How to add a Privy wallet](./doc/how-to-add-privy-wallet.md)           | Use existing Privy App + Wallet ID in the CLI |

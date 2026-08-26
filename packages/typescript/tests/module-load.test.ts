@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 describe('module load smoke', () => {
   it('loads local signer modules and public exports without circular init issues', async () => {
-    const sdk = await import('../src/index.js')
+    const advanced = await import('../src/advanced.js')
     const { LocalSigner } = await import('../src/core/adapters/local.js')
     const { RawSecretSigner } = await import('../src/core/adapters/raw-secret.js')
 
-    expect(sdk.LocalSigner).toBe(LocalSigner)
-    expect(sdk.RawSecretSigner).toBe(RawSecretSigner)
+    expect(advanced.LocalSigner).toBe(LocalSigner)
+    expect(advanced.RawSecretSigner).toBe(RawSecretSigner)
 
     const raw = new RawSecretSigner(
       {

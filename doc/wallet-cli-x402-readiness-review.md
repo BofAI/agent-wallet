@@ -12,7 +12,7 @@ integration 仍明確維持 TRON-only。
 wallet-cli entrypoint、帳戶與 password provider 執行 opt-in 契約測試。本次一般測試使用
 deterministic fixture；沒有提供 opt-in secrets 時，不把真實 signing 宣稱為通過。
 
-P2 dynamic params schema registry 與高吞吐 sidecar/session 不在本期範圍。這兩項不阻塞
+高吞吐 sidecar/session 不在本期範圍。這不阻塞
 目前低至中頻的外部 signer，但 registry 擴充與高併發 facilitator 仍需另立規格。
 
 唯一需求、設計與完成清單分別位於
@@ -315,28 +315,26 @@ builder，可注入 client 與 secret provider factory；地址解析不建立 s
 
 建議讓 resolver/provider context 接受外部依賴，避免把平台實作硬編碼進 builder。
 
-### P2：外部 signer registry 的擴充性有限（延後）
+### P2：外部 signer registry 與 config schema 不一致（已修復）
 
-雖然公開了 `registerExternalSigner(type, builder)`，但 `WalletConfigSchema` 仍只接受固定的三種 type。第三方註冊新 signer 後，config 仍會先被 schema 拒絕。
+registry 已收斂為模組內部的封閉分派，不再公開只有 builder、沒有 config schema 的半套動態註冊 API。新增 signer 必須同步更新中央 schema 與內部 builder 登錄，兩者不會在 runtime 脫鉤。
 
-此外目前 `WalletConfigSchema` 是 `type enum + params union + refine`，不是能在 TypeScript 層自然縮窄 params 的真正 discriminated union，因此 builder 中仍需要 type assertion。
-
-這不阻塞 wallet-cli，但與「可擴充外部 signer」的設計承諾存在落差。
+`WalletConfigSchema` 也已改為真正的 Zod discriminated union，TypeScript 可依 `type` 自然縮窄 params；root entry point 僅保留穩定 API，具體 adapter/client 移至 `@bankofai/agent-wallet/advanced`。
 
 ## x402 場景相容性
 
-| 場景 | 修復後狀態 | 說明 |
-|---|---|---|
-| TRON EIP-3009 typed-data 支付 | 可用候選 | canonical network/account/signer 已固定；仍需 deployment opt-in probe |
-| TRON Permit2 typed-data | 可用候選 | TIP-712 路徑與 signer 驗證已完成 |
-| TRON Permit2 首次 approve | 可用候選 | 完整 signed TRON JSON artifact，network/account 已固定 |
-| TRON facilitator settlement | 低至中頻可用 | TRON-only integration 維持每筆子程序與 mainnet guard |
-| EVM typed-data 支付 | 可用候選 | EVM network、domain.chainId 與 signer 都會驗證 |
-| EVM approve/settlement transaction | 可用候選 | legacy/EIP-2930/EIP-1559 unsigned codec 與 raw signed output 已完成 |
-| macOS Keychain | 可透過 exec script 接入 | 每次 acquire，不再長期保存 exec 輸出的 JS string |
-| Linux/Vault/Secret Service | 可透過 exec script 接入 | 同上；native provider 可由 dependency injection 擴充 |
-| Windows Credential Manager | 可透過固定 script 接入 | `shell:false` 與固定 launcher 已加固 |
-| 高吞吐 facilitator | 仍不建議直接使用 | 每筆啟動 CLI；sidecar/session/nonce ordering 留待後續規格 |
+| 場景                               | 修復後狀態              | 說明                                                                  |
+| ---------------------------------- | ----------------------- | --------------------------------------------------------------------- |
+| TRON EIP-3009 typed-data 支付      | 可用候選                | canonical network/account/signer 已固定；仍需 deployment opt-in probe |
+| TRON Permit2 typed-data            | 可用候選                | TIP-712 路徑與 signer 驗證已完成                                      |
+| TRON Permit2 首次 approve          | 可用候選                | 完整 signed TRON JSON artifact，network/account 已固定                |
+| TRON facilitator settlement        | 低至中頻可用            | TRON-only integration 維持每筆子程序與 mainnet guard                  |
+| EVM typed-data 支付                | 可用候選                | EVM network、domain.chainId 與 signer 都會驗證                        |
+| EVM approve/settlement transaction | 可用候選                | legacy/EIP-2930/EIP-1559 unsigned codec 與 raw signed output 已完成   |
+| macOS Keychain                     | 可透過 exec script 接入 | 每次 acquire，不再長期保存 exec 輸出的 JS string                      |
+| Linux/Vault/Secret Service         | 可透過 exec script 接入 | 同上；native provider 可由 dependency injection 擴充                  |
+| Windows Credential Manager         | 可透過固定 script 接入  | `shell:false` 與固定 launcher 已加固                                  |
+| 高吞吐 facilitator                 | 仍不建議直接使用        | 每筆啟動 CLI；sidecar/session/nonce ordering 留待後續規格             |
 
 ## 原始整改順序與結案
 
@@ -379,18 +377,18 @@ facilitator 若需要高併發，應評估：
 
 ## 最終判斷（修復後）
 
-| 評估面向 | 判斷 |
-|---|---|
-| 模組 seam | 正確 |
-| TRON transaction/typed-data/message | 已實作並有 deterministic process 測試 |
-| x402 TRON production readiness | production candidate；部署前需真實 opt-in probe |
-| x402 EVM | legacy/EIP-2930/EIP-1559 與 typed-data/message 已滿足 |
-| 跨平台秘密來源 | bounded per-sign exec 已滿足；native OS provider 可後續注入 |
-| 高吞吐 facilitator | 未納入；仍建議 sidecar/session 專案 |
-| 是否應搬進 x402 SDK | 不應 |
-| 是否值得繼續維護 agent-wallet | 值得，且應在此集中整改 |
+| 評估面向                            | 判斷                                                        |
+| ----------------------------------- | ----------------------------------------------------------- |
+| 模組 seam                           | 正確                                                        |
+| TRON transaction/typed-data/message | 已實作並有 deterministic process 測試                       |
+| x402 TRON production readiness      | production candidate；部署前需真實 opt-in probe             |
+| x402 EVM                            | legacy/EIP-2930/EIP-1559 與 typed-data/message 已滿足       |
+| 跨平台秘密來源                      | bounded per-sign exec 已滿足；native OS provider 可後續注入 |
+| 高吞吐 facilitator                  | 未納入；仍建議 sidecar/session 專案                         |
+| 是否應搬進 x402 SDK                 | 不應                                                        |
+| 是否值得繼續維護 agent-wallet       | 值得，且應在此集中整改                                      |
 
 總結：`agent-wallet` 已將 wallet-cli 契約、帳戶解析、秘密生命週期、程序界線與格式
 轉換集中在單一深模組。network、identity、secret lifecycle、版本/capability 與 EVM codec
-缺口已修復；剩餘風險是 deployment-specific 真實 probe，以及本期明確延後的 P2 registry
+缺口已修復；剩餘風險是 deployment-specific 真實 probe，以及高吞吐 sidecar/session
 與高吞吐 sidecar。

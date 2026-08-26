@@ -1,5 +1,13 @@
-import type { Eip712Capable, SignOptions, Wallet } from '../base.js'
-import { SigningError, UnsupportedOperationError } from '../errors.js'
+import {
+  Network,
+  type Eip712Capable,
+  type SignOptions,
+  type SignedTransactionArtifact,
+  type TransactionPayload,
+  type TronSignedTransactionArtifact,
+  type Wallet,
+} from '../base.js'
+import { NetworkError, SigningError, UnsupportedOperationError } from '../errors.js'
 import type { PrivyClient, PrivyRpcMethod, PrivyRpcParams } from '../clients/privy.js'
 import type { PrivyConfig } from '../providers/privy-config.js'
 import { stripHexPrefix } from '../utils/hex.js'
@@ -7,6 +15,7 @@ import { keccak256, hashTypedData } from 'viem'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58checkModule from 'bs58check'
 import { createHash } from 'node:crypto'
+import { parseNetworkFamily } from '../utils/network.js'
 
 type Bs58checkLike = {
   encode?: (input: Uint8Array) => string
@@ -22,23 +31,29 @@ const bs58check: typeof bs58checkModule =
 export class PrivyAdapter implements Wallet, Eip712Capable {
   private readonly config: PrivyConfig
   private readonly client: PrivyClient
+  private readonly requestedFamily: Network | undefined
   private cachedAddress: string | null = null
   private cachedChainType: string | null = null
 
-  constructor(config: PrivyConfig, client: PrivyClient) {
+  constructor(config: PrivyConfig, client: PrivyClient, network?: string) {
     this.config = config
     this.client = client
+    this.requestedFamily = network ? parseNetworkFamily(network) : undefined
   }
 
   async getAddress(): Promise<string> {
     if (this.cachedAddress) return this.cachedAddress
     const wallet = await this.client.getWallet(this.config.walletId)
+    this.assertRequestedFamily(wallet.chainType)
     this.cachedAddress = wallet.address
     this.cachedChainType = wallet.chainType ?? null
     return wallet.address
   }
 
-  async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    options?: SignOptions,
+  ): Promise<SignedTransactionArtifact> {
     const chain = await this.getChainType()
     if (chain === 'tron') {
       return this.tronSignTransaction(payload, options)
@@ -52,7 +67,7 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
     if (!signed) {
       throw new SigningError('Privy eth_signTransaction did not return signed_transaction')
     }
-    return stripHexPrefix(signed)
+    return { family: 'evm', rawTransaction: stripHexPrefix(signed) }
   }
 
   async signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string> {
@@ -60,7 +75,11 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
     if (chain === 'tron') {
       return this.tronSignTypedData(data, options)
     }
-    const response = await this.rpc('eth_signTypedData_v4', normalizeTypedDataPayload(data), options)
+    const response = await this.rpc(
+      'eth_signTypedData_v4',
+      normalizeTypedDataPayload(data),
+      options,
+    )
     return extractSignature(response)
   }
 
@@ -71,19 +90,39 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
   private async getChainType(): Promise<string> {
     if (this.cachedChainType) return this.cachedChainType
     const wallet = await this.client.getWallet(this.config.walletId)
+    this.assertRequestedFamily(wallet.chainType)
     this.cachedAddress = wallet.address
     this.cachedChainType = wallet.chainType?.toLowerCase() ?? ''
     return this.cachedChainType
   }
 
+  private assertRequestedFamily(chainType: string): void {
+    if (!this.requestedFamily) return
+    const normalized = chainType.trim().toLowerCase()
+    const actualFamily =
+      normalized === 'tron'
+        ? Network.TRON
+        : normalized === 'ethereum' || normalized === 'evm'
+          ? Network.EVM
+          : undefined
+    if (!actualFamily) {
+      throw new NetworkError(`Privy wallet returned unsupported chain type '${chainType}'`)
+    }
+    if (actualFamily !== this.requestedFamily) {
+      throw new NetworkError(
+        `Privy wallet chain '${actualFamily}' does not match requested network family '${this.requestedFamily}'`,
+      )
+    }
+  }
+
   private async tronSignTransaction(
-    payload: Record<string, unknown>,
+    payload: TransactionPayload,
     options?: SignOptions,
-  ): Promise<string> {
+  ): Promise<TronSignedTransactionArtifact> {
     const { txId } = normalizeTronTxPayload(payload)
     const signature = await this.tronSignHash(Buffer.from(txId, 'hex'), options)
     const signedTx = { ...payload, txID: txId, signature: [signature] }
-    return JSON.stringify(signedTx)
+    return { family: 'tron', transaction: signedTx }
   }
 
   private async tronSignTypedData(

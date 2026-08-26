@@ -19,7 +19,6 @@ function makeWallet(key?: Uint8Array, network?: string): TronSigner {
   return new TronSigner(key ?? TEST_KEY, network)
 }
 
-
 const EIP712_DATA = {
   types: {
     EIP712Domain: [
@@ -104,9 +103,8 @@ describe('Address', () => {
     const wallet = makeWallet()
     const rawDataHex = 'deadbeef'
     const signed = await wallet.signTransaction({ raw_data_hex: rawDataHex })
-    const parsed = JSON.parse(signed)
     const expected = createHash('sha256').update(Buffer.from(rawDataHex, 'hex')).digest('hex')
-    expect(parsed.txID).toBe(expected)
+    expect(signed.transaction.txID).toBe(expected)
   })
 
   it('rejects non-hex txID', async () => {

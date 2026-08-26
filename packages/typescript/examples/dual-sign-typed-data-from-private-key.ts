@@ -6,72 +6,73 @@
  *
  *   - `PRIVATE_KEY`
  *   - `MNEMONIC`
- *   - `WALLET_PASSWORD`
  *   - `MNEMONIC_ACCOUNT_INDEX` (optional, mnemonic mode only)
  *
  * Then it resolves two wallet providers:
  *
- *   - TRON via `resolveWalletProvider({ network: "tron" })`
- *   - EVM via `resolveWalletProvider({ network: "eip155" })`
+ *   - TRON via `resolveWalletProvider({ network: "tron:mainnet" })`
+ *   - EVM via `resolveWalletProvider({ network: "eip155:1" })`
  *
  * Usage:
  *   PRIVATE_KEY=<hex> npx tsx examples/dual-sign-typed-data-from-private-key.ts
  *   MNEMONIC="word1 word2 ..." npx tsx examples/dual-sign-typed-data-from-private-key.ts
  *   MNEMONIC="word1 word2 ..." MNEMONIC_ACCOUNT_INDEX=1 npx tsx examples/dual-sign-typed-data-from-private-key.ts
- *   WALLET_PASSWORD=<password> npx tsx examples/dual-sign-typed-data-from-private-key.ts
  */
 
-import { resolveWalletProvider, type Eip712Capable } from "../src/index.js";
+import { resolveWalletProvider } from '../src/index.js'
+import {
+  configureEnvWalletSource,
+  reportExampleError,
+  requireEip712Wallet,
+} from './example-utils.js'
 
 const PAYMENT_PERMIT = {
   types: {
     EIP712Domain: [
-      { name: "name", type: "string" },
-      { name: "chainId", type: "uint256" },
-      { name: "verifyingContract", type: "address" },
+      { name: 'name', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' },
     ],
     PaymentPermitDetails: [
-      { name: "buyer", type: "address" },
-      { name: "amount", type: "uint256" },
-      { name: "nonce", type: "uint256" },
+      { name: 'buyer', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'nonce', type: 'uint256' },
     ],
   },
-  primaryType: "PaymentPermitDetails",
+  primaryType: 'PaymentPermitDetails',
   domain: {
-    name: "x402PaymentPermit",
+    name: 'x402PaymentPermit',
     chainId: 1,
-    verifyingContract: "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+    verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC',
   },
   message: {
-    buyer: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    buyer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
     amount: 1000000,
     nonce: 0,
   },
-};
-
-async function main() {
-  const tronProvider = resolveWalletProvider({ network: "tron" });
-  const tronWallet = (await tronProvider.getActiveWallet()) as unknown as Eip712Capable & {
-    getAddress(): Promise<string>;
-  };
-  const tronAddress = await tronWallet.getAddress();
-  const tronSignature = await tronWallet.signTypedData(PAYMENT_PERMIT);
-
-  const evmProvider = resolveWalletProvider({ network: "eip155" });
-  const evmWallet = (await evmProvider.getActiveWallet()) as unknown as Eip712Capable & {
-    getAddress(): Promise<string>;
-  };
-  const evmAddress = await evmWallet.getAddress();
-  const evmSignature = await evmWallet.signTypedData(PAYMENT_PERMIT);
-
-  console.log("=== TRON ===");
-  console.log(`Address:    ${tronAddress}`);
-  console.log(`Signature:  ${tronSignature}`);
-  console.log();
-
-  console.log("=== EVM ===");
-  console.log(`Address:    ${evmAddress}`);
-  console.log(`Signature:  ${evmSignature}`);
 }
 
-main().catch(console.error);
+async function main() {
+  configureEnvWalletSource()
+
+  const tronProvider = resolveWalletProvider({ network: 'tron:mainnet' })
+  const tronWallet = requireEip712Wallet(await tronProvider.getActiveWallet())
+  const tronAddress = await tronWallet.getAddress()
+  const tronSignature = await tronWallet.signTypedData(PAYMENT_PERMIT)
+
+  const evmProvider = resolveWalletProvider({ network: 'eip155:1' })
+  const evmWallet = requireEip712Wallet(await evmProvider.getActiveWallet())
+  const evmAddress = await evmWallet.getAddress()
+  const evmSignature = await evmWallet.signTypedData(PAYMENT_PERMIT)
+
+  console.log('=== TRON ===')
+  console.log(`Address:    ${tronAddress}`)
+  console.log(`Signature:  ${tronSignature}`)
+  console.log()
+
+  console.log('=== EVM ===')
+  console.log(`Address:    ${evmAddress}`)
+  console.log(`Signature:  ${evmSignature}`)
+}
+
+main().catch(reportExampleError)

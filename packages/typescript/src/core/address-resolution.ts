@@ -8,7 +8,6 @@ import type { WalletDependencies } from './providers/wallet-builder.js'
 import { WalletCliConfigResolver } from './providers/wallet-cli-config.js'
 import { WalletCliClient } from './clients/wallet-cli.js'
 import { WalletCliExecutionError } from './errors.js'
-import type { WalletCliWalletParams } from './config.js'
 
 export type AddressEntry = {
   format: 'eip155' | 'tron'
@@ -37,9 +36,7 @@ export async function resolveWalletAddresses(
     return resolveExternalSignerAddress(conf, options?.dependencies)
   }
 
-  const privateKey = loadRawSecretPrivateKey(
-    conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams,
-  )
+  const privateKey = loadRawSecretPrivateKey(conf.params)
 
   const [evmAddress, tronAddress] = await Promise.all([
     new EvmSigner(privateKey.eip155, 'eip155').getAddress(),
@@ -73,11 +70,11 @@ async function resolveExternalSignerAddress(
 }
 
 async function resolveWalletCliAddresses(
-  conf: WalletConfig,
+  conf: Extract<WalletConfig, { type: 'wallet_cli' }>,
   dependencies?: WalletDependencies,
 ): Promise<AddressResolutionResult> {
   const resolver = new WalletCliConfigResolver({
-    source: conf.params as WalletCliWalletParams,
+    source: conf.params,
   })
   const config = await resolver.resolve()
   const client =

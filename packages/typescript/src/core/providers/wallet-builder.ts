@@ -46,17 +46,15 @@ export async function createAdapter(
     return externalBuilder(conf.params, { network, dependencies })
   }
   if (conf.type === WalletType.RAW_SECRET) {
-    return new RawSecretSigner(
-      conf.params as RawSecretPrivateKeyParams | RawSecretMnemonicParams,
-      network,
-    )
+    return new RawSecretSigner(conf.params, network)
   }
   throw new Error(`Unknown wallet config type: ${conf.type}`)
 }
 
 // ---------------------------------------------------------------------------
-// External signer registry — new external signing backends self-register
-// here instead of adding if-else branches to createAdapter.
+// Internal external-signer dispatch table. Wallet types remain closed and
+// validated by WalletConfigSchema; adding a backend is an intentional SDK
+// change rather than an unvalidated runtime plugin registration.
 // ---------------------------------------------------------------------------
 
 export type ExternalSignerBuilder = (
@@ -66,7 +64,7 @@ export type ExternalSignerBuilder = (
 
 const externalSignerRegistry = new Map<string, ExternalSignerBuilder>()
 
-export function registerExternalSigner(type: string, builder: ExternalSignerBuilder): void {
+function registerExternalSigner(type: string, builder: ExternalSignerBuilder): void {
   if (externalSignerRegistry.has(type)) {
     console.warn(
       `[agent-wallet] Overwriting existing external signer registration for "${type}". ` +
@@ -76,17 +74,13 @@ export function registerExternalSigner(type: string, builder: ExternalSignerBuil
   externalSignerRegistry.set(type, builder)
 }
 
-export function isRegisteredExternalSigner(type: string): boolean {
-  return externalSignerRegistry.has(type)
-}
-
 // ---------------------------------------------------------------------------
 // External signer registrations — privy and wallet_cli both follow the same
 // pattern: resolver → resolve → client → adapter. They carry their own
 // credentials in params (not agent-wallet master password).
 // ---------------------------------------------------------------------------
 
-registerExternalSigner('privy', async (params, _ctx) => {
+registerExternalSigner('privy', async (params, ctx) => {
   const resolver = new PrivyConfigResolver({
     source: params as PrivyWalletParams,
   })
@@ -95,7 +89,7 @@ registerExternalSigner('privy', async (params, _ctx) => {
     appId: resolved.appId,
     appSecret: resolved.appSecret,
   })
-  return new PrivyAdapter(resolved, client)
+  return new PrivyAdapter(resolved, client, ctx.network)
 })
 
 registerExternalSigner('wallet_cli', async (params, ctx) => {
