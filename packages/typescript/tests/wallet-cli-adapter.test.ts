@@ -45,13 +45,6 @@ function mockClient(): WalletCliClient {
         signed: { txID: 'abc', raw_data_hex: 'deadbeef', signature: ['fixture'] },
       }),
     ),
-    signMessage: vi.fn().mockResolvedValue(
-      success('message.sign', {
-        address: TRON_ADDRESS,
-        message: 'hello',
-        signature: `0x${'11'.repeat(65)}`,
-      }),
-    ),
     signTypedData: vi
       .fn()
       .mockImplementation((_json, _lease, _identity, target: { family: string }) =>
@@ -171,12 +164,9 @@ describe('WalletCliAdapter', () => {
     expect(secret.leases[0].dispose).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects invalid UTF-8 and EVM typed-data chain mismatch before identity or secret access', async () => {
+  it('rejects EVM typed-data chain mismatch before identity or secret access', async () => {
     const client = mockClient()
     const secret = trackingProvider()
-    const tron = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
-    await expect(tron.signMessage(Uint8Array.from([0xc3, 0x28]))).rejects.toThrow('UTF-8')
-
     const evm = new WalletCliAdapter(CONFIG, client, secret.provider, 'eip155:1')
     await expect(
       evm.signTypedData({ domain: { chainId: 56 }, types: {}, message: {} }),
@@ -204,42 +194,6 @@ describe('WalletCliAdapter', () => {
       expect(secret.acquire).not.toHaveBeenCalled()
     },
   )
-
-  it('signs a UTF-8 message through the additive capability', async () => {
-    const client = mockClient()
-    const secret = trackingProvider()
-    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
-    await expect(adapter.signMessage(new TextEncoder().encode('hello'))).resolves.toBe(
-      '11'.repeat(65),
-    )
-    expect(client.signMessage).toHaveBeenCalledWith(
-      'hello',
-      secret.leases[0].lease,
-      expect.objectContaining({ accountId: 'wlt_fixture.0' }),
-      expect.objectContaining({ cliNetwork: 'tron:nile' }),
-      undefined,
-    )
-  })
-
-  it('rejects a message-signing result for a different message and disposes the lease', async () => {
-    const client = mockClient()
-    ;(client.signMessage as ReturnType<typeof vi.fn>).mockResolvedValue(
-      success('message.sign', {
-        address: TRON_ADDRESS,
-        message: 'different message',
-        signature: `0x${'11'.repeat(65)}`,
-      }),
-    )
-    const secret = trackingProvider()
-    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
-
-    await expect(
-      adapter.signMessage(new TextEncoder().encode('expected message')),
-    ).rejects.toMatchObject({
-      code: 'contract_mismatch',
-    })
-    expect(secret.leases[0].dispose).toHaveBeenCalledTimes(1)
-  })
 
   it('forwards cancellation and disposes the lease after an aborted signing operation', async () => {
     const client = mockClient()

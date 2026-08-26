@@ -2,12 +2,13 @@
 
 本指南說明如何把
 **[`@tron-walletcli/wallet-cli`](https://www.npmjs.com/package/@tron-walletcli/wallet-cli)**
-管理的 TRON/EVM 帳戶接到 agent-wallet，並驗證 transaction、typed-data 與 UTF-8
-message 簽章。agent-wallet 支援穩定版 `>=4.13.0 <5.0.0`，不支援 4.12.x。
+管理的 TRON/EVM 帳戶接到 agent-wallet，並驗證 transaction 與 typed-data 簽章。
+agent-wallet 支援穩定版 `>=4.13.0 <5.0.0`，不支援 4.12.x。wallet-cli
+本身雖提供 message signing，但 agent-wallet 目前不公開該能力。
 
 ## 事前準備
 
-- 已安裝並初始化 wallet-cli；keystore 與私鑰由它持有。
+- 已安裝 wallet-cli，並已建立或匯入至少一個 account；keystore 與私鑰由它持有。
 - wallet-cli keystore password。
 - 選用的 account label（例如 `main-1`）；CLI 省略時會在密碼提示前解析 active account，並把 canonical accountId 寫入新 config。
 
@@ -37,22 +38,35 @@ agent-wallet 首次使用時還會驗證 `--json-schema` 與 `networks -o json`�
 entrypoint（`.js`/`.mjs`/`.cjs`）會由目前的 Node 執行且需要 Node.js >=20；Windows
 請指定 package 的 JavaScript entrypoint，不要指定會經 shell 展開的 `.cmd`/`.bat` shim。
 
-### 2. 初始化 wallet-cli keystore
+### 2. 建立或匯入 wallet-cli account
+
+wallet-cli 4.13.0 沒有獨立的 `init` 命令。第一次建立或匯入 account 時會自動建立
+`~/.wallet-cli`，並在互動終端中設定 master password。
+
+建立全新的 HD wallet：
 
 ```bash
-wallet-cli init
+wallet-cli create --label main-1 -o json
 ```
 
-這會建立 wallet-cli keystore 並設定 password。非互動使用時不要把 password 放進 argv；
-以下範例會改用 `--cli-password-exec`。
-
-### 3. 建立或選擇帳戶
+`create` 會產生新的 BIP39 seed，不會要求匯入私鑰。若要恢復既有錢包，請由使用者在
+本機互動終端中選擇其中一種匯入方式：
 
 ```bash
-wallet-cli account create --label main-1
+wallet-cli import mnemonic --label main-1 -o json
 ```
 
-確認 canonical account descriptor；相容版本可同時回傳 TRON 與 EVM 地址：
+```bash
+wallet-cli import private-key --label main-1 -o json
+```
+
+助記詞、私鑰與 master password 都透過隱藏提示輸入，不要放進 argv、環境變數、日誌或
+聊天內容。`create` 不會把 recovery phrase 顯示到 stdout；建立後應由使用者在私人、非
+Git 目錄中執行 `wallet-cli backup`，妥善保存離線備份。
+
+### 3. 確認 account descriptor
+
+相容版本可同時回傳 canonical account ID、TRON 地址與 EVM 地址：
 
 ```bash
 wallet-cli current -o json
@@ -92,11 +106,15 @@ agent-wallet start wallet_cli \
   --cli-password-exec /absolute/path/to/fetch-password.sh
 ```
 
-互動模式可安全提示直接輸入 password：
+互動模式也可用隱藏提示直接輸入 password，避免秘密出現在 argv：
 
 ```bash
 agent-wallet add wallet_cli
 ```
+
+選擇 `direct` 時，password 會以明文字串保存在權限為 `0600` 的
+`wallets_config.json`；它不會顯示在 `inspect` 輸出，但能讀取該檔案的程序仍可取得。
+需要避免落盤明文時，請選擇 `exec` 並使用上面的 `--cli-password-exec` 方式。
 
 CLI 會拒絕 `--cli-password <plaintext>`，避免秘密出現在 shell history 或 process argv。
 既有 `wallets_config.json` 明文字串仍可載入，但新自動化應使用 exec ref：
@@ -156,12 +174,6 @@ agent-wallet resolve-address my_cli_wallet
 `wallet_cli` 強制完整 network：TRON 使用 `tron:<name>`，EVM 使用
 `eip155:<positive-chain-id>`。裸 `tron`、裸 `eip155`、alias 或省略 network 都會在
 子程序與秘密取得前失敗，不會默認 mainnet。
-
-### UTF-8 message
-
-```bash
-agent-wallet sign message --message 'hello 世界' -n tron:nile -w my_cli_wallet
-```
 
 ### Typed data（TIP-712 / EIP-712）
 
@@ -246,26 +258,40 @@ console.log(result);
 不要對 timeout 的簽章或廣播自動重送。client 預設 60 秒 timeout、5 秒 TERM→KILL、
 2 MiB stdout 與 64 KiB stderr 上限；錯誤不包含 argv payload、stdin 或原始程序輸出。
 
-## 測試與本機 wallet-cli
+## agent-wallet 驗證策略
 
-一般 CI 使用 deterministic fixture，不需要安裝 wallet-cli。真實契約測試必須明確設定：
+測試目標是確認 agent-wallet 的功能與外部程序邊界正確，不是替 wallet-cli 測試其內部
+實作。一般 CI 使用 deterministic fixture 模擬 wallet-cli 的公開 machine contract，並驗證：
+
+- `start/add wallet_cli` 會先解析 account，再收集 password source，並保存 canonical account ID。
+- direct password 會寫入權限為 `0600` 的 config；全新 provider 重載後可完成簽章，而
+  `inspect` 一律顯示 `[redacted]`。
+- exec ref 可在全新 provider 重載後執行，且每次簽章都會重新取得一次 password。
+- `resolve-address` 能回傳固定帳戶的 TRON/EVM 地址，且不取得 password。
+- transaction 與 typed-data 會固定 account/network，正確傳遞 one-shot secret lease，並核對 signer。
+- timeout、取消、錯誤 envelope、signer mismatch 與 capability drift 會被 agent-wallet 拒絕。
+
+fixture 讓 CI 可重現 agent-wallet 的成功與失敗分支，不需要真實私鑰或外部網路。選用的
+real-executable probe 只確認 agent-wallet 能與指定的 wallet-cli executable 對接，不將
+wallet-cli 自身功能是否正確列為 agent-wallet 的測試責任：
 
 ```text
 AGENT_WALLET_TEST_WALLET_CLI_PATH
 AGENT_WALLET_TEST_WALLET_CLI_ACCOUNT
 AGENT_WALLET_TEST_WALLET_CLI_NETWORK
-AGENT_WALLET_TEST_WALLET_CLI_PASSWORD_EXEC
 ```
 
-只有 path 時會 probe version/catalog/networks/current；四個值都存在才會執行 message
-signing。測試不會 fallback 到全域 binary，也不會修改、安裝依賴或建置上一級本機
+只有 path 時會驗證 agent-wallet 的 executable resolution 與 compatibility handshake；
+同時提供 account 與 network 時，會再經由 `WalletCliAdapter` 驗證 agent-wallet 的
+canonical account 固定、network mapping 與地址解析。測試不會 fallback
+到全域 binary，也不會修改、安裝依賴或建置上一級本機
 `../wallet-cli`。
 
 ---
 
 ## 摘要
 
-- 安裝穩定版 wallet-cli 4.x，初始化 keystore 與帳戶。
+- 安裝穩定版 wallet-cli 4.x，建立或匯入 account；4.13.0 沒有獨立 `init`。
 - 以互動輸入或 `--cli-password-exec` 設定秘密；不要使用明文 argv。
 - 簽章一律指定完整 `tron:<name>` 或 `eip155:<chain-id>`。
 - 核心簽章支援 TRON/EVM；選用 build/broadcast/status integration 仍為 TRON-only。

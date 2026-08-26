@@ -133,13 +133,6 @@ export interface WalletCliEvmTxSignData {
 /** Backward-compatible alias for the TRON result shape. */
 export type WalletCliTxSignData = WalletCliTronTxSignData
 
-export interface WalletCliMessageSignData {
-  address: string
-  message: string
-  signature: string
-  [key: string]: unknown
-}
-
 export interface WalletCliTypedDataSignData {
   address: string
   primaryType: string
@@ -243,9 +236,6 @@ const EvmTxSignDataSchema = z
     signed: z.object({ raw: HexSchema, hash: HexSchema }).passthrough(),
   })
   .passthrough()
-const MessageSignDataSchema = z
-  .object({ address: z.string().min(1), message: z.string(), signature: HexSchema })
-  .passthrough()
 const TypedDataSignDataSchema = z
   .object({
     address: z.string().min(1),
@@ -284,7 +274,7 @@ export class WalletCliClient {
     const compatibility = await this.compatibilityPromise
     if (!target) return compatibility
 
-    for (const id of ['tx.sign', 'message.sign', 'typed-data.sign']) {
+    for (const id of ['tx.sign', 'typed-data.sign']) {
       const command = compatibility.catalog.commands.find((entry) => entry.id === id)
       if (!command || command.kind !== 'chain' || !command.families?.includes(target.family)) {
         throw new WalletCliExecutionError(
@@ -383,38 +373,6 @@ export class WalletCliClient {
       {
         command: 'tx.sign',
         dataSchema: EvmTxSignDataSchema,
-        chain: compatibility.network!,
-        stdin: lease,
-        signal,
-      },
-    )
-  }
-
-  async signMessage(
-    message: string,
-    lease: SecretLease,
-    identity: { accountId: string },
-    target: WalletCliNetworkTarget,
-    signal?: AbortSignal,
-  ): Promise<WalletCliSuccessResult<WalletCliMessageSignData>> {
-    const compatibility = await this.ensureCompatible(target)
-    return this.run(
-      [
-        'message',
-        'sign',
-        '--message',
-        message,
-        '--account',
-        identity.accountId,
-        '--network',
-        target.cliNetwork,
-        '--password-stdin',
-        '-o',
-        'json',
-      ],
-      {
-        command: 'message.sign',
-        dataSchema: MessageSignDataSchema,
         chain: compatibility.network!,
         stdin: lease,
         signal,

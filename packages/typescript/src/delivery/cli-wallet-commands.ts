@@ -1,7 +1,7 @@
 import { unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { type Eip712Capable, type MessageSigningCapable } from '../core/base.js'
+import { type Eip712Capable } from '../core/base.js'
 import type { WalletConfig } from '../core/config.js'
 import { WalletError } from '../core/errors.js'
 import { getProvider, managedJsonFiles } from './cli.js'
@@ -314,39 +314,6 @@ export async function cmdSignTypedData(
   } catch (e) {
     if (e instanceof WalletError || e instanceof SyntaxError) {
       io.print((e as Error).message)
-      throw new CliExit(1)
-    }
-    if (e instanceof Error) {
-      io.print(e.message)
-      throw new CliExit(1)
-    }
-    throw e
-  }
-}
-
-export async function cmdSignMessage(
-  wallet: string | undefined,
-  message: string,
-  network: string | undefined,
-  dir: string,
-  io: CliIO,
-): Promise<void> {
-  const walletId = resolveWalletId(wallet, dir, io)
-  const provider = getProvider(dir)
-
-  try {
-    const w = await provider.getWallet(walletId, network)
-    if (!('signMessage' in w)) {
-      io.print('This wallet does not support message signing.')
-      throw new CliExit(1)
-    }
-    const signature = await (w as unknown as MessageSigningCapable).signMessage(
-      new TextEncoder().encode(message),
-    )
-    io.print(`Signature: ${signature}`)
-  } catch (e) {
-    if (e instanceof WalletError) {
-      io.print(e.message)
       throw new CliExit(1)
     }
     if (e instanceof Error) {

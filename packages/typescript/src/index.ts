@@ -9,7 +9,6 @@ export type {
   EvmSignedTransactionArtifact,
   TronSignedTransactionArtifact,
   Eip712Capable,
-  MessageSigningCapable,
   WalletProvider,
   SignOptions,
 } from './core/base.js'

@@ -20,7 +20,6 @@ import {
   cmdRemove,
   cmdResolveAddress,
   cmdReset,
-  cmdSignMessage,
   cmdSignTypedData,
   cmdUse,
 } from '../src/delivery/cli-wallet-commands.js'
@@ -763,6 +762,7 @@ describe('cmdList / cmdInspect / cmdRemove', () => {
     expect(out(io)).toContain('wallet_cli')
     expect(out(io)).toContain('main-1')
     expect(out(io)).toContain('[redacted]')
+    expect(out(io)).not.toContain('Secret123!')
   })
 
   it('inspect shows wallet_cli details with (active) when no account', async () => {
@@ -952,73 +952,26 @@ describe('sign commands', () => {
     expect(out(io)).toContain('Signature:')
   })
 
-  it('signs a UTF-8 message through capability detection', async () => {
-    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
-      getAddress: vi.fn(),
-      signTransaction: vi.fn(),
-      signMessage: vi.fn().mockResolvedValue('aabbcc'),
-    })
+  it('does not expose message signing through the CLI', async () => {
     const io = mockIO()
-    await cmdSignMessage('signer', 'hello 世界', 'eip155:1', secretsDir, io)
-    expect(out(io)).toContain('Signature: aabbcc')
-  })
-
-  it('documents and parses sign message --message', async () => {
-    const help = mockIO()
-    expect(await main(['sign', 'message', '--help'], help)).toBe(0)
-    expect(out(help)).toContain('--message <utf8>')
-
-    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
-      getAddress: vi.fn(),
-      signTransaction: vi.fn(),
-      signMessage: vi.fn().mockResolvedValue('deadbeef'),
-    })
-    const io = mockIO()
-    const code = await main(
-      [
-        'sign',
-        'message',
-        '--message',
-        'hello',
-        '--wallet-id',
-        'signer',
-        '--network',
-        'eip155:1',
-        '-d',
-        secretsDir,
-      ],
-      io,
-    )
-    expect(code).toBe(0)
-    expect(out(io)).toContain('Signature: deadbeef')
-  })
-
-  it('parses an equals-form message whose value starts with a hyphen', async () => {
-    const signMessage = vi.fn().mockResolvedValue('deadbeef')
-    vi.spyOn(ConfigWalletProvider.prototype, 'getWallet').mockResolvedValue({
-      getAddress: vi.fn(),
-      signTransaction: vi.fn(),
-      signMessage,
-    })
-    const io = mockIO()
-
-    const code = await main(
-      [
-        'sign',
-        'message',
-        '--message=-hello',
-        '--wallet-id',
-        'signer',
-        '--network',
-        'eip155:1',
-        '-d',
-        secretsDir,
-      ],
-      io,
-    )
-
-    expect(code).toBe(0)
-    expect(signMessage).toHaveBeenCalledWith(new TextEncoder().encode('-hello'))
+    expect(
+      await main(
+        [
+          'sign',
+          'message',
+          '--message',
+          'hello',
+          '--wallet-id',
+          'signer',
+          '--network',
+          'eip155:1',
+          '-d',
+          secretsDir,
+        ],
+        io,
+      ),
+    ).toBe(1)
+    expect(out(io)).toContain('agent-wallet sign <tx|typed-data>')
   })
 })
 

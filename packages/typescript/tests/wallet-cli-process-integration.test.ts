@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,8 +8,10 @@ import { parseTransaction } from 'viem'
 import { z } from 'zod'
 
 import { WalletCliAdapter } from '../src/core/adapters/wallet-cli.js'
+import type { Eip712Capable } from '../src/core/base.js'
 import { WalletCliClient } from '../src/core/clients/wallet-cli.js'
 import { WalletCliExecutionError } from '../src/core/errors.js'
+import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { StaticSecretProvider, type SecretProvider } from '../src/core/secret-provider.js'
 import { parseWalletCliNetwork } from '../src/core/wallet-cli-network.js'
 
@@ -33,6 +35,97 @@ function fixtureClient(mode = 'ok', extraEnv: NodeJS.ProcessEnv = {}): WalletCli
 }
 
 describe('wallet-cli deterministic process integration', () => {
+  it('reloads a persisted direct password and uses it for signing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-direct-password-'))
+    temporaryDirectories.push(dir)
+
+    const writer = new ConfigWalletProvider(dir)
+    writer.addWallet('fixture-cli', {
+      type: 'wallet_cli',
+      params: { account: 'wlt_fixture.0', password: 'fixture-password' },
+    })
+
+    const configPath = join(dir, 'wallets_config.json')
+    const stored = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      wallets: { 'fixture-cli': { params: { password: string } } }
+    }
+    expect(stored.wallets['fixture-cli'].params.password).toBe('fixture-password')
+    if (process.platform !== 'win32') {
+      expect(statSync(configPath).mode & 0o777).toBe(0o600)
+    }
+
+    // A new provider models a new agent-wallet process and must rebuild the
+    // StaticSecretProvider from the direct password loaded from disk.
+    const reader = new ConfigWalletProvider(dir, {
+      dependencies: { walletCli: { clientFactory: () => fixtureClient() } },
+    })
+    const wallet = await reader.getWallet('fixture-cli', 'eip155:1')
+    expect('signTypedData' in wallet).toBe(true)
+    await expect(
+      (wallet as typeof wallet & Eip712Capable).signTypedData({
+        domain: { chainId: 1 },
+        types: { Message: [{ name: 'value', type: 'string' }] },
+        primaryType: 'Message',
+        message: { value: 'persisted direct password' },
+      }),
+    ).resolves.toBe('33'.repeat(65))
+  })
+
+  it('reloads a persisted exec password and executes it for every signing process', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-exec-password-'))
+    temporaryDirectories.push(dir)
+    const counter = join(dir, 'secret-calls.txt')
+    const secretScript = join(dir, 'get-password.mjs')
+    writeFileSync(
+      secretScript,
+      [
+        '#!/usr/bin/env node',
+        "import { appendFileSync } from 'node:fs'",
+        `appendFileSync(${JSON.stringify(counter)}, 'call\\n')`,
+        "process.stdout.write('fixture-password\\n')",
+      ].join('\n'),
+      { mode: 0o700 },
+    )
+
+    const writer = new ConfigWalletProvider(dir)
+    writer.addWallet('fixture-cli', {
+      type: 'wallet_cli',
+      params: {
+        account: 'wlt_fixture.0',
+        password: { exec: secretScript, timeout: 2_000 },
+      },
+    })
+
+    const stored = JSON.parse(readFileSync(join(dir, 'wallets_config.json'), 'utf8')) as {
+      wallets: {
+        'fixture-cli': { params: { password: { exec: string; timeout: number } } }
+      }
+    }
+    expect(stored.wallets['fixture-cli'].params.password).toEqual({
+      exec: secretScript,
+      timeout: 2_000,
+    })
+
+    // Recreate the provider to prove the exec reference survives a process
+    // restart and is resolved by the production SecretProvider factory.
+    const reader = new ConfigWalletProvider(dir, {
+      dependencies: { walletCli: { clientFactory: () => fixtureClient() } },
+    })
+    const wallet = await reader.getWallet('fixture-cli', 'eip155:1')
+    expect('signTypedData' in wallet).toBe(true)
+    const signer = wallet as typeof wallet & Eip712Capable
+    const typedData = {
+      domain: { chainId: 1 },
+      types: { Message: [{ name: 'value', type: 'string' }] },
+      primaryType: 'Message',
+      message: { value: 'persisted exec password' },
+    }
+
+    await expect(signer.signTypedData(typedData)).resolves.toBe('33'.repeat(65))
+    await expect(signer.signTypedData(typedData)).resolves.toBe('33'.repeat(65))
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(2)
+  })
+
   it('shares one version/catalog/networks handshake across concurrent callers', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-counter-'))
     temporaryDirectories.push(dir)
@@ -140,16 +233,13 @@ describe('wallet-cli deterministic process integration', () => {
     expect(parseTransaction(`0x${signed.rawTransaction}`)).toMatchObject({ chainId: 1 })
   })
 
-  it('signs UTF-8 messages and typed data for both families', async () => {
+  it('signs typed data for both families', async () => {
     for (const network of ['tron:nile', 'eip155:1']) {
       const adapter = new WalletCliAdapter(
         { account: 'fixture', password: 'fixture-password' },
         fixtureClient(),
         new StaticSecretProvider('fixture-password'),
         network,
-      )
-      await expect(adapter.signMessage(new TextEncoder().encode('hello 世界'))).resolves.toMatch(
-        /^[0-9a-f]+$/,
       )
       await expect(
         adapter.signTypedData({
@@ -178,8 +268,18 @@ describe('wallet-cli deterministic process integration', () => {
       'tron:nile',
     )
 
-    await adapter.signMessage(new TextEncoder().encode('first'))
-    await adapter.signMessage(new TextEncoder().encode('second'))
+    await adapter.signTypedData({
+      domain: { chainId: 728126428 },
+      types: { Message: [{ name: 'value', type: 'string' }] },
+      primaryType: 'Message',
+      message: { value: 'first' },
+    })
+    await adapter.signTypedData({
+      domain: { chainId: 728126428 },
+      types: { Message: [{ name: 'value', type: 'string' }] },
+      primaryType: 'Message',
+      message: { value: 'second' },
+    })
 
     expect(acquisitions).toBe(2)
   })
@@ -254,7 +354,17 @@ describe('wallet-cli deterministic process integration', () => {
     })
     try {
       await expect(
-        client.signMessage('hello', wrongLease, { accountId: identity.data.accountId }, target),
+        client.signTypedData(
+          JSON.stringify({
+            domain: { chainId: 728126428 },
+            types: { Message: [{ name: 'value', type: 'string' }] },
+            primaryType: 'Message',
+            message: { value: 'hello' },
+          }),
+          wrongLease,
+          { accountId: identity.data.accountId },
+          target,
+        ),
       ).rejects.toMatchObject({ code: 'auth_failed' })
     } finally {
       await wrongLease.dispose()

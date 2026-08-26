@@ -18,7 +18,7 @@ pnpm add @bankofai/agent-wallet
 ```
 
 包含 CLI（`agent-wallet`）、EVM 與 TRON 支援。`wallet_cli` wallet type 會將
-TRON/EVM transaction、typed-data 與 UTF-8 message 簽章委派給外部
+TRON/EVM transaction 與 typed-data 簽章委派給外部
 [`@tron-walletcli/wallet-cli`](https://www.npmjs.com/package/@tron-walletcli/wallet-cli)
 程序；核心 SDK 不讀取或解密它的 keystore。
 
@@ -108,16 +108,13 @@ interface Eip712Capable {
   signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string>
 }
 
-interface MessageSigningCapable {
-  signMessage(message: Uint8Array, options?: SignOptions): Promise<string>
-}
 ```
 
 `SignedTransactionArtifact` 以 `family` 作為 discriminator：EVM 結果位於
 `rawTransaction`，TRON 結果位於 `transaction`，呼叫端不需解析多態字串。
 
-需要 EIP-712 或 message 簽章的 adapter 分別實作加法性的 `Eip712Capable` 與
-`MessageSigningCapable`；`signMessage` 沒有變成所有 `Wallet` 的必要方法。
+需要 EIP-712 簽章的 adapter 實作加法性的 `Eip712Capable`。agent-wallet 不公開
+message signing；wallet-cli 本身的 message command 不在本 package 契約內。
 `SignOptions.signal` 可取消 wallet-cli 子程序，取消與 timeout 都會釋放該次 secret lease。
 
 ## Wallet Types
@@ -154,7 +151,7 @@ mainnet 都會在啟動子程序前被拒絕；EVM target 會映射成 wallet-cl
   `current [--account]` 驗證並保存 canonical accountId，不建立或匯入 wallet-cli key。
 - optional peer 範圍為穩定版 `>=4.13.0 <5.0.0`，不會成為一般使用者的硬相依。
 - 首次使用會共同執行 `--version`、`--json-schema`、`networks -o json` handshake，
-  並驗證 target family 的 `tx.sign`、`message.sign`、`typed-data.sign` 能力。
+  並驗證 target family 的 `tx.sign`、`typed-data.sign` 能力。
 - JavaScript entrypoint 使用目前的 Node 執行，需 Node.js >=20；一般 agent-wallet
   功能仍維持 package 的 Node.js >=18 契約。
 - `WalletCliClient` 只接受 `wallet-cli.result.v1`，交叉檢查 exit status、command、

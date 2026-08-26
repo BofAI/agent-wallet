@@ -2,7 +2,7 @@
 
 ## 簡介
 
-本規格定義將 wallet-cli 整合為 agent-wallet 之 TRON 與 EVM 本地簽名後端的需求。agent-wallet 目前支援 `raw_secret`、`privy` 與 `wallet_cli`；wallet-cli 作為外部簽名來源，金鑰由其加密 keystore 單獨擁有。整合範圍涵蓋交易、UTF-8 訊息與 typed-data 簽名、明確網路選擇、帳戶身分固定、短生命週期秘密、子程序與回應驗證、標準 resolver 的依賴注入、地址解析，以及 x402 所需的 EVM 相容性。
+本規格定義將 wallet-cli 整合為 agent-wallet 之 TRON 與 EVM 本地簽名後端的需求。agent-wallet 目前支援 `raw_secret`、`privy` 與 `wallet_cli`；wallet-cli 作為外部簽名來源，金鑰由其加密 keystore 單獨擁有。整合範圍涵蓋交易與 typed-data 簽名、明確網路選擇、帳戶身分固定、短生命週期秘密、子程序與回應驗證、標準 resolver 的依賴注入、地址解析，以及 x402 所需的 EVM 相容性。wallet-cli 本身的 message signing 不納入 agent-wallet 公開契約。
 
 選用的 `integrations/wallet-cli/` 鏈操作層維持 TRON-only。動態 registry params schema（readiness review 的 P2）不在本次範圍，另案處理。本需求以 `../wallet-cli` 的 `feat/architecture-evm-extension` 本地原始碼與測試所呈現的命令契約作為評估基準，不以全域安裝版或陳舊 `dist` 判定能力。
 
@@ -10,7 +10,7 @@
 
 ### 需求 1：TRON 與 EVM 簽名後端整合
 
-**目標：** 作為整合者，我希望透過同一個 wallet-cli adapter 對 TRON 與 EVM 的交易、訊息及型別化資料簽名，以便 x402 與既有 Wallet 呼叫端無需採用 wallet-cli 專屬介面。
+**目標：** 作為整合者，我希望透過同一個 wallet-cli adapter 對 TRON 與 EVM 的交易及型別化資料簽名，以便 x402 與既有 Wallet 呼叫端無需採用 wallet-cli 專屬介面。
 
 #### 驗收準則
 
@@ -22,8 +22,7 @@
 6. 對 TRON 呼叫 `signTransaction(payload)` 時，應傳入 TRON 未簽交易 JSON，並回傳 `{ family: "tron", transaction: data.signed }`；EVM 應回傳 `{ family: "evm", rawTransaction }`，使呼叫端可用 discriminator 安全收窄。
 7. 對 EVM 呼叫 `signTransaction(payload)` 時，應接受既有 Wallet/x402 使用的 viem 形狀交易物件，驗證 payload `chainId` 與選定 network 一致，序列化為 unsigned transaction 後交給 wallet-cli，並以既有 Wallet 慣例回傳不含 `0x` 前綴的 `data.signed.raw`。
 8. 當呼叫 `signTypedData(data)` 時，應以 wallet-cli 的 typed-data 命令簽名，並依既有 Wallet 契約回傳不含 `0x` 前綴的簽名；輸入與選定 family 不相容時應拒絕簽名。
-9. 當呼叫 `signMessage(message)` 時，應只接受可無損解碼的 UTF-8 訊息並使用 wallet-cli message signing；無效 UTF-8 或無法由 wallet-cli 保持原始位元組語意的資料應 fail-fast。
-10. 當 `wallet_cli` 錢包類型被選用時，agent-wallet 系統不應自行解密或持有 wallet-cli 的明文私鑰；金鑰應全程留在 wallet-cli 進程內。
+9. 當 `wallet_cli` 錢包類型被選用時，agent-wallet 系統不應自行解密或持有 wallet-cli 的明文私鑰；金鑰應全程留在 wallet-cli 進程內。
 
 ### 需求 2：密碼模型與短生命週期 SecretProvider
 
@@ -108,7 +107,7 @@
 1. agent-wallet 系統應將 wallet-cli 宣告為 optional peer dependency（非 `dependencies` 硬依賴），相容版本範圍應限制為 `>=4.13.0 <5.0.0`，且不接受 4.12.x。
 2. 當未安裝 wallet-cli 時，agent-wallet 的 EVM 簽名、Privy 與 `raw_secret` 功能應完全不受影響（零感知）。僅建立或使用 `wallet_cli` 配置時才要求 binary。
 3. 首次使用 wallet-cli 時，client 應驗證版本範圍，並快取 root `--json-schema` capability catalog 與 network 清單；同一 client 的並行首次呼叫應共用同一 handshake promise。
-4. handshake 應確認選定 family 所需的 current、transaction、message 與 typed-data 命令能力，以及 canonical network 確實存在。版本相符但缺少能力時仍應拒絕使用。
+4. handshake 應確認選定 family 所需的 current、transaction 與 typed-data 命令能力，以及 canonical network 確實存在。版本相符但缺少能力時仍應拒絕使用。
 5. 啟動目標解析應依序尊重顯式 client 設定、`AGENT_WALLET_WALLET_CLI_PATH`、可解析 optional peer 的 JavaScript entrypoint，以及 PATH 上可在 `shell: false` 下直接啟動的 executable；JavaScript entrypoint 應由目前的 Node executable 啟動，不應依賴 Windows shell shim。
 6. 當 wallet-cli 路徑被使用且目前 Node 版本低於 wallet-cli 要求時，應拋出明確的 unsupported runtime 錯誤；agent-wallet 本身的 `engines` 應維持 Node ≥18。
 7. agent-wallet 系統不應硬編碼 `node_modules/.bin` 路徑猜測 binary，也不得以版本字串取代 capability 驗證。
@@ -166,7 +165,7 @@
 
 #### 驗收準則
 
-1. 測試應提供 deterministic fixture CLI，覆蓋版本、capability catalog、network 清單、account descriptor、TRON/EVM transaction、message、typed-data、structured warnings、退出碼、timeout、超限輸出及 malformed envelope。
+1. 測試應提供 deterministic fixture CLI，覆蓋版本、capability catalog、network 清單、account descriptor、TRON/EVM transaction、typed-data、structured warnings、退出碼、timeout、超限輸出及 malformed envelope。
 2. 測試應驗證並行首次操作只執行一次 capability handshake 與 account identity resolution，且每次簽章各自取得並釋放一次 secret lease。
 3. 測試應透過標準 `resolveWallet` / provider / builder 路徑注入 client factory 與 secret-provider factory，不得只測試直接建構 adapter 的旁路。
 4. 專案應提供 opt-in 真實整合測試入口，以明確環境變數指定 wallet-cli 啟動目標；未指定或上一級本地產物尚未可執行時應清楚 skip/report，不得讓一般 CI 假通過或隱式使用全域版本。

@@ -69,23 +69,13 @@ if (signed.family === "evm") {
 相關型別為 `TransactionPayload`、`SignedTransactionArtifact`、
 `EvmSignedTransactionArtifact` 與 `TronSignedTransactionArtifact`。
 
-## 5. 按能力呼叫 message 與 typed-data signing
+## 5. 按能力呼叫 typed-data signing
 
-`signRaw()` 已從公開 `Wallet` contract 移除。`signMessage()` 和 `signTypedData()` 不是每個
-wallet backend 都必須具備；呼叫前應檢查 additive capability：
+`signRaw()` 與 `signMessage()` 已從公開契約移除。`signTypedData()` 不是每個 wallet
+backend 都必須具備；呼叫前應檢查 additive capability：
 
 ```ts
-import type {
-  Eip712Capable,
-  MessageSigningCapable,
-  Wallet,
-} from "@bankofai/agent-wallet";
-
-function supportsMessageSigning(
-  wallet: Wallet,
-): wallet is Wallet & MessageSigningCapable {
-  return "signMessage" in wallet && typeof wallet.signMessage === "function";
-}
+import type { Eip712Capable, Wallet } from "@bankofai/agent-wallet";
 
 function supportsTypedData(wallet: Wallet): wallet is Wallet & Eip712Capable {
   return (

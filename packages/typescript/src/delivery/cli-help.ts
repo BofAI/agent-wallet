@@ -77,9 +77,7 @@ export function showCommandHelp(command: string, subcommand: string | undefined,
         ? 'Usage: agent-wallet sign tx <payload> [options]'
         : subcommand === 'typed-data'
           ? 'Usage: agent-wallet sign typed-data <data> [options]'
-          : subcommand === 'message'
-            ? 'Usage: agent-wallet sign message --message <utf8> [options]'
-            : 'Usage: agent-wallet sign <tx|typed-data|message> <data> [options]'
+          : 'Usage: agent-wallet sign <tx|typed-data> <data> [options]'
     lines(io, [
       usage,
       '',
@@ -116,7 +114,7 @@ export function showCommandHelp(command: string, subcommand: string | undefined,
     '  inspect <id>      Show wallet details',
     '  resolve-address [id]  Resolve wallet addresses',
     '  remove [id]       Remove a wallet',
-    '  sign              Sign transactions, typed data, or messages',
+    '  sign              Sign transactions or typed data',
     '  reset             Delete all wallet data',
     '',
     DIR,

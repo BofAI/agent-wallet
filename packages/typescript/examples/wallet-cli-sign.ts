@@ -11,11 +11,7 @@
  *   npx tsx examples/wallet-cli-sign.ts
  */
 
-import {
-  ConfigWalletProvider,
-  resolveWalletProvider,
-  type MessageSigningCapable,
-} from '../src/index.js'
+import { ConfigWalletProvider, resolveWalletProvider } from '../src/index.js'
 import { reportExampleError, requireEip712Wallet } from './example-utils.js'
 
 const NETWORK = process.env.NETWORK ?? 'tron:nile'
@@ -47,14 +43,6 @@ async function main() {
     message: { contents: 'signed by wallet-cli' },
   })
   console.log(`Typed-data signature: ${typedSignature}`)
-
-  if (!('signMessage' in wallet)) {
-    throw new Error('Configured wallet does not expose UTF-8 message signing')
-  }
-  const messageSignature = await (wallet as MessageSigningCapable).signMessage(
-    new TextEncoder().encode('hello from agent-wallet'),
-  )
-  console.log(`Message signature: ${messageSignature}`)
 }
 
 main().catch(reportExampleError)

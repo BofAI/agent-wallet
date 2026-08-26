@@ -50,7 +50,7 @@
 
 - [x] 3.2 收緊 result envelope、warnings 與 command data schema
   - success/error 使用 discriminated schemas；meta 必填，warnings 公開為 `string | { code, message }`
-  - 為 networks、current、TRON tx、EVM tx、message、typed-data 建立必要欄位 schema，允許未知加法欄位/code
+  - 為 networks、current、TRON tx、EVM tx、typed-data 建立必要欄位 schema，允許未知加法欄位/code
   - 交叉檢查 exit code、success、command、chain context 與 data shape；矛盾回 `contract_mismatch`
   - 保留 exit 1/2 的既有共享錯誤分類，未知 `error.code` 不拒絕解析
   - 測試 structured/unknown warning、malformed envelope、錯 command/chain/data/success 與 sanitized message
@@ -58,13 +58,13 @@
 
 - [x] 3.3 實作版本、catalog 與 network capability handshake
   - 以 bounded meta runner 解析 `--version` 與 root `--json-schema`；接受穩定 `>=4.13.0 <5.0.0`，catalog version 必須一致
-  - 以 `networks -o json` 取得 canonical rows；驗證 current 及 target family 的 tx/message/typed-data commands
+  - 以 `networks -o json` 取得 canonical rows；驗證 current 及 target family 的 tx/typed-data commands
   - 同一 client 的並行首次呼叫共用 handshake promise；版本相同但 EVM command 缺失仍 fail-fast
   - 測試版本上下界/prerelease、source/dist 同版能力漂移、缺 family command、未知額外 command/network 與共享 promise
   - _Requirements: 7.1, 7.3-7.4, 7.7, 11.1-11.2_
 
 - [x] 3.4 實作窄 client 方法與 canonical context
-  - 新增 `currentAccount`、`signTronTransaction`、`signEvmTransaction`、`signMessage`、`signTypedData`
+  - 新增 `currentAccount`、`signTronTransaction`、`signEvmTransaction`、`signTypedData`
   - 所有 signing argv 明確包含 canonical `--account`、`--network`、`--password-stdin`；EVM 使用 `--hex`，TRON 使用 `--transaction`
   - client 接受 `SecretLease` 而非 password string；integration 用的 generic run 必須帶 command/context validator
   - 測試 argv/stdin 單一 consumer、lease write failure、各命令 data/context 驗證與無密碼查詢不 acquire lease
@@ -94,11 +94,9 @@
   - 以 viem recovery/serialization 驗證 EVM fixture 結果與既有 `EvmSigner`/x402 格式一致
   - _Requirements: 1.3, 1.5, 1.7, 10.2-10.4, 11.1_
 
-- [x] 4.4 實作 message 與雙 family typed-data 完整路徑
-  - 新增加法性 `MessageSigningCapable`；`WalletCliAdapter` 實作但不擴大所有 `Wallet` 的 required interface
-  - message 使用 fatal UTF-8 decode，無效 bytes 在 spawn/acquire 前失敗；結果去 `0x` 並驗證 signer
+- [x] 4.4 實作雙 family typed-data 完整路徑
   - EVM typed-data `domain.chainId` 存在時須匹配 target；TRON 由 wallet-cli TIP-712 family strategy 處理
-  - 測試 TRON/EVM message、typed-data、x402 PaymentPermit（有/無 domain version）、chain mismatch 與 signer mismatch
+  - 測試 TRON/EVM typed-data、x402 PaymentPermit（有/無 domain version）、chain mismatch 與 signer mismatch
   - _Requirements: 1.5, 1.8-1.9, 10.2, 11.1, 11.6_
 
 ## 5. 標準 resolver、地址、CLI 與公開契約
@@ -120,9 +118,8 @@
   - 更新 `start/add wallet_cli` help，明示只連結既有 wallet-cli account、不建立或匯入 key；base probe 不取得密碼
   - onboarding 在密碼提示前以 `current [--account]` 驗證帳戶，保存 canonical `accountId`；不存在時提供 wallet-cli create/import 下一步
   - `sign tx` / `sign typed-data` 要求完整 network 並原樣呈現 adapter 的已分類錯誤
-  - 新增 `sign message --message <utf8> --network <...>`，以 `MessageSigningCapable` feature detection 執行
   - `resolve-address` 顯示 TRON/EVM whitelist entries；`inspect` 繼續 redact password、provider output 與 launch metadata
-  - 更新 CLI 測試覆蓋 help、帳戶先驗驗證/canonicalization、完整 network、message capability、雙地址與 redaction
+  - 更新 CLI 測試覆蓋 help、帳戶先驗驗證/canonicalization、完整 network、雙地址與 redaction
   - _Requirements: 1.2, 1.9, 2.6, 3.6, 3.8, 5.4, 9.3-9.4_
 
 - [x] 5.4 更新公開 exports 與 optional peer 契約
@@ -150,13 +147,13 @@
 
 - [x] 7.1 建立 deterministic wallet-cli fixture 程序並納入一般 CI
   - 新增 `tests/fixtures/wallet-cli-fixture.mjs`，透過 Node launch target 真實解析 argv/stdin 並輸出單一 `wallet-cli.result.v1` frame
-  - fixture 覆蓋 version、catalog、networks、current、TRON/EVM transaction、message、typed-data、structured warnings、exit 1/2、timeout、超限與 malformed envelope
+  - fixture 覆蓋 version、catalog、networks、current、TRON/EVM transaction、typed-data、structured warnings、exit 1/2、timeout、超限與 malformed envelope
   - 新增 `wallet-cli-process-integration.test.ts` 驗證 handshake、identity、每簽章一個 lease、stdin ownership、Node JS target 與完整錯誤分類
   - _Requirements: 4.1-4.10, 7.3-7.7, 9.1, 9.7-9.10, 11.1-11.3_
 
 - [x] 7.2 建立 opt-in 真實 wallet-cli 契約測試
   - `wallet-cli-real-integration.test.ts` 僅在 `AGENT_WALLET_TEST_WALLET_CLI_PATH` 明確指定時執行 version/catalog/networks/current probe，不 fallback 全域 binary
-  - signing probe 另要求 `AGENT_WALLET_TEST_WALLET_CLI_ACCOUNT`、`AGENT_WALLET_TEST_WALLET_CLI_NETWORK`、`AGENT_WALLET_TEST_WALLET_CLI_PASSWORD_EXEC`；缺少時列明原因並 skip
+  - adapter address probe 另要求 `AGENT_WALLET_TEST_WALLET_CLI_ACCOUNT` 與 `AGENT_WALLET_TEST_WALLET_CLI_NETWORK`；缺任一項時列明原因並 skip
   - 測試及說明不得修改、安裝相依或建置 `../wallet-cli`；本地 source/dist/dependency 未就緒時如實報告
   - _Requirements: 7.3-7.5, 11.4-11.5_
 
@@ -186,8 +183,8 @@
   - 僅使用 7.2 的明確 entrypoint 與 opt-in 條件；不得使用 stale 全域版本冒充本地 source 能力
   - 摘要記錄版本、catalog/network probe、signing 是否執行，以及既有 artifact/dependency 阻礙；不修改 sibling repository
   - 2026-08-26：`../wallet-cli/ts` source package 與 build 已升為 4.13.0、Node >=20，source catalog 宣告 TRON/EVM 三種簽章能力；全域安裝連結至 sibling repo，opt-in test 必須以顯式 path 驗證
-  - 2026-08-26 以全域 sibling symlink 明確設定 `AGENT_WALLET_TEST_WALLET_CLI_PATH`：4.13.0 version/catalog/networks probe 1 test 通過；未提供 account/password exec，2 tests 明確 skipped
-  - 4.13 適配後完整驗證：22 files / 279 tests 通過、1 file / 3 opt-in tests skipped；`tsc`、examples typecheck、ESLint、Prettier 與 ESM/CJS/DTS build 通過
+  - 2026-08-26 移除 agent-wallet message signing 後，以全域 sibling symlink 明確設定 `AGENT_WALLET_TEST_WALLET_CLI_PATH`：agent-wallet executable compatibility probe 1 test 通過；未提供 account/network，adapter address test 明確 skipped
+  - 移除 message signing 後完整驗證：22 files / 275 tests 通過、1 file / 2 opt-in tests skipped；`tsc`、examples typecheck、ESLint、Prettier 與 ESM/CJS/DTS build 通過
   - _Requirements: 11.4-11.5_
 
 - [x] 8.4 完成變更範圍與安全檢查

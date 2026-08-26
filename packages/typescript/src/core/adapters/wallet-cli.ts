@@ -8,7 +8,6 @@ import {
 
 import type {
   Eip712Capable,
-  MessageSigningCapable,
   SignedTransactionArtifact,
   SignOptions,
   TransactionPayload,
@@ -25,7 +24,7 @@ interface WalletCliIdentity {
   addresses: WalletCliCurrentAccountData['addresses']
 }
 
-export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCapable {
+export class WalletCliAdapter implements Wallet, Eip712Capable {
   private readonly target: WalletCliNetworkTarget
   private identityPromise?: Promise<WalletCliIdentity>
 
@@ -113,35 +112,6 @@ export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCa
         options?.signal,
       )
       this.assertSigner(result.data.address, identity)
-      return strip0x(result.data.signature)
-    })
-  }
-
-  async signMessage(message: Uint8Array, options?: SignOptions): Promise<string> {
-    let decoded: string
-    try {
-      decoded = new TextDecoder('utf-8', { fatal: true }).decode(message)
-    } catch {
-      throw new SigningError('wallet_cli sign_message requires valid UTF-8 bytes')
-    }
-    if (!decoded) throw new SigningError('wallet_cli sign_message requires a non-empty message')
-
-    const identity = await this.getIdentity()
-    return this.withLease(identity, async (lease) => {
-      const result = await this.client.signMessage(
-        decoded,
-        lease,
-        identity,
-        this.target,
-        options?.signal,
-      )
-      this.assertSigner(result.data.address, identity)
-      if (result.data.message !== decoded) {
-        throw new WalletCliExecutionError(
-          'wallet-cli message-signing result does not match the requested message',
-          'contract_mismatch',
-        )
-      }
       return strip0x(result.data.signature)
     })
   }

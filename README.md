@@ -36,7 +36,7 @@ With **agent-wallet** you can:
 | ------------ | ---------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `raw_secret` | CLI config / env | EVM + TRON | Plaintext private key or mnemonic in config (dev only).                                                                                                                                                                         |
 | `privy`      | CLI config       | EVM + TRON | Uses Privy app credentials + wallet ID. See [doc/how-to-add-privy-wallet.md](./doc/how-to-add-privy-wallet.md).                                                                                                                 |
-| `wallet_cli` | CLI config       | TRON + EVM | 金鑰由 wallet-cli 管理；agent-wallet 透過受限子程序委派交易、typed-data 與 UTF-8 message 簽章。需要相容的 `@tron-walletcli/wallet-cli` 4.x。詳見 [doc/how-to-add-wallet-cli-wallet.md](./doc/how-to-add-wallet-cli-wallet.md)。 |
+| `wallet_cli` | CLI config       | TRON + EVM | 金鑰由 wallet-cli 管理；agent-wallet 透過受限子程序委派交易與 typed-data 簽章。需要相容的 `@tron-walletcli/wallet-cli` 4.x。詳見 [doc/how-to-add-wallet-cli-wallet.md](./doc/how-to-add-wallet-cli-wallet.md)。 |
 
 ## Quick Start
 

@@ -5,7 +5,8 @@
 本評估列出的 P0 與本期 P1 已在 `agent-wallet` 完成：`wallet_cli` 現在具備嚴格
 network/account identity、每次簽章 one-shot `SecretLease`、穩定版
 `>=4.13.0 <5.0.0` capability handshake、bounded `shell:false` runner，以及 TRON/EVM
-transaction、typed-data、UTF-8 message 完整簽章路徑。選用的 build/broadcast/status
+transaction 與 typed-data 完整簽章路徑。wallet-cli 本身的 message signing 未暴露為
+agent-wallet 能力。選用的 build/broadcast/status
 integration 仍明確維持 TRON-only。
 
 因此可將這個 backend 視為 x402 TRON/EVM 的 production candidate；正式環境仍應以實際
@@ -88,7 +89,7 @@ agent-wallet 不直接讀取或解密 wallet-cli keystore，也不取得明文�
 ### 修復後驗證範圍
 
 - deterministic fixture 會真實 spawn Node entrypoint，解析 argv/stdin，覆蓋
-  version/catalog/networks/current、TRON/EVM transaction、message、typed-data、warning、
+  version/catalog/networks/current、TRON/EVM transaction、typed-data、warning、
   exit 1/2、timeout、超限與 malformed envelope；見
   [wallet-cli-process-integration.test.ts](../packages/typescript/tests/wallet-cli-process-integration.test.ts)。
 - secret lifecycle、client、adapter、resolver、CLI 與 TRON-only integration 各有分層測試；
@@ -96,12 +97,12 @@ agent-wallet 不直接讀取或解密 wallet-cli keystore，也不取得明文�
   [wallet-cli-real-integration.test.ts](../packages/typescript/tests/wallet-cli-real-integration.test.ts)
   依明確環境變數 opt-in。
 - 上一級本機 `../wallet-cli/ts` source package、build 與全域 symlink 均為 `4.13.0`、
-  要求 Node >=20；catalog 明確包含 TRON/EVM 的 `tx.sign`、`message.sign`、
+  要求 Node >=20；agent-wallet handshake 明確要求 TRON/EVM 的 `tx.sign` 與
   `typed-data.sign`。opt-in probe 以顯式 executable path 驗證 version/catalog/networks，
   不依賴 PATH 猜測。
-- 最終等價品質命令結果為 22 test files / 279 tests 通過、1 file / 3 個需真實 account
-  或 credential 的 opt-in tests skipped；另以全域 sibling symlink 執行 real probe，
-  1 test 通過、2 tests 因未提供 account/credential 跳過。`tsc`、examples typecheck、
+- 最終等價品質命令結果為 22 test files / 275 tests 通過、1 file / 2 個需真實 executable
+  或 account 的 opt-in tests skipped；另以全域 sibling symlink 執行 real probe，
+  1 test 通過、1 test 因未提供 account/network 跳過。`tsc`、examples typecheck、
   ESLint、Prettier 與 ESM/CJS/DTS build 全部通過。
 
 ## 原始關鍵缺口與修復狀態
@@ -254,7 +255,7 @@ wallet-cli 4.13.0 實際允許：
 
 修復：EVM transaction 以 viem 支援 legacy/EIP-2930/EIP-1559 unsigned serialization，
 使用 `tx sign --hex` 並 recovery 驗證 signer，回傳不含 `0x` 的 signed raw；typed-data 與
-UTF-8 message 同樣支援 TRON/EVM。EIP-4844/EIP-7702 明確拒絕。
+EIP-4844/EIP-7702 明確拒絕。
 
 wallet-cli 4.13.0 已提供 EVM typed-data 和交易簽名，但修復前的 agent-wallet adapter 仍按 TRON 模型實作：
 
@@ -379,9 +380,9 @@ facilitator 若需要高併發，應評估：
 | 評估面向                            | 判斷                                                        |
 | ----------------------------------- | ----------------------------------------------------------- |
 | 模組 seam                           | 正確                                                        |
-| TRON transaction/typed-data/message | 已實作並有 deterministic process 測試                       |
+| TRON transaction/typed-data         | 已實作並有 deterministic process 測試                       |
 | x402 TRON production readiness      | production candidate；部署前需真實 opt-in probe             |
-| x402 EVM                            | legacy/EIP-2930/EIP-1559 與 typed-data/message 已滿足       |
+| x402 EVM                            | legacy/EIP-2930/EIP-1559 與 typed-data 已滿足               |
 | 跨平台秘密來源                      | bounded per-sign exec 已滿足；native OS provider 可後續注入 |
 | 高吞吐 facilitator                  | 未納入；仍建議 sidecar/session 專案                         |
 | 是否應搬進 x402 SDK                 | 不應                                                        |

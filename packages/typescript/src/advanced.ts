@@ -30,7 +30,6 @@ export type {
   WalletCliTxSignData,
   WalletCliTronTxSignData,
   WalletCliEvmTxSignData,
-  WalletCliMessageSignData,
   WalletCliTypedDataSignData,
 } from './core/clients/wallet-cli.js'
 

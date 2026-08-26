@@ -36,7 +36,6 @@ Commands:
   remove <id>       Remove a wallet
   sign tx <data>    Sign a transaction (JSON payload)
   sign typed-data <data>  Sign EIP-712 typed data (JSON)
-  sign message --message <utf8>  Sign a UTF-8 message
   reset             Delete all wallet data
 
 Options:
@@ -191,7 +190,6 @@ Privy EVM 可依 payload chainId 運作。
 ```bash
 agent-wallet sign tx '<json>' -n eip155:1 [-w WALLET_ID] ...
 agent-wallet sign typed-data '<json>' -n eip155:1 [-w WALLET_ID] ...
-agent-wallet sign message --message '<utf8>' -n eip155:1 [-w WALLET_ID] ...
 ```
 
 | Option        | Short | Description                                                    |
@@ -202,7 +200,7 @@ agent-wallet sign message --message '<utf8>' -n eip155:1 [-w WALLET_ID] ...
 
 - **`raw_secret` wallets:** signs directly with the stored private key.
 - **`privy` wallets:** delegates signing to the Privy API. EVM does not require `--network`; it follows the `chainId` in the payload.
-- **`wallet_cli` wallets：** 支援 TRON/EVM transaction、typed-data 與 UTF-8 message。
+- **`wallet_cli` wallets：** 支援 TRON/EVM transaction 與 typed-data。
   必須使用完整 `tron:<name>` 或 `eip155:<positive-chain-id>`；裸 family、alias 與省略值會
   在子程序及 secret acquire 前 fail-fast。簽章結果會核對固定 account/network/signer。
 

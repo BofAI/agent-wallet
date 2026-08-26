@@ -11,8 +11,8 @@
   `runtime_secrets.json` 與 `AGENT_WALLET_PASSWORD` 流程。
 - `Wallet.signTransaction()` 不再回傳多態字串，改為以 `family` 區分的
   `SignedTransactionArtifact`：EVM 使用 `rawTransaction`，TRON 使用 `transaction`。
-- 從基礎 `Wallet` 介面移除 `signRaw()`；`signMessage()` 改為可選的
-  `MessageSigningCapable` 能力。
+- 從公開契約移除 `signRaw()`、`signMessage()` 與 CLI `sign message`；agent-wallet
+  目前只提供 transaction 與 typed-data 簽章。
 - `ConfigWalletProvider` constructor 改為 `new ConfigWalletProvider(dir, options)`，
   不再接收 password 與 secret loader positional arguments。
 - adapter、client、secret lifecycle 與 config resolver 等低階 API 移至
@@ -25,8 +25,7 @@
 
 ### Added
 
-- 新增 `wallet_cli` wallet type，支援委派 TRON/EVM transaction、typed-data 與
-  UTF-8 message 簽章。
+- 新增 `wallet_cli` wallet type，支援委派 TRON/EVM transaction 與 typed-data 簽章。
 - 新增 `@bankofai/agent-wallet/advanced` 與
   `@bankofai/agent-wallet/integrations/wallet-cli` subpath exports。
 - 新增 typed transaction payload/artifact、可取消的 `SignOptions.signal`，以及

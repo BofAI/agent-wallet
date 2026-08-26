@@ -7,7 +7,6 @@ import {
   cmdRemove,
   cmdReset,
   cmdResolveAddress,
-  cmdSignMessage,
   cmdSignTx,
   cmdSignTypedData,
   cmdUse,
@@ -72,12 +71,7 @@ export async function main(argv?: string[], io?: CliIO): Promise<number> {
       if (subcommand === 'tx') await cmdSignTx(walletId, args[0], network, dir, cliIO)
       else if (subcommand === 'typed-data') {
         await cmdSignTypedData(walletId, args[0], network, dir, cliIO)
-      } else if (subcommand === 'message') {
-        if (typeof options.message !== 'string' || !options.message) {
-          return usage(cliIO, 'agent-wallet sign message --message <utf8> [options]')
-        }
-        await cmdSignMessage(walletId, options.message, network, dir, cliIO)
-      } else return usage(cliIO, 'agent-wallet sign <tx|typed-data|message> <data> [options]')
+      } else return usage(cliIO, 'agent-wallet sign <tx|typed-data> <data> [options]')
     } else {
       cliIO.print(`Unknown command: ${command}`)
       return 1

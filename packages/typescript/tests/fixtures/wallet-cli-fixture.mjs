@@ -32,12 +32,6 @@ if (mode === 'hang') {
     { id: 'current', kind: 'neutral', path: ['current'] },
     { id: 'tx.sign', kind: 'chain', families: ['tron', 'evm'], path: ['tx', 'sign'] },
     {
-      id: 'message.sign',
-      kind: 'chain',
-      families: ['tron', 'evm'],
-      path: ['message', 'sign'],
-    },
-    {
       id: 'typed-data.sign',
       kind: 'chain',
       families: mode === 'missing-evm-capability' ? ['tron'] : ['tron', 'evm'],
@@ -130,14 +124,6 @@ async function runOperational() {
     )
     return
   }
-  if (id === 'message.sign') {
-    success(
-      id,
-      { address: signer, message: valueOf('--message'), signature: `0x${'11'.repeat(65)}` },
-      chain,
-    )
-    return
-  }
   if (id === 'typed-data.sign') {
     const typed = JSON.parse(valueOf('--typed-data') ?? '{}')
     success(
@@ -158,7 +144,6 @@ async function runOperational() {
 function commandId(argv) {
   const words = argv.filter((arg) => !arg.startsWith('-'))
   if (argv[0] === 'tx') return `tx.${argv[1]}`
-  if (argv[0] === 'message') return 'message.sign'
   if (argv[0] === 'typed-data') return 'typed-data.sign'
   return words[0] ?? 'meta'
 }
