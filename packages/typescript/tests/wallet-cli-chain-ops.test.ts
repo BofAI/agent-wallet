@@ -13,8 +13,8 @@ const NETWORK = { id: 'tron:nile', family: 'tron', chainId: 'nile' }
 
 function client() {
   const ensureCompatible = vi.fn().mockResolvedValue({
-    version: '4.12.0',
-    catalog: { tool: 'wallet-cli', version: '4.12.0', globalFlags: [], commands: [] },
+    version: '4.13.0',
+    catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
     networks: [NETWORK],
     network: NETWORK,
   })

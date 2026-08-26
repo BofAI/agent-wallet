@@ -88,10 +88,10 @@ beforeEach(() => {
     meta: { durationMs: 1, warnings: [] },
   })
   vi.spyOn(WalletCliClient.prototype, 'ensureCompatible').mockResolvedValue({
-    version: '4.12.0',
+    version: '4.13.0',
     catalog: {
       tool: 'wallet-cli',
-      version: '4.12.0',
+      version: '4.13.0',
       globalFlags: [],
       commands: [{ id: 'current', kind: 'neutral', path: ['current'] }],
     },

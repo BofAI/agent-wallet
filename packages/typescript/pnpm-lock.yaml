@@ -835,11 +835,6 @@ packages:
   '@scure/bip39@2.2.0':
     resolution: {integrity: sha512-T/Bj/YvYMNkIPq6EENO6/rcs2e7qTNuyoUXf0KBFDmp0ZDu0H2X4Lq6yC3i0c8PcWkov5EbW+yQZZbdMmk154A==}
 
-  '@tron-walletcli/wallet-cli@0.1.1':
-    resolution: {integrity: sha512-2nE1TytBYNGgvDIipR5YTyARwy3qZDyMs1JvTPY5y2BQrzsA93whZFqHjZYu67HtarvfLVf8Y0MaEa6ZIPunHg==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
 
@@ -2704,29 +2699,6 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
       '@scure/base': 2.2.0
-
-  '@tron-walletcli/wallet-cli@0.1.1':
-    dependencies:
-      '@ledgerhq/hw-app-trx': 6.36.5
-      '@ledgerhq/hw-transport-node-hid': 6.33.5
-      '@ledgerhq/hw-transport-node-speculos-http': 6.36.6
-      '@noble/ciphers': 2.2.0
-      '@noble/curves': 2.2.0
-      '@noble/hashes': 2.2.0
-      '@scure/base': 2.2.0
-      '@scure/bip32': 2.2.0
-      '@scure/bip39': 2.2.0
-      axios: 1.18.1
-      lossless-json: 4.3.0
-      tronweb: 6.4.0
-      yaml: 2.9.0
-      yargs: 18.0.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
 
   '@types/esrecurse@4.3.1': {}
 

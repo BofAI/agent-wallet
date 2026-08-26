@@ -8,7 +8,7 @@ import { WalletCliExecutionError, WalletCliNotFoundError, WalletCliUsageError } 
 import type { SecretLease } from '../secret-provider.js'
 import type { WalletCliNetworkTarget } from '../wallet-cli-network.js'
 
-export const WALLET_CLI_MIN_VERSION = '4.12.0'
+export const WALLET_CLI_MIN_VERSION = '4.13.0'
 export const WALLET_CLI_MAX_MAJOR = 5
 export const DEFAULT_WALLET_CLI_TIMEOUT_MS = 60_000
 export const DEFAULT_WALLET_CLI_KILL_GRACE_MS = 5_000
@@ -258,7 +258,7 @@ const TypedDataSignDataSchema = z
 export interface WalletCliRunContract<T> {
   command: string
   dataSchema: z.ZodType<T>
-  chain: 'none' | WalletCliNetworkRow
+  chain: 'none' | WalletCliNetworkRow | WalletCliNetworkRow[]
   stdin?: string | Buffer | SecretLease
   signal?: AbortSignal
 }
@@ -312,15 +312,17 @@ export class WalletCliClient {
 
   async currentAccount(
     accountRef?: string,
+    target?: WalletCliNetworkTarget,
   ): Promise<WalletCliSuccessResult<WalletCliCurrentAccountData>> {
-    await this.ensureCompatible()
+    const compatibility = await this.ensureCompatible(target)
     const args = ['current']
     if (accountRef) args.push('--account', accountRef)
+    if (target) args.push('--network', target.cliNetwork)
     args.push('-o', 'json')
     return this.run(args, {
       command: 'current',
       dataSchema: CurrentAccountSchema,
-      chain: 'none',
+      chain: target ? compatibility.network! : compatibility.networks,
     })
   }
 
@@ -773,13 +775,30 @@ function throwInvalidEnvelope(exitCode: number | null): never {
 
 function validateChain(
   actual: WalletCliChainContext | undefined,
-  expected: 'none' | WalletCliNetworkRow,
+  expected: 'none' | WalletCliNetworkRow | WalletCliNetworkRow[],
 ): void {
   if (expected === 'none') {
     if (actual) {
       throw new WalletCliExecutionError(
         'wallet-cli returned unexpected chain context for a neutral command',
         'contract_mismatch',
+      )
+    }
+    return
+  }
+  if (Array.isArray(expected)) {
+    if (
+      !actual ||
+      !expected.some(
+        (network) =>
+          actual.family === network.family &&
+          actual.network === network.id &&
+          actual.chainId === network.chainId,
+      )
+    ) {
+      throw new WalletCliExecutionError(
+        'wallet-cli returned an unadvertised chain context',
+        'network_mismatch',
       )
     }
     return
@@ -817,7 +836,7 @@ function parseSupportedVersion(output: string): string {
   const [, majorRaw, minorRaw] = match
   const major = Number(majorRaw)
   const minor = Number(minorRaw)
-  if (major !== 4 || minor < 12) {
+  if (major !== 4 || minor < 13) {
     throw new WalletCliExecutionError(
       `wallet-cli ${version} is unsupported; expected >=${WALLET_CLI_MIN_VERSION} <${WALLET_CLI_MAX_MAJOR}.0.0`,
       'unsupported_version',

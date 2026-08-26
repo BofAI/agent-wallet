@@ -46,7 +46,7 @@ describe('wallet-cli deterministic process integration', () => {
       client.ensureCompatible(target),
     ])
 
-    expect(first.version).toBe('4.12.0')
+    expect(first.version).toBe('4.13.0')
     expect(second.network?.id).toBe('evm:1')
     expect(third.catalog.commands.some((command) => command.id === 'typed-data.sign')).toBe(true)
     expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(3)
@@ -56,6 +56,21 @@ describe('wallet-cli deterministic process integration', () => {
     const result = await fixtureClient().currentAccount('fixture')
     expect(result.data.accountId).toBe('wlt_fixture.0')
     expect(result.data.addresses).toEqual({ tron: TRON_ADDRESS, evm: EVM_ADDRESS })
+    expect(result.chain).toEqual({
+      family: 'tron',
+      network: 'tron:mainnet',
+      chainId: 'mainnet',
+    })
+  })
+
+  it('pins current to the requested signing network and requires its 4.13 chain context', async () => {
+    const target = parseWalletCliNetwork('eip155:1')
+    const result = await fixtureClient().currentAccount('fixture', target)
+    expect(result.chain).toEqual({ family: 'evm', network: 'evm:1', chainId: '1' })
+
+    await expect(
+      fixtureClient('missing-current-chain').currentAccount('fixture', target),
+    ).rejects.toMatchObject({ code: 'network_mismatch' })
   })
 
   it('signs a TRON transaction and preserves the complete JSON artifact', async () => {
@@ -176,11 +191,11 @@ describe('wallet-cli deterministic process integration', () => {
     } satisfies Partial<WalletCliExecutionError>)
   })
 
-  it('enforces stable >=4.12.0 <5.0.0 versions and catalog agreement', async () => {
+  it('enforces stable >=4.13.0 <5.0.0 versions and catalog agreement', async () => {
     await expect(
       fixtureClient('ok', { WALLET_CLI_FIXTURE_VERSION: '4.13.1' }).ensureCompatible(),
     ).resolves.toMatchObject({ version: '4.13.1' })
-    for (const version of ['4.11.9', '5.0.0']) {
+    for (const version of ['4.12.0', '5.0.0']) {
       await expect(
         fixtureClient('ok', { WALLET_CLI_FIXTURE_VERSION: version }).ensureCompatible(),
       ).rejects.toMatchObject({ code: 'unsupported_version' })
@@ -199,7 +214,7 @@ describe('wallet-cli deterministic process integration', () => {
     const counter = join(dir, 'calls.txt')
     const client = fixtureClient('ok', {
       WALLET_CLI_FIXTURE_COUNTER: counter,
-      WALLET_CLI_FIXTURE_VERSION: '4.11.9',
+      WALLET_CLI_FIXTURE_VERSION: '4.12.0',
     })
 
     await expect(client.ensureCompatible()).rejects.toMatchObject({ code: 'unsupported_version' })

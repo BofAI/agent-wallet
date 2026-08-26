@@ -13,12 +13,18 @@ describe.skipIf(!cliPath)('wallet-cli real integration (opt-in)', () => {
   it('probes the explicitly selected executable contract', async () => {
     const client = new WalletCliClient({ binary: cliPath })
     const compatibility = await client.ensureCompatible()
-    const current = await client.currentAccount(account)
 
-    expect(compatibility.version).toMatch(/^4\./)
+    expect(compatibility.version).toMatch(/^4\.(?:1[3-9]|[2-9]\d)\./)
     expect(compatibility.catalog.tool).toBe('wallet-cli')
     expect(compatibility.networks.length).toBeGreaterThan(0)
+  })
+
+  it.skipIf(!account)('resolves an explicitly selected account', async () => {
+    const client = new WalletCliClient({ binary: cliPath })
+    const target = network ? parseWalletCliNetwork(network) : undefined
+    const current = await client.currentAccount(account, target)
     expect(current.data.accountId).toBeTruthy()
+    expect(current.chain).toBeTruthy()
   })
 
   it.skipIf(!account || !network || !passwordExec)(

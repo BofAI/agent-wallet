@@ -158,7 +158,7 @@ export class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCa
 
   private async resolveIdentity(): Promise<WalletCliIdentity> {
     await this.client.ensureCompatible(this.target)
-    const result = await this.client.currentAccount(this.config.account)
+    const result = await this.client.currentAccount(this.config.account, this.target)
     const identity = {
       accountId: result.data.accountId,
       addresses: { ...result.data.addresses },

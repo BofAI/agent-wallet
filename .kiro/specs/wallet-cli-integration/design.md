@@ -14,7 +14,7 @@ agent-wallet 只消費 wallet-cli 的公開 CLI 機器契約，不匯入其內�
 - **先驗相容檢查**：第一次使用先驗證窄版本範圍、root catalog、family commands 與 network 清單；版本字串本身不代表 EVM 能力。
 - **選用鏈操作**：`integrations/wallet-cli/` 明確維持 TRON-only，不進入核心 resolver 或 x402 路徑。
 
-本地評估發現同一 checkout 的 source package 為 4.12.0 且包含 EVM，但現有 `dist` 與全域 binary 仍可能是舊的 TRON-only 產物。因此 client 同時檢查 `--version`、root `--json-schema` 與 `networks -o json`，不能以 package/version 單點判定。
+本地整合以 wallet-cli 4.13.0 為最低版本；該版本包含 EVM，且 `current` 會回傳所選 network 的 chain context。因此 client 同時檢查 `--version`、root `--json-schema` 與 `networks -o json`，不能以 package/version 單點判定。
 
 ### 密碼模型（關鍵設計決策）
 
@@ -129,7 +129,7 @@ graph TB
 | 信封解析   | `zod`（既有）                                                       | 校驗 `wallet-cli.result.v1`                         | 與 core 風格一致                  |
 | EVM codec  | `viem.serializeTransaction`（既有）                                 | 將 Wallet/x402 payload 轉 unsigned serialized tx    | 不新增相依                        |
 | stdin 通道 | Node stream                                                         | 餵 `--password-stdin`（簽名）/ `--tx-stdin`（廣播） | 單一消費者限制                    |
-| 執行期相依 | `@tron-walletcli/wallet-cli >=4.12.0 <5`（optional peer，Node ≥20） | TRON/EVM 簽名 + TRON 鏈操作                         | capability handshake 仍為必要條件 |
+| 執行期相依 | `@tron-walletcli/wallet-cli >=4.13.0 <5`（optional peer，Node ≥20） | TRON/EVM 簽名 + TRON 鏈操作                         | capability handshake 仍為必要條件 |
 
 ## Component Design
 
@@ -253,7 +253,7 @@ interface WalletCliResult<T> {
 公開/adapter-facing 方法採窄輸入，不讓 adapter 任意拼接 argv：
 
 - `ensureCompatible(target?)`：共用 base handshake promise；有 target 時再驗證 family commands 與 network row。
-- `currentAccount(accountRef?)`：`current [--account] -o json`；只接受 `command === "current"` 且 chain 缺席。
+- `currentAccount(accountRef?, target?)`：`current [--account] [--network] -o json`；只接受 `command === "current"`，且 chain 必須精確匹配 target 或已公告 network。
 - `signTronTransaction(json, lease, identity, network)`：`tx sign --transaction ... --account <accountId> --network <id> --password-stdin -o json`。
 - `signEvmTransaction(unsignedHex, lease, identity, network)`：使用 `--hex`，不得使用 TRON `--transaction`。
 - `signMessage(message, lease, identity, network)` 與 `signTypedData(json, lease, identity, network)`。
@@ -281,7 +281,7 @@ interface WalletCliResult<T> {
 
 base handshake 以單一 promise 依序或並行取得：
 
-1. `wallet-cli --version`：解析穩定版 semver，接受 `>=4.12.0 <5.0.0`，拒絕 prerelease 與額外輸出。
+1. `wallet-cli --version`：解析穩定版 semver，接受 `>=4.13.0 <5.0.0`，拒絕 4.12.x、prerelease 與額外輸出。
 2. `wallet-cli --json-schema`：驗證 `{ tool: "wallet-cli", version, commands[] }`，catalog version 必須與 `--version` 相同。
 3. `wallet-cli networks -o json`：驗證 `command === "networks"`、neutral envelope 及 `{ id, family, chainId }[]`。
 
@@ -309,7 +309,7 @@ class WalletCliAdapter implements Wallet, Eip712Capable, MessageSigningCapable {
 adapter 內有兩個共享 promise：
 
 - `compatibilityPromise` 由 client 管理並跨 adapter/client 操作共用。
-- `identityPromise` 由 adapter 管理；第一次呼叫 `currentAccount(config.account)`，驗證 `accountId` 與 family address 後固定 `{ accountId, addresses }`。並行呼叫共用；成功後永不重新讀 active account。第一次失敗可清除 promise，讓明確的後續呼叫重試。
+- `identityPromise` 由 adapter 管理；第一次呼叫 `currentAccount(config.account, target)`，驗證 chain context、`accountId` 與 family address 後固定 `{ accountId, addresses }`。並行呼叫共用；成功後永不重新讀 active account。第一次失敗可清除 promise，讓明確的後續呼叫重試。
 
 方法對應：
 
@@ -530,7 +530,7 @@ agent-wallet 以**子程序**呼叫 wallet-cli（非程式碼 import），故相
 ```json
 {
   "peerDependencies": {
-    "@tron-walletcli/wallet-cli": ">=4.12.0 <5.0.0"
+    "@tron-walletcli/wallet-cli": ">=4.13.0 <5.0.0"
   },
   "peerDependenciesMeta": {
     "@tron-walletcli/wallet-cli": { "optional": true }
@@ -622,7 +622,7 @@ sequenceDiagram
   Cli-->>Client: catalog JSON
   Client->>Cli: networks -o json
   Cli-->>Client: result.v1 { command:"networks", data:[...] }
-  Signer->>Client: currentAccount(config.account)（共享 identity promise）
+  Signer->>Client: currentAccount(config.account, target)（共享 identity promise）
   Client->>Cli: current --account main-1 -o json
   Cli-->>Client: result.v1 { command:"current", data:{ accountId, addresses } }
   Signer->>Signer: 驗證 target capability/network + 固定 accountId/addresses

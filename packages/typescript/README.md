@@ -152,7 +152,7 @@ mainnet 都會在啟動子程序前被拒絕；EVM target 會映射成 wallet-cl
 
 - `agent-wallet start/add wallet_cli` 只連結既有 account；在收集 password 前以
   `current [--account]` 驗證並保存 canonical accountId，不建立或匯入 wallet-cli key。
-- optional peer 範圍為穩定版 `>=4.12.0 <5.0.0`，不會成為一般使用者的硬相依。
+- optional peer 範圍為穩定版 `>=4.13.0 <5.0.0`，不會成為一般使用者的硬相依。
 - 首次使用會共同執行 `--version`、`--json-schema`、`networks -o json` handshake，
   並驗證 target family 的 `tx.sign`、`message.sign`、`typed-data.sign` 能力。
 - JavaScript entrypoint 使用目前的 Node 執行，需 Node.js >=20；一般 agent-wallet
@@ -179,7 +179,7 @@ mainnet 都會在啟動子程序前被拒絕；EVM target 會映射成 wallet-cl
 `wallet_cli` 時才需安裝相容的 4.x：
 
 ```bash
-npm install '@tron-walletcli/wallet-cli@^4.12.0'
+npm install '@tron-walletcli/wallet-cli@^4.13.0'
 ```
 
 ## Examples

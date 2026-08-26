@@ -32,8 +32,8 @@ function success<T>(command: string, data: T) {
 function client(): WalletCliClient {
   return {
     ensureCompatible: vi.fn().mockResolvedValue({
-      version: '4.12.0',
-      catalog: { tool: 'wallet-cli', version: '4.12.0', globalFlags: [], commands: [] },
+      version: '4.13.0',
+      catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
       networks: [],
       network: { id: 'tron:nile', family: 'tron', chainId: 'nile' },
     }),

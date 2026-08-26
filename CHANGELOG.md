@@ -21,7 +21,7 @@
   `WalletConfigSchema` 定義。
 - 移除舊 TRON 環境變數 alias：`TRON_PRIVATE_KEY`、`TRON_MNEMONIC`、
   `TRON_ACCOUNT_INDEX`。請改用 `AGENT_WALLET_*` 變數。
-- `@tron-walletcli/wallet-cli` 的相容範圍改為 `>=4.12.0 <5.0.0`。
+- `@tron-walletcli/wallet-cli` 的相容範圍改為 `>=4.13.0 <5.0.0`；不相容 4.12.x。
 
 ### Added
 

@@ -105,7 +105,7 @@
 
 #### 驗收準則
 
-1. agent-wallet 系統應將 wallet-cli 宣告為 optional peer dependency（非 `dependencies` 硬依賴），相容版本範圍應限制為 `>=4.12.0 <5.0.0`。
+1. agent-wallet 系統應將 wallet-cli 宣告為 optional peer dependency（非 `dependencies` 硬依賴），相容版本範圍應限制為 `>=4.13.0 <5.0.0`，且不接受 4.12.x。
 2. 當未安裝 wallet-cli 時，agent-wallet 的 EVM 簽名、Privy 與 `raw_secret` 功能應完全不受影響（零感知）。僅建立或使用 `wallet_cli` 配置時才要求 binary。
 3. 首次使用 wallet-cli 時，client 應驗證版本範圍，並快取 root `--json-schema` capability catalog 與 network 清單；同一 client 的並行首次呼叫應共用同一 handshake promise。
 4. handshake 應確認選定 family 所需的 current、transaction、message 與 typed-data 命令能力，以及 canonical network 確實存在。版本相符但缺少能力時仍應拒絕使用。

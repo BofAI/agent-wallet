@@ -57,7 +57,7 @@
   - _Requirements: 4.2-4.9, 5.5-5.6, 10.6, 11.1_
 
 - [x] 3.3 實作版本、catalog 與 network capability handshake
-  - 以 bounded meta runner 解析 `--version` 與 root `--json-schema`；接受穩定 `>=4.12.0 <5.0.0`，catalog version 必須一致
+  - 以 bounded meta runner 解析 `--version` 與 root `--json-schema`；接受穩定 `>=4.13.0 <5.0.0`，catalog version 必須一致
   - 以 `networks -o json` 取得 canonical rows；驗證 current 及 target family 的 tx/message/typed-data commands
   - 同一 client 的並行首次呼叫共用 handshake promise；版本相同但 EVM command 缺失仍 fail-fast
   - 測試版本上下界/prerelease、source/dist 同版能力漂移、缺 family command、未知額外 command/network 與共享 promise
@@ -127,7 +127,7 @@
 
 - [x] 5.4 更新公開 exports 與 optional peer 契約
   - 從 `@bankofai/agent-wallet/advanced` 匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver`、`SecretProvider`/`SecretLease` 與 launch/network/warning 型別；root 保留穩定 SDK 契約
-  - `@tron-walletcli/wallet-cli` optional peer 限制為 `>=4.12.0 <5.0.0`；不得新增硬 dependency 或依賴 CI 全域安裝
+  - `@tron-walletcli/wallet-cli` optional peer 限制為 `>=4.13.0 <5.0.0`；不得新增硬 dependency 或依賴 CI 全域安裝
   - agent-wallet `engines` 維持 Node ≥18；以 import/module smoke test 驗證未安裝 peer 時非 wallet-cli 功能仍可載入
   - _Requirements: 3.7, 7.1-7.2, 7.6, 10.6_
 
@@ -185,8 +185,9 @@
 - [x] 8.3 執行或明確 skip 上一級本地 wallet-cli 實測
   - 僅使用 7.2 的明確 entrypoint 與 opt-in 條件；不得使用 stale 全域版本冒充本地 source 能力
   - 摘要記錄版本、catalog/network probe、signing 是否執行，以及既有 artifact/dependency 阻礙；不修改 sibling repository
-  - 2026-08-25：`../wallet-cli/ts` source package 為 4.12.0、Node >=20，source catalog tests 宣告 TRON/EVM 三種簽章能力；既有 sibling dist 仍回報 0.1.1，全域 binary 回報 4.12.0，但均未自動代入測試
-  - 未提供 `AGENT_WALLET_TEST_WALLET_CLI_PATH` 與 signing opt-in 變數，真實 probe/signing 2 tests 明確 skipped；未宣稱通過，也未修改 sibling
+  - 2026-08-26：`../wallet-cli/ts` source package 與 build 已升為 4.13.0、Node >=20，source catalog 宣告 TRON/EVM 三種簽章能力；全域安裝連結至 sibling repo，opt-in test 必須以顯式 path 驗證
+  - 2026-08-26 以全域 sibling symlink 明確設定 `AGENT_WALLET_TEST_WALLET_CLI_PATH`：4.13.0 version/catalog/networks probe 1 test 通過；未提供 account/password exec，2 tests 明確 skipped
+  - 4.13 適配後完整驗證：22 files / 279 tests 通過、1 file / 3 opt-in tests skipped；`tsc`、examples typecheck、ESLint、Prettier 與 ESM/CJS/DTS build 通過
   - _Requirements: 11.4-11.5_
 
 - [x] 8.4 完成變更範圍與安全檢查
@@ -209,5 +210,5 @@
 
 - [x] 9.3 更新 readiness review 的修復與驗證狀態
   - 在 `doc/wallet-cli-x402-readiness-review.md` 將已修復項目連回唯一需求/設計/測試來源，記錄封閉 registry 與 discriminated union 的收斂結果
-  - 記錄上一級 wallet-cli source 4.12.0 具 EVM 能力但既有 dist/全域 artifact 漂移，以及最終 opt-in probe 結果；不得把未執行的實測標為通過
+  - 記錄上一級 wallet-cli source 4.13.0、sibling dist／全域 symlink 狀態，以及最終 opt-in probe 結果；不得把未執行的實測標為通過
   - _Requirements: 6.7, 7.3-7.7, 11.4-11.6_

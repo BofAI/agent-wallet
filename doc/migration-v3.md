@@ -13,7 +13,7 @@ npm install @bankofai/agent-wallet@^3.0.0
 只有使用 `wallet_cli` wallet type 時才需要安裝 optional peer dependency：
 
 ```bash
-npm install '@tron-walletcli/wallet-cli@^4.12.0'
+npm install '@tron-walletcli/wallet-cli@^4.13.0'
 ```
 
 agent-wallet 需要 Node.js >=18；使用 wallet-cli 的 JavaScript entrypoint 時需要 Node.js

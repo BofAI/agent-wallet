@@ -4,7 +4,7 @@
 
 本評估列出的 P0 與本期 P1 已在 `agent-wallet` 完成：`wallet_cli` 現在具備嚴格
 network/account identity、每次簽章 one-shot `SecretLease`、穩定版
-`>=4.12.0 <5.0.0` capability handshake、bounded `shell:false` runner，以及 TRON/EVM
+`>=4.13.0 <5.0.0` capability handshake、bounded `shell:false` runner，以及 TRON/EVM
 transaction、typed-data、UTF-8 message 完整簽章路徑。選用的 build/broadcast/status
 integration 仍明確維持 TRON-only。
 
@@ -44,7 +44,7 @@ wallet-cli / Keychain / Vault / Ledger / Privy
 - `resolveWallet`、`ConfigWalletProvider` 與 wallet builder 的解析流程。
 - `WalletCliAdapter`、`WalletCliClient` 和 wallet-cli integration。
 - wallet-cli 密碼解析及 exec-script 憑證模型。
-- wallet-cli 4.12.0 的版本與命令 schema。
+- wallet-cli 4.13.0 的版本與命令 schema。
 - x402 對 TRON/EVM 地址、typed-data 簽名和交易簽名的需求。
 - 相關單元測試與 TypeScript 類型檢查。
 
@@ -95,15 +95,14 @@ agent-wallet 不直接讀取或解密 wallet-cli keystore，也不取得明文�
   真實 executable 測試則由
   [wallet-cli-real-integration.test.ts](../packages/typescript/tests/wallet-cli-real-integration.test.ts)
   依明確環境變數 opt-in。
-- 上一級本機 `../wallet-cli/ts` source package 為 `4.12.0`、要求 Node >=20，且組裝後的
-  catalog 測試明確包含 TRON/EVM 的 `tx.sign`、`message.sign`、`typed-data.sign`；但該
-  sibling 的既有 `dist/index.js --version` 仍為舊 `0.1.1`。目前全域 binary 回報 4.12.0，
-  仍不會被 opt-in 測試自動採用。agent-wallet 不修改、安裝依賴或建置 sibling repository。
-- 最終等價品質命令結果為 21 test files / 263 tests 通過、1 file / 2 個真實 opt-in
-  tests skipped；`tsc --noEmit`、ESLint、tsup build 與本次變更檔 Prettier check 通過。
-  四個 pnpm script 本身因既有 node_modules layout 與 pnpm 11 新設定不一致，在 script
-  執行前被非 TTY purge/metadata fetch 阻擋；完整命令與替代驗證記錄於
-  [tasks.md](../.kiro/specs/wallet-cli-integration/tasks.md)，未執行項目不標示為通過。
+- 上一級本機 `../wallet-cli/ts` source package、build 與全域 symlink 均為 `4.13.0`、
+  要求 Node >=20；catalog 明確包含 TRON/EVM 的 `tx.sign`、`message.sign`、
+  `typed-data.sign`。opt-in probe 以顯式 executable path 驗證 version/catalog/networks，
+  不依賴 PATH 猜測。
+- 最終等價品質命令結果為 22 test files / 279 tests 通過、1 file / 3 個需真實 account
+  或 credential 的 opt-in tests skipped；另以全域 sibling symlink 執行 real probe，
+  1 test 通過、2 tests 因未提供 account/credential 跳過。`tsc`、examples typecheck、
+  ESLint、Prettier 與 ESM/CJS/DTS build 全部通過。
 
 ## 原始關鍵缺口與修復狀態
 
@@ -210,7 +209,7 @@ interface SecretLease {
 
 ### P0：wallet-cli 版本契約過寬（已修復）
 
-修復：optional peer 與 runtime 都限制穩定版 `>=4.12.0 <5.0.0`，首次呼叫共用
+修復：optional peer 與 runtime 都限制穩定版 `>=4.13.0 <5.0.0`，首次呼叫共用
 version/catalog/networks handshake；版本、catalog 或 target family 能力漂移會 fail-fast。
 
 修復前 optional peer dependency 為：
@@ -223,11 +222,11 @@ version/catalog/networks handshake；版本、catalog 或 target family 能力�
 
 修正要求：
 
-- 固定支援 `@tron-walletcli/wallet-cli@4.12.0`，或採經驗證的窄版本範圍。
+- 固定支援 `@tron-walletcli/wallet-cli@4.13.0`，或採經驗證的窄版本範圍。
 - 第一次使用時執行 `wallet-cli --version` 並快取結果。
 - 版本不符時 fail-fast，不應在簽名階段才以 schema error 失敗。
 
-### P0：wallet-cli 4.12.0 warning schema 已發生漂移（已修復）
+### P0：wallet-cli 4.13.0 warning schema 已發生漂移（已修復）
 
 修復：warnings 公開型別與 schema 接受 string/structured union，未知 code 與加法欄位保留。
 
@@ -237,7 +236,7 @@ version/catalog/networks handshake；版本、catalog 或 target family 能力�
 warnings: string[]
 ```
 
-wallet-cli 4.12.0 實際允許：
+wallet-cli 4.13.0 實際允許：
 
 ```ts
 (string | { code: string; message: string })[]
@@ -257,7 +256,7 @@ wallet-cli 4.12.0 實際允許：
 使用 `tx sign --hex` 並 recovery 驗證 signer，回傳不含 `0x` 的 signed raw；typed-data 與
 UTF-8 message 同樣支援 TRON/EVM。EIP-4844/EIP-7702 明確拒絕。
 
-wallet-cli 4.12.0 已提供 EVM typed-data 和交易簽名，但修復前的 agent-wallet adapter 仍按 TRON 模型實作：
+wallet-cli 4.13.0 已提供 EVM typed-data 和交易簽名，但修復前的 agent-wallet adapter 仍按 TRON 模型實作：
 
 - 交易固定使用 `tx sign --transaction <TRON JSON>`。
 - EVM 交易需要先序列化為 unsigned transaction hex，再使用 `tx sign --hex`。
@@ -345,7 +344,7 @@ registry 已收斂為模組內部的封閉分派，不再公開只有 builder、
 
 1. 簽名顯式綁定 canonical network。
 2. 固定 accountId 並校驗 signer address。
-3. 修正 wallet-cli 4.12.0 warnings schema。
+3. 修正 wallet-cli 4.13.0 warnings schema。
 4. 增加首次版本檢查。
 5. 增加真實 wallet-cli binary 的 Nile integration test。
 

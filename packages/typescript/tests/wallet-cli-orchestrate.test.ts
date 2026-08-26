@@ -18,8 +18,8 @@ function mockClient(): WalletCliClient {
   return {
     ensureCompatible: vi.fn(
       async (target: { family: string; cliNetwork: string; requestedChainId?: string }) => ({
-        version: '4.12.0',
-        catalog: { tool: 'wallet-cli', version: '4.12.0', globalFlags: [], commands: [] },
+        version: '4.13.0',
+        catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
         networks: [],
         network: {
           id: target.cliNetwork,

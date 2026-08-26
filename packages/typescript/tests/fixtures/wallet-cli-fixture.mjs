@@ -4,7 +4,7 @@ import { appendFileSync } from 'node:fs'
 import { keccak256, parseTransaction } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
-const VERSION = '4.12.0'
+const VERSION = '4.13.0'
 const emittedVersion = process.env.WALLET_CLI_FIXTURE_VERSION ?? VERSION
 const PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 const account = privateKeyToAccount(PRIVATE_KEY)
@@ -26,7 +26,7 @@ if (mode === 'hang') {
 } else if (mode === 'malformed' && !args.includes('--version') && !args.includes('--json-schema')) {
   process.stdout.write('{not-json')
 } else if (args.length === 1 && args[0] === '--version') {
-  process.stdout.write(mode === 'prerelease' ? '4.12.0-beta.1\n' : `${emittedVersion}\n`)
+  process.stdout.write(mode === 'prerelease' ? '4.13.0-beta.1\n' : `${emittedVersion}\n`)
 } else if (args.length === 1 && args[0] === '--json-schema') {
   const commands = [
     { id: 'current', kind: 'neutral', path: ['current'] },
@@ -47,7 +47,7 @@ if (mode === 'hang') {
   process.stdout.write(
     JSON.stringify({
       tool: 'wallet-cli',
-      version: mode === 'catalog-version-mismatch' ? '4.13.0' : emittedVersion,
+      version: mode === 'catalog-version-mismatch' ? '4.14.0' : emittedVersion,
       globalFlags: [],
       commands,
     }),
@@ -68,15 +68,20 @@ async function runOperational() {
     return
   }
   if (id === 'current') {
-    success('current', {
-      accountId: ACCOUNT_ID,
-      label: 'fixture',
-      type: 'seed',
-      index: 0,
-      active: true,
-      addresses: { tron: TRON_ADDRESS, evm: account.address },
-      seedId: 'wlt_fixture',
-    })
+    const chain = chainFor(valueOf('--network') ?? 'tron:mainnet')
+    success(
+      'current',
+      {
+        accountId: ACCOUNT_ID,
+        label: 'fixture',
+        type: 'seed',
+        index: 0,
+        active: true,
+        addresses: { tron: TRON_ADDRESS, evm: account.address },
+        seedId: 'wlt_fixture',
+      },
+      mode === 'missing-current-chain' ? undefined : chain,
+    )
     return
   }
 

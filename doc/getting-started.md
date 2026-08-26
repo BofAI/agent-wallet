@@ -112,7 +112,7 @@ Shared `start` options:
 **`wallet_cli`：** 連結由 wallet-cli 持有金鑰的既有 TRON/EVM account；不建立或匯入
 wallet-cli key。CLI 會在詢問 password 前驗證 account descriptor，並把 canonical accountId
 寫入新 config。需要穩定版
-`@tron-walletcli/wallet-cli >=4.12.0 <5.0.0` 位於 PATH，或設定
+`@tron-walletcli/wallet-cli >=4.13.0 <5.0.0` 位於 PATH，或設定
 `AGENT_WALLET_WALLET_CLI_PATH`。Windows 建議指定 package JavaScript entrypoint；詳見
 [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)。
 

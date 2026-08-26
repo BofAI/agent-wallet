@@ -3,7 +3,7 @@
 本指南說明如何把
 **[`@tron-walletcli/wallet-cli`](https://www.npmjs.com/package/@tron-walletcli/wallet-cli)**
 管理的 TRON/EVM 帳戶接到 agent-wallet，並驗證 transaction、typed-data 與 UTF-8
-message 簽章。agent-wallet 支援穩定版 `>=4.12.0 <5.0.0`。
+message 簽章。agent-wallet 支援穩定版 `>=4.13.0 <5.0.0`，不支援 4.12.x。
 
 ## 事前準備
 
@@ -21,7 +21,7 @@ message 簽章。agent-wallet 支援穩定版 `>=4.12.0 <5.0.0`。
 ### 1. 安裝相容的 wallet-cli
 
 ```bash
-npm install -g '@tron-walletcli/wallet-cli@^4.12.0'
+npm install -g '@tron-walletcli/wallet-cli@^4.13.0'
 ```
 
 驗證安裝：
@@ -237,7 +237,7 @@ console.log(result);
 兩個 family address。每次簽章結果的 command、chain context、data shape 與 signer 都必須
 一致。常見分類包含：
 
-- `unsupported_version`：不是穩定版 `>=4.12.0 <5.0.0`。
+- `unsupported_version`：不是穩定版 `>=4.13.0 <5.0.0`。
 - `capability_missing`：catalog 缺目標 family 的簽章能力。
 - `network_mismatch` / `contract_mismatch`：network 或 result envelope 不一致。
 - `timeout` / `output_limit` / `aborted`：程序超時、輸出超限或 caller 取消。

@@ -21,8 +21,8 @@ function success<T>(command: string, data: T) {
 function mockClient(): WalletCliClient {
   return {
     ensureCompatible: vi.fn().mockResolvedValue({
-      version: '4.12.0',
-      catalog: { tool: 'wallet-cli', version: '4.12.0', globalFlags: [], commands: [] },
+      version: '4.13.0',
+      catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
       networks: [],
       network: { id: 'tron:nile', family: 'tron', chainId: 'nile' },
     }),
@@ -102,7 +102,11 @@ describe('WalletCliAdapter', () => {
       TRON_ADDRESS,
     ])
     expect(client.currentAccount).toHaveBeenCalledTimes(1)
-    expect(client.currentAccount).toHaveBeenCalledWith('fixture')
+    expect(client.currentAccount).toHaveBeenCalledWith('fixture', {
+      agentNetwork: 'tron:nile',
+      cliNetwork: 'tron:nile',
+      family: 'tron',
+    })
   })
 
   it('allows a later identity attempt after the first lookup fails', async () => {
