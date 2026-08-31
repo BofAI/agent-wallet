@@ -57,10 +57,11 @@
   - _Requirements: 4.2-4.9, 5.5-5.6, 10.6, 11.1_
 
 - [x] 3.3 實作版本、catalog 與 network capability handshake
-  - 以 bounded meta runner 解析 `--version` 與 root `--json-schema`；接受穩定 `>=4.13.0 <5.0.0`，catalog version 必須一致
+  - 以 bounded meta runner 依序解析 `-o json --version` 與 root `-o json --json-schema`；接受穩定 `>=4.13.0 <5.0.0`，catalog version 必須一致
   - 以 `networks -o json` 取得 canonical rows；驗證 current 及 target family 的 tx/typed-data commands
-  - 同一 client 的並行首次呼叫共用 handshake promise；版本相同但 EVM command 缺失仍 fail-fast
-  - 測試版本上下界/prerelease、source/dist 同版能力漂移、缺 family command、未知額外 command/network 與共享 promise
+  - 同一 client 的並行首次呼叫共用 handshake promise；meta probes 固定串行，避免 wallet-cli 4.13 startup migration 競爭
+  - 辨識 migration completion/cancellation/required envelope，不自動重送原命令；只對 migration 邊界解除 promise，其他 handshake 失敗仍快取
+  - 測試版本上下界/prerelease、source/dist 同版能力漂移、缺 family command、未知額外 command/network、共享 promise 與 migration 重試邊界
   - _Requirements: 7.1, 7.3-7.4, 7.7, 11.1-11.2_
 
 - [x] 3.4 實作窄 client 方法與 canonical context
@@ -147,8 +148,8 @@
 
 - [x] 7.1 建立 deterministic wallet-cli fixture 程序並納入一般 CI
   - 新增 `tests/fixtures/wallet-cli-fixture.mjs`，透過 Node launch target 真實解析 argv/stdin 並輸出單一 `wallet-cli.result.v1` frame
-  - fixture 覆蓋 version、catalog、networks、current、TRON/EVM transaction、typed-data、structured warnings、exit 1/2、timeout、超限與 malformed envelope
-  - 新增 `wallet-cli-process-integration.test.ts` 驗證 handshake、identity、每簽章一個 lease、stdin ownership、Node JS target 與完整錯誤分類
+  - fixture 覆蓋 version、catalog、networks、current、TRON/EVM transaction、typed-data、migration completion/cancellation/required、structured warnings、exit 1/2、timeout、超限與 malformed envelope
+  - 新增 `wallet-cli-process-integration.test.ts` 驗證串行 handshake、migration retry 邊界、identity、每簽章一個 lease、stdin ownership、Node JS target 與完整錯誤分類
   - _Requirements: 4.1-4.10, 7.3-7.7, 9.1, 9.7-9.10, 11.1-11.3_
 
 - [x] 7.2 建立 opt-in 真實 wallet-cli 契約測試

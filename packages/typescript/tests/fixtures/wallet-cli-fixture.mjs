@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs'
 import { keccak256, parseTransaction } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
@@ -25,9 +25,16 @@ if (mode === 'hang') {
   process.stderr.write('sensitive-stderr'.repeat(16 * 1024))
 } else if (mode === 'malformed' && !args.includes('--version') && !args.includes('--json-schema')) {
   process.stdout.write('{not-json')
-} else if (args.length === 1 && args[0] === '--version') {
+} else if (mode === 'migration-once' && args.includes('--version') && beginMigration()) {
+  success('migration', { upgraded: true, originalCommandExecuted: false })
+} else if (mode === 'migration-cancelled' && args.includes('--version')) {
+  success('migration', { upgraded: false, cancelled: true, originalCommandExecuted: false })
+} else if (mode === 'migration-required' && args.includes('--version')) {
+  if (hasJsonOutput(args)) failure('migration', 'migration_required', 'password required', 2)
+  else process.exitCode = 2
+} else if (args.includes('--version')) {
   process.stdout.write(mode === 'prerelease' ? '4.13.0-beta.1\n' : `${emittedVersion}\n`)
-} else if (args.length === 1 && args[0] === '--json-schema') {
+} else if (args.includes('--json-schema')) {
   const commands = [
     { id: 'current', kind: 'neutral', path: ['current'] },
     { id: 'tx.sign', kind: 'chain', families: ['tron', 'evm'], path: ['tx', 'sign'] },
@@ -142,10 +149,24 @@ async function runOperational() {
 }
 
 function commandId(argv) {
+  if (argv.includes('--version')) return 'version'
+  if (argv.includes('--json-schema')) return 'catalog'
   const words = argv.filter((arg) => !arg.startsWith('-'))
   if (argv[0] === 'tx') return `tx.${argv[1]}`
   if (argv[0] === 'typed-data') return 'typed-data.sign'
   return words[0] ?? 'meta'
+}
+
+function beginMigration() {
+  const statePath = process.env.WALLET_CLI_FIXTURE_MIGRATION_STATE
+  if (!statePath || existsSync(statePath)) return false
+  writeFileSync(statePath, 'migrated\n')
+  return true
+}
+
+function hasJsonOutput(argv) {
+  const outputIndex = argv.findIndex((arg) => arg === '-o' || arg === '--output')
+  return outputIndex >= 0 && argv[outputIndex + 1] === 'json'
 }
 
 function valueOf(flag) {

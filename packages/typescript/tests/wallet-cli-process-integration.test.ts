@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { WalletCliAdapter } from '../src/core/adapters/wallet-cli.js'
 import type { Eip712Capable } from '../src/core/base.js'
 import { WalletCliClient } from '../src/core/clients/wallet-cli.js'
-import { WalletCliExecutionError } from '../src/core/errors.js'
+import { WalletCliExecutionError, WalletCliUsageError } from '../src/core/errors.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { StaticSecretProvider, type SecretProvider } from '../src/core/secret-provider.js'
 import { parseWalletCliNetwork } from '../src/core/wallet-cli-network.js'
@@ -142,7 +142,67 @@ describe('wallet-cli deterministic process integration', () => {
     expect(first.version).toBe('4.13.0')
     expect(second.network?.id).toBe('evm:1')
     expect(third.catalog.commands.some((command) => command.id === 'typed-data.sign')).toBe(true)
-    expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(3)
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual([
+      'version',
+      'catalog',
+      'networks',
+    ])
+  })
+
+  it('serializes startup migration and lets the same client retry after completion', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-migration-'))
+    temporaryDirectories.push(dir)
+    const counter = join(dir, 'calls.txt')
+    const migrationState = join(dir, 'migration-complete')
+    const client = fixtureClient('migration-once', {
+      WALLET_CLI_FIXTURE_COUNTER: counter,
+      WALLET_CLI_FIXTURE_MIGRATION_STATE: migrationState,
+    })
+
+    await expect(client.ensureCompatible()).rejects.toMatchObject({
+      code: 'migration_completed',
+    } satisfies Partial<WalletCliExecutionError>)
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual(['version'])
+
+    await expect(client.ensureCompatible()).resolves.toMatchObject({ version: '4.13.0' })
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual([
+      'version',
+      'version',
+      'catalog',
+      'networks',
+    ])
+  })
+
+  it('preserves migration_required and does not pin it on the client', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-migration-required-'))
+    temporaryDirectories.push(dir)
+    const counter = join(dir, 'calls.txt')
+    const client = fixtureClient('migration-required', {
+      WALLET_CLI_FIXTURE_COUNTER: counter,
+    })
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const error = await client.ensureCompatible().catch((cause: unknown) => cause)
+      expect(error).toBeInstanceOf(WalletCliUsageError)
+      expect(error).toMatchObject({ code: 'migration_required' })
+    }
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual(['version', 'version'])
+  })
+
+  it('preserves an interactive migration cancellation and lets the client retry', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-wallet-cli-migration-cancelled-'))
+    temporaryDirectories.push(dir)
+    const counter = join(dir, 'calls.txt')
+    const client = fixtureClient('migration-cancelled', {
+      WALLET_CLI_FIXTURE_COUNTER: counter,
+    })
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(client.ensureCompatible()).rejects.toMatchObject({
+        code: 'migration_cancelled',
+      } satisfies Partial<WalletCliExecutionError>)
+    }
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual(['version', 'version'])
   })
 
   it('returns the canonical dual-family account descriptor without acquiring a secret', async () => {
@@ -319,7 +379,7 @@ describe('wallet-cli deterministic process integration', () => {
 
     await expect(client.ensureCompatible()).rejects.toMatchObject({ code: 'unsupported_version' })
     await expect(client.ensureCompatible()).rejects.toMatchObject({ code: 'unsupported_version' })
-    expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(2)
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual(['version'])
   })
 
   it('classifies timeout, output limits and malformed envelopes without exposing output', async () => {

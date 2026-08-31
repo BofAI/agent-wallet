@@ -106,7 +106,7 @@
 
 1. agent-wallet 系統應將 wallet-cli 宣告為 optional peer dependency（非 `dependencies` 硬依賴），相容版本範圍應限制為 `>=4.13.0 <5.0.0`，且不接受 4.12.x。
 2. 當未安裝 wallet-cli 時，agent-wallet 的 EVM 簽名、Privy 與 `raw_secret` 功能應完全不受影響（零感知）。僅建立或使用 `wallet_cli` 配置時才要求 binary。
-3. 首次使用 wallet-cli 時，client 應驗證版本範圍，並快取 root `--json-schema` capability catalog 與 network 清單；同一 client 的並行首次呼叫應共用同一 handshake promise。
+3. 首次使用 wallet-cli 時，client 應依序驗證版本範圍、root `--json-schema` capability catalog 與 network 清單，再快取結果；同一 client 的並行首次呼叫應共用同一 handshake promise，不得並行啟動可能同時觸發 wallet-data migration 的 meta probes。若 startup gate 回傳 migration completion、cancellation 或 `migration_required`，原命令不得自動重送，且該 migration 邊界不得永久釘住 handshake cache，讓 caller 修正狀態後可明確重試。
 4. handshake 應確認選定 family 所需的 current、transaction 與 typed-data 命令能力，以及 canonical network 確實存在。版本相符但缺少能力時仍應拒絕使用。
 5. 啟動目標解析應依序尊重顯式 client 設定、`AGENT_WALLET_WALLET_CLI_PATH`、可解析 optional peer 的 JavaScript entrypoint，以及 PATH 上可在 `shell: false` 下直接啟動的 executable；JavaScript entrypoint 應由目前的 Node executable 啟動，不應依賴 Windows shell shim。
 6. 當 wallet-cli 路徑被使用且目前 Node 版本低於 wallet-cli 要求時，應拋出明確的 unsupported runtime 錯誤；agent-wallet 本身的 `engines` 應維持 Node ≥18。

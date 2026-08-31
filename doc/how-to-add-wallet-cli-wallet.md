@@ -252,6 +252,10 @@ console.log(result);
 - `unsupported_version`：不是穩定版 `>=4.13.0 <5.0.0`。
 - `capability_missing`：catalog 缺目標 family 的簽章能力。
 - `network_mismatch` / `contract_mismatch`：network 或 result envelope 不一致。
+- `migration_completed`：wallet-cli 已完成 startup migration，但本次原命令刻意未執行；檢查結果後重試。
+- `migration_cancelled`：互動 migration 已取消；核准升級後再重試。
+- `migration_required`：舊 wallet data 需要密碼才能升級；先依 wallet-cli 的互動或
+  `--password-stdin` 流程完成 migration，再重試 agent-wallet 操作。handshake 不會為此取得錢包密碼。
 - `timeout` / `output_limit` / `aborted`：程序超時、輸出超限或 caller 取消。
 - wallet-cli exit 1/2 的未知 `error.code` 仍會保留，以便 forward-compatible 處理。
 

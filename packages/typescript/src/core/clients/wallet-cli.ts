@@ -177,6 +177,23 @@ const ResultEnvelopeSchema = z.discriminatedUnion('success', [
   SuccessEnvelopeSchema,
   FailureEnvelopeSchema,
 ])
+const MigrationDataSchema = z.discriminatedUnion('upgraded', [
+  z
+    .object({
+      upgraded: z.literal(true),
+      originalCommandExecuted: z.literal(false),
+    })
+    .passthrough(),
+  z
+    .object({
+      upgraded: z.literal(false),
+      cancelled: z.literal(true),
+      originalCommandExecuted: z.literal(false),
+    })
+    .passthrough(),
+])
+
+type ParsedResultEnvelope = z.infer<typeof ResultEnvelopeSchema>
 
 const NetworkRowSchema = z
   .object({
@@ -268,10 +285,21 @@ export class WalletCliClient {
   }
 
   async ensureCompatible(target?: WalletCliNetworkTarget): Promise<WalletCliCompatibility> {
-    if (!this.compatibilityPromise) {
-      this.compatibilityPromise = this.loadCompatibility()
+    let compatibilityPromise = this.compatibilityPromise
+    if (!compatibilityPromise) {
+      compatibilityPromise = this.loadCompatibility()
+      this.compatibilityPromise = compatibilityPromise
     }
-    const compatibility = await this.compatibilityPromise
+
+    let compatibility: WalletCliCompatibility
+    try {
+      compatibility = await compatibilityPromise
+    } catch (error) {
+      if (isMigrationBoundaryError(error) && this.compatibilityPromise === compatibilityPromise) {
+        this.compatibilityPromise = undefined
+      }
+      throw error
+    }
     if (!target) return compatibility
 
     for (const id of ['tx.sign', 'typed-data.sign']) {
@@ -416,16 +444,24 @@ export class WalletCliClient {
     args: string[],
     contract: WalletCliRunContract<T>,
   ): Promise<WalletCliSuccessResult<T>> {
+    const compatibilityPromise = this.compatibilityPromise
     const processResult = await this.runProcess(args, contract.stdin, contract.signal)
-    return parseOperationalResult(processResult, contract)
+    try {
+      return parseOperationalResult(processResult, contract)
+    } catch (error) {
+      if (isMigrationBoundaryError(error) && this.compatibilityPromise === compatibilityPromise) {
+        this.compatibilityPromise = undefined
+      }
+      throw error
+    }
   }
 
   private async loadCompatibility(): Promise<WalletCliCompatibility> {
-    const [versionOutput, catalogOutput] = await Promise.all([
-      this.runMeta(['--version']),
-      this.runMeta(['--json-schema']),
-    ])
+    // wallet-cli 4.13 runs its migration gate before every command. Keep these
+    // probes serial so two startup processes cannot migrate the same wallet.
+    const versionOutput = await this.runMeta(['--version'])
     const version = parseSupportedVersion(versionOutput.toString('utf8'))
+    const catalogOutput = await this.runMeta(['--json-schema'])
 
     let catalogJson: unknown
     try {
@@ -467,7 +503,15 @@ export class WalletCliClient {
   }
 
   private async runMeta(args: string[]): Promise<Buffer> {
-    const result = await this.runProcess(args)
+    const result = await this.runProcess(['-o', 'json', ...args])
+    const envelope = tryParseResultEnvelope(result.stdout)
+    if (envelope) {
+      throwIfMigrationBoundary(result.exitCode, envelope)
+      throw new WalletCliExecutionError(
+        'wallet-cli metadata command returned an unexpected result envelope',
+        'contract_mismatch',
+      )
+    }
     if (result.exitCode !== 0) {
       throw new WalletCliExecutionError(
         `wallet-cli metadata command exited with code ${result.exitCode}`,
@@ -670,15 +714,10 @@ function parseOperationalResult<T>(
   processResult: ProcessResult,
   contract: WalletCliRunContract<T>,
 ): WalletCliSuccessResult<T> {
-  let json: unknown
-  try {
-    json = JSON.parse(processResult.stdout.toString('utf8'))
-  } catch {
-    return throwInvalidEnvelope(processResult.exitCode)
-  }
-  const parsed = ResultEnvelopeSchema.safeParse(json)
-  if (!parsed.success) return throwInvalidEnvelope(processResult.exitCode)
-  const envelope = parsed.data
+  const envelope = tryParseResultEnvelope(processResult.stdout)
+  if (!envelope) return throwInvalidEnvelope(processResult.exitCode)
+
+  throwIfMigrationBoundary(processResult.exitCode, envelope)
 
   if (envelope.command !== contract.command) {
     throw new WalletCliExecutionError(
@@ -716,6 +755,58 @@ function parseOperationalResult<T>(
     )
   }
   return { ...envelope, data: data.data } as WalletCliSuccessResult<T>
+}
+
+function tryParseResultEnvelope(stdout: Buffer): ParsedResultEnvelope | undefined {
+  let json: unknown
+  try {
+    json = JSON.parse(stdout.toString('utf8'))
+  } catch {
+    return undefined
+  }
+  const parsed = ResultEnvelopeSchema.safeParse(json)
+  return parsed.success ? parsed.data : undefined
+}
+
+function throwIfMigrationBoundary(exitCode: number | null, envelope: ParsedResultEnvelope): void {
+  if (!envelope.success && envelope.error.code === 'migration_required') {
+    if (exitCode !== 2 || envelope.chain) {
+      throw new WalletCliExecutionError(
+        'wallet-cli exit status and migration envelope disagree',
+        'contract_mismatch',
+      )
+    }
+    throw new WalletCliUsageError(sanitizeMessage(envelope.error.message), 'migration_required')
+  }
+
+  if (envelope.success && envelope.command === 'migration') {
+    const migration = MigrationDataSchema.safeParse(envelope.data)
+    if (exitCode !== 0 || envelope.chain || !migration.success) {
+      throw new WalletCliExecutionError(
+        'wallet-cli returned an invalid migration envelope',
+        'contract_mismatch',
+      )
+    }
+    if (!migration.data.upgraded) {
+      throw new WalletCliExecutionError(
+        'wallet-cli wallet migration was cancelled; retry after approving the upgrade',
+        'migration_cancelled',
+      )
+    }
+    throw new WalletCliExecutionError(
+      'wallet-cli completed a wallet migration; retry the original command',
+      'migration_completed',
+    )
+  }
+}
+
+function isMigrationBoundaryError(error: unknown): boolean {
+  return (
+    (error instanceof WalletCliExecutionError || error instanceof WalletCliUsageError) &&
+    (error.code === 'migration_completed' ||
+      error.code === 'migration_cancelled' ||
+      error.code === 'migration_required')
+  )
 }
 
 function throwInvalidEnvelope(exitCode: number | null): never {

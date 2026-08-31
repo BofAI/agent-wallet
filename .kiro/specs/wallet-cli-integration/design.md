@@ -276,13 +276,15 @@ interface WalletCliResult<T> {
 
 #### 1.6 Capability handshake
 
-`--version` 與 root `--json-schema` 是 meta raw JSON/text，不是 `wallet-cli.result.v1`；`networks -o json` 則走一般 envelope parser。client 因此使用獨立的 bounded `runMeta()`，不把 catalog 偽裝成 result envelope。
+wallet-cli 狀態為 current 時，`--version` 與 root `--json-schema` 是 meta raw JSON/text，不是 `wallet-cli.result.v1`；`networks -o json` 則走一般 envelope parser。wallet-cli 4.13 startup gate 會在所有 meta surface 前檢查 wallet data，因此 client 以 `-o json` 執行 meta probe，先辨識可能取代原輸出的 migration envelope，再把非 envelope 輸出交給 bounded `runMeta()` 的版本或 catalog parser。
 
-base handshake 以單一 promise 依序或並行取得：
+base handshake 以單一 promise 嚴格依序取得，避免兩個 wallet-cli 子程序同時 migration 同一份資料：
 
-1. `wallet-cli --version`：解析穩定版 semver，接受 `>=4.13.0 <5.0.0`，拒絕 4.12.x、prerelease 與額外輸出。
-2. `wallet-cli --json-schema`：驗證 `{ tool: "wallet-cli", version, commands[] }`，catalog version 必須與 `--version` 相同。
+1. `wallet-cli -o json --version`：若沒有 migration envelope，解析穩定版 semver，接受 `>=4.13.0 <5.0.0`，拒絕 4.12.x、prerelease 與額外輸出。
+2. `wallet-cli -o json --json-schema`：若沒有 migration envelope，驗證 `{ tool: "wallet-cli", version, commands[] }`，catalog version 必須與 `--version` 相同。
 3. `wallet-cli networks -o json`：驗證 `command === "networks"`、neutral envelope 及 `{ id, family, chainId }[]`。
+
+成功 migration 以 `migration_completed`、互動取消以 `migration_cancelled`、缺 migration 密碼以 upstream `migration_required` 對 caller 明確分類；三者都代表原命令未執行，不在 client 內自動重送，並只解除當次 compatibility promise。caller 檢查結果、完成必要操作後可重試。同一 promise 的其他 caller 仍收到相同結果；非 migration 的版本、catalog 或能力失敗則維持快取，避免隱式重跑不相容 binary。
 
 catalog 最少要求 neutral `current`，並針對 target family 檢查 `tx.sign`、`typed-data.sign` 的 `families` 含 `tron` 或 `evm`。catalog/network 結果可含未知命令、欄位、warning code 與額外 network。版本符合但能力缺失仍 fail-fast，解決本地 source/dist 同版號漂移。
 
@@ -609,9 +611,9 @@ sequenceDiagram
 
   App->>Signer: getAddress()
   Signer->>Client: ensureCompatible(target)（共享 promise）
-  Client->>Cli: --version
-  Cli-->>Client: 4.12.x
-  Client->>Cli: --json-schema
+  Client->>Cli: -o json --version
+  Cli-->>Client: 4.13.x
+  Client->>Cli: -o json --json-schema
   Cli-->>Client: catalog JSON
   Client->>Cli: networks -o json
   Cli-->>Client: result.v1 { command:"networks", data:[...] }
@@ -622,7 +624,7 @@ sequenceDiagram
   Signer-->>App: 選定 family address
 ```
 
-若並行呼叫先後抵達，只有第一個建立 promise。handshake 失敗保留於 client；建立新 client 才重試。identity 第一次失敗可重試，成功後永不因 active account 改變而切換。
+若並行呼叫先後抵達，只有第一個建立 promise，且 version、catalog、networks 三個子程序固定依序啟動。一般 handshake 失敗保留於 client；只有 `migration_completed`、`migration_cancelled`、`migration_required` 解除該次 promise，讓 caller 明確重試。identity 第一次失敗可重試，成功後永不因 active account 改變而切換。
 
 ### 流程 B：TRON 簽交易
 
