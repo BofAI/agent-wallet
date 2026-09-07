@@ -4,6 +4,9 @@
 wallet storage，並為 transaction signing 引入穩定的 typed result。以下變更需要舊呼叫方
 主動調整。
 
+> **發布狀態：** 本分支以尚未發布的 `3.0.0` 為目標。在 3.0.0 正式發布前，以下 npm
+> 升級命令尚不可用；未指定版本的安裝仍會取得目前的 `2.4.0` 正式版。
+
 ## 1. 升級套件
 
 ```bash
@@ -16,9 +19,8 @@ npm install @bankofai/agent-wallet@^3.0.0
 npm install '@tron-walletcli/wallet-cli@^4.13.0'
 ```
 
-agent-wallet 需要 Node.js >=18；使用 wallet-cli 的 JavaScript entrypoint 時需要 Node.js
-
-> =20。
+agent-wallet 需要 Node.js >=18；使用 wallet-cli 的 JavaScript entrypoint 時需要
+Node.js >=20。
 
 ## 2. 遷移 wallet 設定
 

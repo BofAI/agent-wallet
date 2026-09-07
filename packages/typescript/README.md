@@ -5,6 +5,10 @@
 
 Universal multi-chain signing SDK for AI agents — TypeScript implementation.
 
+> **Release status:** this branch targets `3.0.0`, which is not yet published. Until the 3.0.0
+> release, unversioned npm install commands resolve to the current `2.4.0` release and do not
+> include the v3 APIs documented here.
+
 從 2.x 升級請先閱讀
 [3.0 遷移指南](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)與
 [變更記錄](https://github.com/BofAI/agent-wallet/blob/main/CHANGELOG.md)。
@@ -194,6 +198,9 @@ npm install '@tron-walletcli/wallet-cli@^4.13.0'
 - [wallet-cli-sign.ts](./examples/wallet-cli-sign.ts)
 
 ## Development
+
+The published runtime supports Node.js >=18. Repository development uses ESLint 10 and therefore
+requires Node.js `^20.19.0 || ^22.13.0 || >=24`.
 
 ```bash
 pnpm install

@@ -1,10 +1,10 @@
 # Product Overview
 
-agent-wallet is a multi-chain signing toolkit for AI agents and applications. It provides a consistent way to create or import wallets, resolve an active wallet, and sign transactions, messages, and typed data across TRON and EVM networks.
+agent-wallet is a multi-chain signing toolkit for AI agents and applications. It provides a consistent way to configure or link wallets, resolve an active wallet, and sign transactions and typed data across TRON and EVM networks.
 
 ## Core Capabilities
 
-- Secure local wallet setup with encrypted and plaintext development modes
+- Plaintext local wallet setup for development and external signer integration for production
 - Wallet resolution through config-backed and environment-backed providers
 - Signing support for TRON and EVM networks
 - CLI workflows for wallet setup, switching, and signing
@@ -18,4 +18,4 @@ agent-wallet is a multi-chain signing toolkit for AI agents and applications. It
 
 ## Value Proposition
 
-The project focuses on wallet resolution and signing only. It does not build or broadcast transactions. This keeps the library narrow, safer to integrate, and easier to reason about in agent-driven workflows.
+The core package focuses on wallet resolution and signing. Optional integrations may orchestrate protocol-specific transaction building and broadcasting without expanding the core wallet contract. This keeps the signing boundary narrow, safer to integrate, and easier to reason about in agent-driven workflows.

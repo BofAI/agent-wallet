@@ -5,7 +5,13 @@
 
 **Wallet signing for AI agents and apps** — store keys safely (or use env for quick tests), pick an active wallet, and **sign** transactions and typed data on **TRON** and **EVM** chains.
 
-> This project **only signs**. Building and broadcasting transactions is done by your code or another tool (e.g. an RPC client).
+> The core SDK **only signs**. Building and broadcasting transactions normally belongs to your
+> code or another tool; the optional `integrations/wallet-cli` entrypoint provides TRON-only
+> build/broadcast/status orchestration.
+
+> **Release status:** this branch targets `3.0.0`, which is not yet published. Until the 3.0.0
+> release, unversioned npm install commands resolve to the current `2.4.0` release and do not
+> include the v3 APIs documented here.
 
 ## Contents
 
@@ -52,7 +58,7 @@ Set up wallets with the [CLI](#cli) first, then let the SDK resolve from your lo
 
 #### Wallet Setup Via Env
 
-If no usable CLI wallet config is available, the SDK can resolve directly from environment variables:
+If `wallets_config.json` is missing or contains no wallets, the SDK can resolve directly from environment variables:
 
 | Environment variable                  | Purpose                                                        |
 | ------------------------------------- | -------------------------------------------------------------- |
@@ -60,7 +66,7 @@ If no usable CLI wallet config is available, the SDK can resolve directly from e
 | `AGENT_WALLET_MNEMONIC`               | Mnemonic used for SDK wallet resolution.                       |
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index used when deriving from `AGENT_WALLET_MNEMONIC`. |
 
-- If CLI config resolution is unavailable, the SDK falls back to these environment variables.
+- A non-empty wallet config takes precedence. Invalid or incomplete config fails explicitly instead of silently falling back to environment variables.
 
 ### CLI
 
@@ -237,7 +243,9 @@ Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), a
 - **`raw_secret`** — private key or mnemonic stored in **plaintext** inside config; **dev / low-value only**. For production signing, use `wallet_cli` or `privy`.
 - **`privy` / `wallet_cli`** — credentials stored in config. Use [exec script credentials](#exec-script-credentials) to avoid storing secrets in plaintext.
 - **`wallet_cli`** — 簽章一律固定完整 network 與 account identity；exec password 每次簽章重新取得，只經 stdin 傳給子程序。選用的 build/broadcast/status integration 仍限定 TRON。
-- Secrets are **not** sent over the network by this SDK; still protect your machine, backups, and env files.
+- `raw_secret` key material stays local. Privy credentials and signing requests are sent to Privy
+  over HTTPS; wallet-cli passwords stay local and are delivered only to the selected subprocess
+  over stdin. Protect your machine, backups, environment, and secret-provider sessions.
 
 ## Packages & development
 
@@ -249,6 +257,9 @@ Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), a
 # TypeScript tests
 cd packages/typescript && pnpm test
 ```
+
+The published runtime supports Node.js >=18. Repository development uses ESLint 10 and therefore
+requires Node.js `^20.19.0 || ^22.13.0 || >=24`.
 
 ## License
 

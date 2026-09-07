@@ -43,6 +43,6 @@ This project is package-oriented and layered by responsibility. The TypeScript i
 
 - Keep signing logic separate from CLI interaction
 - Keep provider resolution separate from adapter implementation
-- 外部簽名器憑證解析位於 `core/secret-resolver.ts`；`local_secure` 與自有加密 KV 已移除
+- 外部簽名器的共用 credential 正規化位於 `core/secret-resolver.ts`；wallet-cli 的 one-shot secret lifecycle 位於 `core/secret-provider.ts`；`local_secure` 與自有加密 KV 已移除
 - Cross-platform filesystem behavior must be explicit and tested when changed
-- Do not mix transaction broadcasting or RPC orchestration into this project; this project signs only
+- Do not mix transaction broadcasting or RPC orchestration into the core wallet path; keep protocol-specific orchestration under explicit optional integrations

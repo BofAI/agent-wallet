@@ -35,6 +35,10 @@
 ### Fixed
 
 - 移除 wallet 後會正確驅逐該 ID 的所有 cached adapters，避免同 ID 重建時沿用舊 credential。
+- wallet-cli compatibility handshake 會串行執行 metadata probes，辨識 startup migration
+  完成、取消與需密碼狀態，並在 migration 邊界後允許 caller 明確重試。
+- 將 `@inquirer/prompts` 固定於支援 Node.js 18 的 7.x 系列，使 CLI runtime dependency
+  與 package 的 Node.js `>=18` 契約一致。
 - Windows `.cmd`/`.bat` secret exec 使用固定 quoting，並拒絕可能觸發
   `cmd.exe` expansion/escaping 的不安全路徑。
 

@@ -1,6 +1,10 @@
 # Getting Started
 
-> This guide covers the `agent-wallet` CLI. The npm and PyPI distributions now share the same command structure, though help text formatting may differ slightly.
+> This guide covers the TypeScript `agent-wallet` CLI distributed through npm.
+
+> **Release status:** this branch targets `3.0.0`, which is not yet published. Until the 3.0.0
+> release, unversioned npm install commands resolve to the current `2.4.0` release and do not
+> include the v3 commands documented here.
 
 This guide walks you through every CLI command in `@bankofai/agent-wallet` — from installation to signing.
 
@@ -27,22 +31,18 @@ Typical output:
 Usage: agent-wallet <command> [options]
 
 Commands:
-  start             Quick setup: create and activate wallet
-  add               Add a new wallet
+  start             Quick setup: init + configure wallet
+  add               Add a wallet configuration
   list              List all configured wallets
-  use [id]          Set the active wallet (interactive if omitted)
+  use [id]          Set the active wallet
   inspect <id>      Show wallet details
-  resolve-address <id>  Resolve wallet address output
+  resolve-address [id]  Resolve wallet addresses
   remove <id>       Remove a wallet
-  sign tx <data>    Sign a transaction (JSON payload)
-  sign typed-data <data>  Sign EIP-712 typed data (JSON)
+  sign              Sign transactions or typed data
   reset             Delete all wallet data
 
-Options:
   --dir, -d <path>      Secrets directory path (default: ~/.agent-wallet)
   --help, -h            Show this help message
-
-Run agent-wallet <command> --help for more info on a command.
 ```
 
 Running `agent-wallet` with no arguments shows the same help output.

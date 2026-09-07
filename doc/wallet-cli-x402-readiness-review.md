@@ -1,6 +1,6 @@
 # wallet-cli 對接 x402 就緒度評估
 
-## 結論（2026-08-25 修復後）
+## 結論（2026-09-07 驗證）
 
 本評估列出的 P0 與本期 P1 已在 `agent-wallet` 完成：`wallet_cli` 現在具備嚴格
 network/account identity、每次簽章 one-shot `SecretLease`、穩定版
@@ -70,7 +70,8 @@ resolveWallet
 
 - `WalletCliAdapter` 負責符合 Wallet interface 及格式正規化。
 - `WalletCliClient` 負責子程序、timeout、JSON envelope 和退出碼。
-- `WalletCliConfigResolver` 負責憑證解析。
+- `WalletCliConfigResolver` 負責驗證與正規化 credential 設定；`SecretProvider` 負責每次
+  簽章的 credential acquisition 與 one-shot lease lifecycle。
 - 廣播與交易追蹤放在選用的 `integrations/wallet-cli`，沒有污染簽名核心。
 
 這個分層具備良好 locality：wallet-cli 契約改動可以集中在 agent-wallet 修正，不需要散落到每個 x402 呼叫端。
@@ -89,20 +90,19 @@ agent-wallet 不直接讀取或解密 wallet-cli keystore，也不取得明文�
 ### 修復後驗證範圍
 
 - deterministic fixture 會真實 spawn Node entrypoint，解析 argv/stdin，覆蓋
-  version/catalog/networks/current、TRON/EVM transaction、typed-data、warning、
-  exit 1/2、timeout、超限與 malformed envelope；見
+  version/catalog/networks/current、TRON/EVM transaction、typed-data、startup migration、
+  warning、exit 1/2、timeout、超限與 malformed envelope；見
   [wallet-cli-process-integration.test.ts](../packages/typescript/tests/wallet-cli-process-integration.test.ts)。
 - secret lifecycle、client、adapter、resolver、CLI 與 TRON-only integration 各有分層測試；
   真實 executable 測試則由
   [wallet-cli-real-integration.test.ts](../packages/typescript/tests/wallet-cli-real-integration.test.ts)
   依明確環境變數 opt-in。
-- 上一級本機 `../wallet-cli/ts` source package、build 與全域 symlink 均為 `4.13.0`、
-  要求 Node >=20；agent-wallet handshake 明確要求 TRON/EVM 的 `tx.sign` 與
-  `typed-data.sign`。opt-in probe 以顯式 executable path 驗證 version/catalog/networks，
-  不依賴 PATH 猜測。
-- 最終等價品質命令結果為 22 test files / 275 tests 通過、1 file / 2 個需真實 executable
-  或 account 的 opt-in tests skipped；另以全域 sibling symlink 執行 real probe，
-  1 test 通過、1 test 因未提供 account/network 跳過。`tsc`、examples typecheck、
+- npm 正式發布的 `@tron-walletcli/wallet-cli@4.13.0` artifact 要求 Node >=20；agent-wallet
+  handshake 明確要求 TRON/EVM 的 `tx.sign` 與 `typed-data.sign`。opt-in probe 以顯式
+  executable path 驗證 version/catalog/networks，不依賴 PATH 或 sibling 開發連結猜測。
+- 2026-09-07 最終品質命令結果為 22 test files / 280 tests 通過、1 file / 2 個需真實
+  executable 或 account 的 opt-in tests skipped；另以 npm 正式 4.13.0 artifact 執行 real
+  probe，1 test 通過、1 test 因未提供 account/network 跳過。`tsc`、examples typecheck、
   ESLint、Prettier 與 ESM/CJS/DTS build 全部通過。
 
 ## 原始關鍵缺口與修復狀態

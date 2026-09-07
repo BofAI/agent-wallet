@@ -7,7 +7,7 @@
 - [`../README.md`](../README.md)：專案概覽與快速開始。
 - [`../packages/typescript/README.md`](../packages/typescript/README.md)：npm package 的公開契約與安裝方式。
 - [`getting-started.md`](./getting-started.md)：完整入門流程。
-- [`migration-v3.md`](./migration-v3.md)：從 2.x 升級到 3.0 的 breaking changes 與操作步驟。
+- [`migration-v3.md`](./migration-v3.md)：從 2.x 升級到尚未發布的 3.0 的 breaking changes 與操作步驟。
 - [`how-to-add-privy-wallet.md`](./how-to-add-privy-wallet.md)：Privy wallet 設定。
 - [`how-to-add-wallet-cli-wallet.md`](./how-to-add-wallet-cli-wallet.md)：wallet-cli wallet 設定。
 

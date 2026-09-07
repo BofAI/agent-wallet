@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The project is a TypeScript SDK and CLI codebase. Core responsibilities are wallet resolution, signing adapters, local secure storage, and CLI interaction.
+The project is a TypeScript SDK and CLI codebase. Core responsibilities are wallet resolution, signing adapters, external signer integration, and CLI interaction.
 
 ## Core Technologies
 
@@ -47,7 +47,7 @@ If a check is not run, explicitly state why and provide a follow-up plan.
 
 ### Required Tools
 
-- Node.js 18+
+- Node.js `^20.19.0 || ^22.13.0 || >=24` for repository development; the published runtime contract remains Node.js 18+
 - pnpm
 
 ### Common Commands
@@ -70,6 +70,6 @@ cd packages/typescript && pnpm build
 ## Key Technical Decisions
 
 - The project supports both config-backed and env-backed wallet resolution
-- Secure local storage is preferred for user workflows; env-based resolution is the fallback
-- This project signs data only and intentionally does not own transaction broadcasting
+- External signers are preferred for production workflows; plaintext config and env-based resolution are development fallbacks
+- The core package signs data only; optional protocol integrations may orchestrate transaction building and broadcasting
 - Features touching providers, adapters, config resolution, or CLI behavior should be scoped to the TypeScript package
