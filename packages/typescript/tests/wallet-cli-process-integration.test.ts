@@ -86,13 +86,17 @@ describe('wallet-cli deterministic process integration', () => {
       ].join('\n'),
       { mode: 0o700 },
     )
+    const secretExec = process.platform === 'win32' ? join(dir, 'get-password.cmd') : secretScript
+    if (process.platform === 'win32') {
+      writeFileSync(secretExec, `@echo off\r\n"${process.execPath}" "%~dp0get-password.mjs"\r\n`)
+    }
 
     const writer = new ConfigWalletProvider(dir)
     writer.addWallet('fixture-cli', {
       type: 'wallet_cli',
       params: {
         account: 'wlt_fixture.0',
-        password: { exec: secretScript, timeout: 2_000 },
+        password: { exec: secretExec, timeout: 2_000 },
       },
     })
 
@@ -102,7 +106,7 @@ describe('wallet-cli deterministic process integration', () => {
       }
     }
     expect(stored.wallets['fixture-cli'].params.password).toEqual({
-      exec: secretScript,
+      exec: secretExec,
       timeout: 2_000,
     })
 

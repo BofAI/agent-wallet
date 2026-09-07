@@ -15,6 +15,7 @@ import {
 
 const dirs: string[] = []
 const context = { label: 'wallet-cli password', accountId: 'wlt_test.0', network: 'tron:nile' }
+const isWindows = process.platform === 'win32'
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -32,12 +33,16 @@ async function consume(lease: SecretLease): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-function script(contents: string): { dir: string; path: string } {
+function script(contents: { posix: string; windows: string }): { dir: string; path: string } {
   const dir = mkdtempSync(join(tmpdir(), 'agent-wallet-secret-provider-'))
   dirs.push(dir)
-  const path = join(dir, 'secret.sh')
-  writeFileSync(path, `#!/bin/sh\n${contents}\n`, 'utf8')
-  chmodSync(path, 0o700)
+  const path = join(dir, isWindows ? 'secret.cmd' : 'secret.sh')
+  writeFileSync(
+    path,
+    isWindows ? `@echo off\r\n${contents.windows}\r\n` : `#!/bin/sh\n${contents.posix}\n`,
+    'utf8',
+  )
+  if (!isWindows) chmodSync(path, 0o700)
   return { dir, path }
 }
 
@@ -116,9 +121,12 @@ describe('SecretProvider', () => {
   })
 
   it('executes an exec source for every acquire and trims its Buffer output', async () => {
-    const { dir, path } = script(
-      'count_file="$(dirname "$0")/count"\ncount=$(cat "$count_file" 2>/dev/null || printf 0)\ncount=$((count + 1))\nprintf "%s" "$count" > "$count_file"\nprintf "  fixture-password  \\n"',
-    )
+    const { dir, path } = script({
+      posix:
+        'count_file="$(dirname "$0")/count"\ncount=$(cat "$count_file" 2>/dev/null || printf 0)\ncount=$((count + 1))\nprintf "%s" "$count" > "$count_file"\nprintf "  fixture-password  \\n"',
+      windows:
+        'set "count_file=%~dp0count"\r\nset "count=0"\r\nif exist "%count_file%" set /p count=<"%count_file%"\r\nset /a count+=1\r\n>"%count_file%" <nul set /p "=%count%"\r\n<nul set /p "=  fixture-password  "',
+    })
     const provider = new ExecSecretProvider({ exec: path })
     const first = await provider.acquire(context)
     const second = await provider.acquire(context)
@@ -130,12 +138,18 @@ describe('SecretProvider', () => {
   })
 
   it('classifies timeout and output limits without including secret output', async () => {
-    const timeoutScript = script('sleep 2\nprintf leaked-secret')
+    const timeoutScript = script({
+      posix: 'sleep 2\nprintf leaked-secret',
+      windows: 'ping -n 3 127.0.0.1 >nul\r\n<nul set /p "=leaked-secret"',
+    })
     await expect(
       new ExecSecretProvider({ exec: timeoutScript.path, timeout: 20 }).acquire(context),
     ).rejects.toThrow('timed out')
 
-    const outputScript = script('printf leaked-secret-value')
+    const outputScript = script({
+      posix: 'printf leaked-secret-value',
+      windows: '<nul set /p "=leaked-secret-value"',
+    })
     let caught: Error | undefined
     try {
       await new ExecSecretProvider({ exec: outputScript.path }, 'wallet-cli password', {
@@ -147,7 +161,10 @@ describe('SecretProvider', () => {
     expect(caught?.message).toContain('stdout limit')
     expect(caught?.message).not.toContain('leaked-secret-value')
 
-    const stderrScript = script('printf leaked-stderr >&2\nsleep 1')
+    const stderrScript = script({
+      posix: 'printf leaked-stderr >&2\nsleep 1',
+      windows: '<nul set /p "=leaked-stderr" 1>&2\r\nping -n 2 127.0.0.1 >nul',
+    })
     await expect(
       new ExecSecretProvider({ exec: stderrScript.path }, 'wallet-cli password', {
         maxStderrBytes: 4,
@@ -156,12 +173,18 @@ describe('SecretProvider', () => {
   })
 
   it('classifies empty output and non-zero exit without including process output', async () => {
-    const emptyScript = script('printf "  \n"')
+    const emptyScript = script({
+      posix: 'printf "  \n"',
+      windows: '<nul set /p "=  "',
+    })
     await expect(
       new ExecSecretProvider({ exec: emptyScript.path }).acquire(context),
     ).rejects.toThrow('produced no output')
 
-    const failedScript = script('printf leaked-output\nexit 7')
+    const failedScript = script({
+      posix: 'printf leaked-output\nexit 7',
+      windows: '<nul set /p "=leaked-output"\r\nexit /b 7',
+    })
     let caught: Error | undefined
     try {
       await new ExecSecretProvider({ exec: failedScript.path }).acquire(context)
@@ -176,7 +199,10 @@ describe('SecretProvider', () => {
     expect(defaultSecretProviderFactory('password', { label: 'test' })).toBeInstanceOf(
       StaticSecretProvider,
     )
-    const { path } = script('printf password')
+    const { path } = script({
+      posix: 'printf password',
+      windows: '<nul set /p "=password"',
+    })
     expect(defaultSecretProviderFactory({ exec: path }, { label: 'test' })).toBeInstanceOf(
       ExecSecretProvider,
     )
