@@ -125,7 +125,7 @@ describe('SecretProvider', () => {
       posix:
         'count_file="$(dirname "$0")/count"\ncount=$(cat "$count_file" 2>/dev/null || printf 0)\ncount=$((count + 1))\nprintf "%s" "$count" > "$count_file"\nprintf "  fixture-password  \\n"',
       windows:
-        'set "count_file=%~dp0count"\r\nset "count=0"\r\nif exist "%count_file%" set /p count=<"%count_file%"\r\nset /a count+=1\r\n>"%count_file%" <nul set /p "=%count%"\r\n<nul set /p "=  fixture-password  "',
+        'set "count_file=%~dp0count"\r\nset "count=0"\r\nif exist "%count_file%" set /p count=<"%count_file%"\r\nset /a count+=1\r\n>"%count_file%" <nul set /p "=%count%"\r\n<nul set /p "=  fixture-password  "\r\nexit /b 0',
     })
     const provider = new ExecSecretProvider({ exec: path })
     const first = await provider.acquire(context)
@@ -175,7 +175,7 @@ describe('SecretProvider', () => {
   it('classifies empty output and non-zero exit without including process output', async () => {
     const emptyScript = script({
       posix: 'printf "  \n"',
-      windows: '<nul set /p "=  "',
+      windows: '<nul set /p "=  "\r\nexit /b 0',
     })
     await expect(
       new ExecSecretProvider({ exec: emptyScript.path }).acquire(context),
