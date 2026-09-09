@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { hashTypedData } from 'viem'
 
 import { WalletCliAdapter } from '../src/core/adapters/wallet-cli.js'
 import type { WalletCliClient } from '../src/core/clients/wallet-cli.js'
@@ -24,7 +25,7 @@ function mockClient(): WalletCliClient {
       version: '4.13.0',
       catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
       networks: [],
-      network: { id: 'tron:nile', family: 'tron', chainId: 'nile' },
+      network: { id: 'tron:3448148188', family: 'tron', chainId: '3448148188' },
     }),
     currentAccount: vi.fn().mockResolvedValue(
       success('current', {
@@ -72,33 +73,44 @@ function trackingProvider() {
 }
 
 describe('WalletCliAdapter', () => {
-  it.each([undefined, '', 'tron', 'eip155', 'bsc', 'eip155:0', 'eip155:01'])(
-    'rejects incomplete or non-canonical network %s synchronously',
-    (network) => {
-      expect(
-        () =>
-          new WalletCliAdapter(
-            CONFIG,
-            mockClient(),
-            trackingProvider().provider,
-            network as string,
-          ),
-      ).toThrow(/network|chainId|aliases/i)
-    },
-  )
+  it.each([
+    undefined,
+    '',
+    'tron',
+    'eip155',
+    'bsc',
+    'evm:1',
+    'tron:nile',
+    'tron:mainnet',
+    'TRON:728126428',
+    ' tron:728126428',
+    'eip155:0',
+    'eip155:01',
+  ])('rejects incomplete or non-canonical network %s synchronously', (network) => {
+    expect(
+      () =>
+        new WalletCliAdapter(CONFIG, mockClient(), trackingProvider().provider, network as string),
+    ).toThrow(/network|chainId|aliases/i)
+  })
 
   it('shares one in-flight identity lookup and pins both family addresses', async () => {
     const client = mockClient()
-    const adapter = new WalletCliAdapter(CONFIG, client, trackingProvider().provider, 'tron:nile')
+    const adapter = new WalletCliAdapter(
+      CONFIG,
+      client,
+      trackingProvider().provider,
+      'tron:3448148188',
+    )
     await expect(Promise.all([adapter.getAddress(), adapter.getAddress()])).resolves.toEqual([
       TRON_ADDRESS,
       TRON_ADDRESS,
     ])
     expect(client.currentAccount).toHaveBeenCalledTimes(1)
     expect(client.currentAccount).toHaveBeenCalledWith('fixture', {
-      agentNetwork: 'tron:nile',
-      cliNetwork: 'tron:nile',
+      agentNetwork: 'tron:3448148188',
+      cliNetwork: 'tron:3448148188',
       family: 'tron',
+      requestedChainId: '3448148188',
     })
   })
 
@@ -115,7 +127,12 @@ describe('WalletCliAdapter', () => {
           addresses: { tron: TRON_ADDRESS },
         }),
       )
-    const adapter = new WalletCliAdapter(CONFIG, client, trackingProvider().provider, 'tron:nile')
+    const adapter = new WalletCliAdapter(
+      CONFIG,
+      client,
+      trackingProvider().provider,
+      'tron:3448148188',
+    )
     await expect(adapter.getAddress()).rejects.toThrow('temporary failure')
     await expect(adapter.getAddress()).resolves.toBe(TRON_ADDRESS)
     expect(client.currentAccount).toHaveBeenCalledTimes(2)
@@ -124,7 +141,7 @@ describe('WalletCliAdapter', () => {
   it('passes canonical account/network, acquires one lease and disposes it after TRON signing', async () => {
     const client = mockClient()
     const secret = trackingProvider()
-    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
+    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:3448148188')
     const signed = await adapter.signTransaction({ txID: 'abc', raw_data_hex: 'deadbeef' })
 
     expect(signed).toMatchObject({
@@ -134,13 +151,13 @@ describe('WalletCliAdapter', () => {
     expect(secret.acquire).toHaveBeenCalledWith({
       label: 'wallet-cli password',
       accountId: 'wlt_fixture.0',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
     })
     expect(client.signTronTransaction).toHaveBeenCalledWith(
       JSON.stringify({ txID: 'abc', raw_data_hex: 'deadbeef' }),
       secret.leases[0].lease,
       expect.objectContaining({ accountId: 'wlt_fixture.0' }),
-      expect.objectContaining({ cliNetwork: 'tron:nile' }),
+      expect.objectContaining({ cliNetwork: 'tron:3448148188' }),
       undefined,
     )
     expect(secret.leases[0].dispose).toHaveBeenCalledTimes(1)
@@ -157,7 +174,7 @@ describe('WalletCliAdapter', () => {
       }),
     )
     const secret = trackingProvider()
-    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
+    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:3448148188')
     await expect(adapter.signTransaction({ txID: 'abc' })).rejects.toMatchObject({
       code: 'contract_mismatch',
     })
@@ -203,7 +220,7 @@ describe('WalletCliAdapter', () => {
       Object.assign(new Error('aborted'), { code: 'aborted' }),
     )
     const secret = trackingProvider()
-    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:nile')
+    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'tron:3448148188')
 
     await expect(
       adapter.signTransaction({ txID: 'abc' }, { signal: controller.signal }),
@@ -257,9 +274,64 @@ describe('WalletCliAdapter', () => {
         JSON.stringify(typedData),
         secret.leases[0].lease,
         expect.objectContaining({ accountId: 'wlt_fixture.0' }),
-        expect.objectContaining({ cliNetwork: 'evm:1' }),
+        expect.objectContaining({ cliNetwork: 'eip155:1' }),
         undefined,
       )
     },
   )
+
+  it('serializes nested typed-data bigint values as digest-equivalent decimal strings', async () => {
+    const client = mockClient()
+    const secret = trackingProvider()
+    const adapter = new WalletCliAdapter(CONFIG, client, secret.provider, 'eip155:1')
+    const typedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+        ],
+        Payment: [
+          { name: 'recipient', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+        ],
+        Batch: [
+          { name: 'payments', type: 'Payment[]' },
+          { name: 'nonce', type: 'uint256' },
+        ],
+      },
+      primaryType: 'Batch',
+      domain: { name: 'BigInt fixture', chainId: 1n },
+      message: {
+        payments: [
+          {
+            recipient: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+            amount: 1_000_000_000_000_000_000n,
+          },
+        ],
+        nonce: 2n ** 256n - 1n,
+      },
+    }
+
+    await adapter.signTypedData(typedData)
+    const serialized = vi.mocked(client.signTypedData).mock.calls[0][0]
+    const parsed = JSON.parse(serialized)
+
+    expect(parsed.domain.chainId).toBe('1')
+    expect(parsed.message.payments[0].amount).toBe('1000000000000000000')
+    expect(parsed.message.nonce).toBe((2n ** 256n - 1n).toString())
+    expect(hashTypedData(parsed)).toBe(hashTypedData(typedData))
+  })
+
+  it('still rejects cyclic typed-data payloads', async () => {
+    const client = mockClient()
+    const adapter = new WalletCliAdapter(CONFIG, client, trackingProvider().provider, 'eip155:1')
+    const typedData: Record<string, unknown> = {
+      domain: { chainId: 1 },
+      types: {},
+      message: {},
+    }
+    typedData.self = typedData
+
+    await expect(adapter.signTypedData(typedData)).rejects.toThrow('not JSON serializable')
+  })
 })

@@ -33,7 +33,7 @@ export class ConfigWalletProvider implements WalletProvider {
     options?: { network?: string; dependencies?: WalletDependencies },
   ) {
     this.configDir = configDir
-    this.network = options?.network
+    this.network = resolveNetwork(undefined, options?.network)
     const walletCli = options?.dependencies?.walletCli
     this.dependencies = walletCli
       ? {

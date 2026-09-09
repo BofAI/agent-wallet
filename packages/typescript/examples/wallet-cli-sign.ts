@@ -7,14 +7,14 @@
  * Usage:
  *   AGENT_WALLET_DIR=~/.agent-wallet \
  *   WALLET_ID=cli-wallet \
- *   NETWORK=tron:nile \
+ *   NETWORK=tron:3448148188 \
  *   npx tsx examples/wallet-cli-sign.ts
  */
 
 import { ConfigWalletProvider, resolveWalletProvider } from '../src/index.js'
 import { reportExampleError, requireEip712Wallet } from './example-utils.js'
 
-const NETWORK = process.env.NETWORK ?? 'tron:nile'
+const NETWORK = process.env.NETWORK ?? 'tron:3448148188'
 const WALLET_ID = process.env.WALLET_ID
 
 async function main() {

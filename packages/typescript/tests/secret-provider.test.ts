@@ -14,7 +14,11 @@ import {
 } from '../src/core/secret-provider.js'
 
 const dirs: string[] = []
-const context = { label: 'wallet-cli password', accountId: 'wlt_test.0', network: 'tron:nile' }
+const context = {
+  label: 'wallet-cli password',
+  accountId: 'wlt_test.0',
+  network: 'tron:3448148188',
+}
 const isWindows = process.platform === 'win32'
 
 afterEach(() => {
@@ -172,6 +176,32 @@ describe('SecretProvider', () => {
     ).rejects.toThrow('stderr limit')
   })
 
+  it.runIf(!isWindows)(
+    'kills descendants that keep inherited pipes open after timeout',
+    async () => {
+      const pidDir = mkdtempSync(join(tmpdir(), 'agent-wallet-descendant-pid-'))
+      dirs.push(pidDir)
+      const pidFile = join(pidDir, 'pid')
+      const timeoutScript = script({
+        posix:
+          'trap "exit 0" TERM\n( trap "" TERM; sleep 30 ) &\nprintf "%s" "$!" > "$DESCENDANT_PID_FILE"\nwait',
+        windows: 'exit /b 0',
+      })
+      const started = Date.now()
+
+      await expect(
+        new ExecSecretProvider({ exec: timeoutScript.path, timeout: 5_000 }, 'secret', {
+          env: { ...process.env, DESCENDANT_PID_FILE: pidFile },
+          killGraceMs: 30,
+        }).acquire(context),
+      ).rejects.toThrow('timed out')
+
+      expect(Date.now() - started).toBeLessThan(6_000)
+      const descendantPid = Number(readFileSync(pidFile, 'utf8'))
+      await expect(waitForProcessExit(descendantPid)).resolves.toBeUndefined()
+    },
+  )
+
   it('classifies empty output and non-zero exit without including process output', async () => {
     const emptyScript = script({
       posix: 'printf "  \n"',
@@ -208,3 +238,16 @@ describe('SecretProvider', () => {
     )
   })
 })
+
+async function waitForProcessExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 2_000
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0)
+    } catch {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error(`descendant process ${pid} remained alive`)
+}

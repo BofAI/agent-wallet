@@ -171,8 +171,9 @@ agent-wallet resolve-address my_cli_wallet
 
 ## 簽章
 
-`wallet_cli` 強制完整 network：TRON 使用 `tron:<name>`，EVM 使用
-`eip155:<positive-chain-id>`。裸 `tron`、裸 `eip155`、alias 或省略 network 都會在
+agent-wallet 全面只接受 canonical CAIP-2 network；`wallet_cli` 的 TRON 使用
+`tron:<positive-chain-id>`，EVM 使用 `eip155:<positive-chain-id>`，並把同一 ID 原樣傳給
+wallet-cli。裸 `tron`、裸 `eip155`、`evm:*`、名稱 alias 或省略 network 都會在
 子程序與秘密取得前失敗，不會默認 mainnet。
 
 ### Typed data（TIP-712 / EIP-712）
@@ -193,7 +194,7 @@ agent-wallet sign typed-data '{
 
 ```bash
 agent-wallet sign tx '{"txID":"...","raw_data":{},"raw_data_hex":"..."}' \
-  -n tron:nile -w my_cli_wallet
+  -n tron:3448148188 -w my_cli_wallet
 ```
 
 回傳值是包含 `signature` 的完整 JSON artifact。
@@ -226,22 +227,26 @@ import { signAndBroadcast } from "@bankofai/agent-wallet/integrations/wallet-cli
 
 const client = new WalletCliClient();
 const wallet = await resolveWallet({
-  network: "tron:nile",
+  network: "tron:3448148188",
   dependencies: { walletCli: { clientFactory: () => client } },
 });
 
 const result = await signAndBroadcast(wallet, client, {
   to: "T...",
   amount: "1",
-  network: "tron:nile",
+  network: "tron:3448148188",
   wait: true,
 });
 console.log(result);
 // { txId: '...', stage: 'confirmed', confirmed: true, blockNumber: '...' }
 ```
 
-`tron:mainnet` 必須明確傳 `confirmMainnet: true`。broadcast timeout 或狀態不明時不會
+`tron:728126428` 必須明確傳 `confirmMainnet: true`。broadcast timeout 或狀態不明時不會
 自動重簽或重送；caller 應以 `tx status` 複核。
+
+`signAndBroadcast` 會用注入 wallet 的地址建立交易並核對 transaction owner，不依賴
+wallet-cli 當下的 active account。若 broadcast 已回傳 txId、但後續 status query 失敗，
+錯誤會保留該 `txId`、分類 `code` 與 `cause`；請用該 txId 繼續查詢，不要重送交易。
 
 ## 錯誤與程序界線
 
@@ -287,7 +292,7 @@ AGENT_WALLET_TEST_WALLET_CLI_NETWORK
 
 只有 path 時會驗證 agent-wallet 的 executable resolution 與 compatibility handshake；
 同時提供 account 與 network 時，會再經由 `WalletCliAdapter` 驗證 agent-wallet 的
-canonical account 固定、network mapping 與地址解析。測試不會 fallback
+canonical account 固定、network 原樣傳遞與地址解析。測試不會 fallback
 到全域 binary，也不會修改、安裝依賴或建置上一級本機
 `../wallet-cli`。
 
@@ -297,5 +302,5 @@ canonical account 固定、network mapping 與地址解析。測試不會 fallba
 
 - 安裝穩定版 wallet-cli 4.x，建立或匯入 account；4.13.0 沒有獨立 `init`。
 - 以互動輸入或 `--cli-password-exec` 設定秘密；不要使用明文 argv。
-- 簽章一律指定完整 `tron:<name>` 或 `eip155:<chain-id>`。
+- 簽章一律指定 canonical `tron:<chain-id>` 或 `eip155:<chain-id>`。
 - 核心簽章支援 TRON/EVM；選用 build/broadcast/status integration 仍為 TRON-only。

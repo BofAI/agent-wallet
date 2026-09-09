@@ -38,7 +38,7 @@ export class PrivyAdapter implements Wallet, Eip712Capable {
   constructor(config: PrivyConfig, client: PrivyClient, network?: string) {
     this.config = config
     this.client = client
-    this.requestedFamily = network ? parseNetworkFamily(network) : undefined
+    this.requestedFamily = network === undefined ? undefined : parseNetworkFamily(network)
   }
 
   async getAddress(): Promise<string> {

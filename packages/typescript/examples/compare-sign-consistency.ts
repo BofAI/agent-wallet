@@ -18,7 +18,7 @@ const RAW_SECRET_ID = process.env.RAW_SECRET_WALLET_ID ?? 'default_raw'
 const PRIVY_EVM_ID = process.env.PRIVY_EVM_WALLET_ID ?? 'privy_evm'
 const PRIVY_TRON_ID = process.env.PRIVY_TRON_WALLET_ID ?? 'privy_tron_2'
 const EVM_NETWORK = process.env.EVM_NETWORK ?? 'eip155:1'
-const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron:mainnet'
+const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron:728126428'
 
 const provider = resolveWalletProvider({ dir: DIR })
 if (!(provider instanceof ConfigWalletProvider)) {

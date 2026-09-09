@@ -29,6 +29,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "test:cjs": "node scripts/test-cjs-entrypoints.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json && eslint src/ examples/",

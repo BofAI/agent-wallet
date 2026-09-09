@@ -18,7 +18,6 @@ import { WalletCliNotFoundError } from '../core/errors.js'
 import { WalletCliClient } from '../core/clients/wallet-cli.js'
 import { ConfigWalletProvider } from '../core/providers/config-provider.js'
 import { decodePrivateKey } from '../core/utils/keys.js'
-import { parseNetworkFamily } from '../core/utils/network.js'
 import { type SecretValue } from '../core/secret-resolver.js'
 import { CliExit, promptInput, selectInput, type CliIO } from './cli-io.js'
 import { printWalletTable } from './cli-output.js'
@@ -284,7 +283,9 @@ async function buildRawSecretConfig(
     opts.mnemonicIndex,
   )
   const derivationProfile = opts.deriveAs ?? (await promptDerivationProfile(io))
-  parseNetworkFamily(derivationProfile)
+  if (derivationProfile !== 'eip155' && derivationProfile !== 'tron') {
+    throw new Error("mnemonic derivation profile must be 'eip155' or 'tron'")
+  }
   return {
     type: 'raw_secret',
     params: {
@@ -426,17 +427,18 @@ async function resolveWalletCliAccount(
   client: WalletCliClient,
   requestedAccount?: string,
 ): Promise<string> {
-  const accountRef =
-    requestedAccount?.trim() ||
-    (
-      await promptInput(
-        io,
-        'Existing wallet-cli account label (optional, press Enter to use active)',
-        {},
-        'wallet-cli account',
-      )
-    ).trim() ||
-    undefined
+  let accountRef = requestedAccount?.trim() || undefined
+  if (!accountRef && io.interactive !== false) {
+    accountRef =
+      (
+        await promptInput(
+          io,
+          'Existing wallet-cli account label (optional, press Enter to use active)',
+          {},
+          'wallet-cli account',
+        )
+      ).trim() || undefined
+  }
 
   try {
     const result = await client.currentAccount(accountRef)

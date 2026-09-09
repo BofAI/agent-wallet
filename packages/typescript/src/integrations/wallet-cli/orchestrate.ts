@@ -12,7 +12,7 @@
 
 import type { Wallet } from '../../core/base.js'
 import type { WalletCliClient } from '../../core/clients/wallet-cli.js'
-import { WalletCliExecutionError } from '../../core/errors.js'
+import { WalletCliExecutionError, WalletCliSubmittedTransactionError } from '../../core/errors.js'
 import { buildTransfer, broadcast, getTxStatus } from './chain-ops.js'
 import { assertTronWalletCliNetwork } from '../../core/wallet-cli-network.js'
 
@@ -39,23 +39,25 @@ export interface SignAndBroadcastResult {
 
 const DEFAULT_WAIT_TIMEOUT_MS = 60_000
 const POLL_INTERVAL_MS = 3_000
-const MAINNET = 'tron:mainnet'
+const MAINNET = 'tron:728126428'
 
 export async function signAndBroadcast(
   wallet: Wallet,
   client: WalletCliClient,
   params: SignAndBroadcastParams,
 ): Promise<SignAndBroadcastResult> {
-  assertTronWalletCliNetwork(params.network)
+  const target = assertTronWalletCliNetwork(params.network)
   // Mainnet safety guard
-  if (params.network === MAINNET && !params.confirmMainnet) {
+  if (target.cliNetwork === MAINNET && !params.confirmMainnet) {
     throw new Error(
       `Mainnet broadcast requires explicit confirmation: pass confirmMainnet: true for ${MAINNET}`,
     )
   }
 
   // Step 1: Build unsigned transaction (no password)
+  const sourceAddress = await wallet.getAddress()
   const buildResult = await buildTransfer(client, {
+    from: sourceAddress,
     to: params.to,
     amount: params.amount,
     rawAmount: params.rawAmount,
@@ -102,7 +104,12 @@ export async function signAndBroadcast(
 
   const deadline = Date.now() + (params.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
   while (Date.now() < deadline) {
-    const statusResult = await getTxStatus(client, txId, params.network)
+    let statusResult
+    try {
+      statusResult = await getTxStatus(client, txId, params.network)
+    } catch (error) {
+      throw new WalletCliSubmittedTransactionError(txId, error)
+    }
     if (!statusResult.data) {
       await sleep(POLL_INTERVAL_MS)
       continue

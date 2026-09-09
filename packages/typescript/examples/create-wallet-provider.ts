@@ -28,7 +28,7 @@ async function main() {
         : `Mode: mnemonic (accountIndex=${source.accountIndex})\n`,
     )
 
-    const tronProvider = resolveWalletProvider({ network: 'tron:mainnet' })
+    const tronProvider = resolveWalletProvider({ network: 'tron:728126428' })
     const evmProvider = resolveWalletProvider({ network: 'eip155:1' })
 
     await printWallet('TRON', tronProvider)

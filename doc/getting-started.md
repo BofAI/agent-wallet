@@ -56,7 +56,7 @@ Use `agent-wallet start --help`, `agent-wallet start raw_secret --help`, or `age
 | Concept                     | Meaning                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Wallet types**            | `raw_secret` — private key or mnemonic stored in **plaintext** inside `wallets_config.json` (dev only); `privy` — uses Privy app credentials plus wallet ID; `wallet_cli` — 金鑰由相容的 `@tron-walletcli/wallet-cli` 4.x 管理，透過受限子程序委派 TRON/EVM 簽章（見 [how-to-add-wallet-cli-wallet.md](./how-to-add-wallet-cli-wallet.md)）。 |
-| **Signing network**         | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:nile`). The CLI picks EVM vs Tron **adapter** from this string.                                                                                                                                                                                                   |
+| **Signing network**         | Every `sign` subcommand requires `--network` / `-n` (e.g. `eip155:1`, `tron:3448148188`). The CLI picks EVM vs Tron **adapter** from this string.                                                                                                                                                                                                   |
 | **Active wallet**           | Used when you omit `--wallet-id` / `-w` on `sign`. Set with `use <id>`.                                                                                                                                                                                                                                                                       |
 | **Exec script credentials** | For `privy` and `wallet_cli` wallets, credentials can reference an executable script instead of storing plaintext in config. See [Exec Script Credentials](#exec-script-credentials) below.                                                                                                                                                   |
 
@@ -185,7 +185,8 @@ If you remove the active wallet and other wallets still exist, the CLI can optio
 ## 10. `sign`
 
 簽章 subcommand 都接受 **`--network` / `-n`**；`raw_secret` 與 `wallet_cli` 需要此值，
-Privy EVM 可依 payload chainId 運作。
+Privy EVM 可依 payload chainId 運作。只接受精確的 canonical CAIP-2：
+`eip155:<positive-chain-id>` 或 `tron:<positive-chain-id>`；不會正規化 alias、大小寫或空白。
 
 ```bash
 agent-wallet sign tx '<json>' -n eip155:1 [-w WALLET_ID] ...
@@ -195,13 +196,13 @@ agent-wallet sign typed-data '<json>' -n eip155:1 [-w WALLET_ID] ...
 | Option        | Short | Description                                                    |
 | ------------- | ----- | -------------------------------------------------------------- |
 | `--wallet-id` | `-w`  | Wallet id (defaults to active)                                 |
-| `--network`   | `-n`  | `raw_secret` / `wallet_cli` 必填；例如 `eip155:1`、`tron:nile` |
+| `--network`   | `-n`  | `raw_secret` / `wallet_cli` 必填；例如 `eip155:1`、`tron:3448148188` |
 | `--dir`       | `-d`  | Secrets directory                                              |
 
 - **`raw_secret` wallets:** signs directly with the stored private key.
-- **`privy` wallets:** delegates signing to the Privy API. EVM does not require `--network`; it follows the `chainId` in the payload.
+- **`privy` wallets:** delegates signing to the Privy API. EVM does not require `--network`; it follows the `chainId` in the payload. If supplied, `--network` must be canonical CAIP-2.
 - **`wallet_cli` wallets：** 支援 TRON/EVM transaction 與 typed-data。
-  必須使用完整 `tron:<name>` 或 `eip155:<positive-chain-id>`；裸 family、alias 與省略值會
+  必須使用 `tron:<positive-chain-id>` 或 `eip155:<positive-chain-id>`；裸 family、alias 與省略值會
   在子程序及 secret acquire 前 fail-fast。簽章結果會核對固定 account/network/signer。
 
 Signed tx 使用 typed artifact：TRON transaction object 會 pretty-print，EVM

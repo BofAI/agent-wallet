@@ -11,7 +11,7 @@ import type {
 } from '../base.js'
 import { Network } from '../base.js'
 import { UnsupportedOperationError } from '../errors.js'
-import { parseNetworkFamily } from '../utils/network.js'
+import { parseCanonicalNetwork } from '../utils/network.js'
 import { EvmSigner } from './evm.js'
 import { TronSigner } from './tron.js'
 
@@ -47,8 +47,8 @@ export class LocalSigner implements Wallet, Eip712Capable {
 }
 
 function createSigner(privateKey: Uint8Array, network?: string): Wallet {
-  const family = parseNetworkFamily(network)
-  if (family === Network.EVM) return new EvmSigner(privateKey, network)
-  if (family === Network.TRON) return new TronSigner(privateKey, network)
+  const target = parseCanonicalNetwork(network)
+  if (target.family === Network.EVM) return new EvmSigner(privateKey, target.id)
+  if (target.family === Network.TRON) return new TronSigner(privateKey, target.id)
   throw new Error(`Unknown network: ${network}`)
 }

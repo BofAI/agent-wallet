@@ -44,6 +44,7 @@ export interface ExecSecretProviderOptions {
   maxStderrBytes?: number
   platform?: NodeJS.Platform
   comspec?: string
+  killGraceMs?: number
 }
 
 class BufferSecretLease implements SecretLease {

@@ -61,15 +61,15 @@ async function runOperational() {
   const id = commandId(args)
   if (id === 'networks') {
     success('networks', [
-      { id: 'tron:nile', alias: 'nile', family: 'tron', chainId: 'nile' },
-      { id: 'tron:mainnet', alias: 'mainnet', family: 'tron', chainId: 'mainnet' },
-      { id: 'evm:1', alias: 'ethereum', family: 'evm', chainId: '1' },
-      { id: 'evm:56', alias: 'bsc', family: 'evm', chainId: '56' },
+      { id: 'tron:3448148188', alias: 'nile', family: 'tron', chainId: '3448148188' },
+      { id: 'tron:728126428', alias: 'mainnet', family: 'tron', chainId: '728126428' },
+      { id: 'eip155:1', alias: 'ethereum', family: 'evm', chainId: '1' },
+      { id: 'eip155:56', alias: 'bsc', family: 'evm', chainId: '56' },
     ])
     return
   }
   if (id === 'current') {
-    const chain = chainFor(valueOf('--network') ?? 'tron:mainnet')
+    const chain = chainFor(valueOf('--network') ?? 'tron:728126428')
     success(
       'current',
       {
@@ -175,10 +175,10 @@ function valueOf(flag) {
 }
 
 function chainFor(network) {
-  if (network === 'tron:nile') return { family: 'tron', network, chainId: 'nile' }
-  if (network === 'tron:mainnet') return { family: 'tron', network, chainId: 'mainnet' }
-  if (network === 'evm:1') return { family: 'evm', network, chainId: '1' }
-  if (network === 'evm:56') return { family: 'evm', network, chainId: '56' }
+  if (network === 'tron:3448148188') return { family: 'tron', network, chainId: '3448148188' }
+  if (network === 'tron:728126428') return { family: 'tron', network, chainId: '728126428' }
+  if (network === 'eip155:1') return { family: 'evm', network, chainId: '1' }
+  if (network === 'eip155:56') return { family: 'evm', network, chainId: '56' }
   return undefined
 }
 

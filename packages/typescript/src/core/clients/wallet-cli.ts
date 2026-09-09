@@ -4,9 +4,20 @@ import { createRequire } from 'node:module'
 import { dirname, extname, resolve } from 'node:path'
 import { z } from 'zod'
 
-import { WalletCliExecutionError, WalletCliNotFoundError, WalletCliUsageError } from '../errors.js'
+import {
+  NetworkError,
+  WalletCliExecutionError,
+  WalletCliNotFoundError,
+  WalletCliUsageError,
+} from '../errors.js'
 import type { SecretLease } from '../secret-provider.js'
-import type { WalletCliNetworkTarget } from '../wallet-cli-network.js'
+import { parseWalletCliNetwork, type WalletCliNetworkTarget } from '../wallet-cli-network.js'
+import {
+  destroyProcessPipes,
+  forceKillProcessTree,
+  shouldDetachProcess,
+  signalProcessTree,
+} from '../utils/process-tree.js'
 
 export const WALLET_CLI_MIN_VERSION = '4.13.0'
 export const WALLET_CLI_MAX_MAJOR = 5
@@ -285,6 +296,7 @@ export class WalletCliClient {
   }
 
   async ensureCompatible(target?: WalletCliNetworkTarget): Promise<WalletCliCompatibility> {
+    if (target) assertCanonicalTarget(target)
     let compatibilityPromise = this.compatibilityPromise
     if (!compatibilityPromise) {
       compatibilityPromise = this.loadCompatibility()
@@ -544,6 +556,7 @@ export class WalletCliClient {
         env: this.options.env ?? process.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false,
+        detached: shouldDetachProcess(),
       })
       const stdout: Buffer[] = []
       let stdoutBytes = 0
@@ -576,8 +589,25 @@ export class WalletCliClient {
       const terminate = () => {
         if (terminating) return
         terminating = true
-        child.kill('SIGTERM')
-        killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs)
+        signalProcessTree(child, 'SIGTERM')
+        killTimer = setTimeout(() => {
+          forceKillProcessTree(child)
+          destroyProcessPipes(child)
+          if (aborted) {
+            reject(new WalletCliExecutionError('wallet-cli operation was aborted', 'aborted'))
+          } else if (timedOut) {
+            reject(new WalletCliExecutionError('wallet-cli process timed out', 'timeout'))
+          } else if (exceeded) {
+            reject(
+              new WalletCliExecutionError(
+                `wallet-cli exceeded the configured ${exceeded} limit`,
+                'output_limit',
+              ),
+            )
+          } else {
+            reject(new WalletCliExecutionError('wallet-cli stdin write failed', 'stdin_write'))
+          }
+        }, killGraceMs)
         killTimer.unref?.()
       }
       const timeoutTimer = setTimeout(() => {
@@ -649,14 +679,20 @@ export class WalletCliClient {
         resolveResult({ stdout: Buffer.concat(stdout, stdoutBytes), exitCode })
       })
 
+      child.stdin.on('error', () => {
+        if (settled || terminating) return
+        stdinFailed = true
+        clearTimeout(timeoutTimer)
+        terminate()
+      })
+
       const writeInput = async () => {
         if (!child.stdin) return
         if (isSecretLease(stdin)) {
           await stdin.writeTo(child.stdin)
           return
         }
-        if (stdin === undefined) child.stdin.end()
-        else child.stdin.end(stdin)
+        await endWritable(child.stdin, stdin)
       }
       void writeInput().catch(() => {
         if (terminating) return
@@ -692,6 +728,54 @@ export class WalletCliClient {
 
   private checkNodeVersion(target: WalletCliLaunchTarget): void {
     assertWalletCliNodeRuntime(target)
+  }
+}
+
+function endWritable(
+  writable: NodeJS.WritableStream,
+  value: string | Buffer | undefined,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      writable.off('error', onError)
+      writable.off('finish', onFinish)
+      writable.off('close', onClose)
+      if (error) reject(error)
+      else resolve()
+    }
+    const onError = (error: Error) => finish(error)
+    const onFinish = () => finish()
+    const onClose = () => {
+      const state = writable as NodeJS.WritableStream & { writableFinished?: boolean }
+      if (!state.writableFinished) {
+        finish(Object.assign(new Error('stdin closed before finishing'), { code: 'EPIPE' }))
+      }
+    }
+    writable.once('error', onError)
+    writable.once('finish', onFinish)
+    writable.once('close', onClose)
+    try {
+      if (value === undefined) writable.end()
+      else writable.end(value)
+    } catch (error) {
+      finish(error as Error)
+    }
+  })
+}
+
+function assertCanonicalTarget(target: WalletCliNetworkTarget): void {
+  const canonical = parseWalletCliNetwork(target.agentNetwork)
+  if (
+    target.family !== canonical.family ||
+    target.cliNetwork !== canonical.cliNetwork ||
+    target.requestedChainId !== canonical.requestedChainId
+  ) {
+    throw new NetworkError(
+      `Invalid wallet-cli network target '${target.agentNetwork}'; use the unmodified canonical target returned by parseWalletCliNetwork().`,
+    )
   }
 }
 

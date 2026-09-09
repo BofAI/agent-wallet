@@ -67,15 +67,15 @@ describe('resolver – no valid wallet source', () => {
 
   describe('resolveWallet', () => {
     it('throws when no wallet source (evm)', async () => {
-      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'evm' })).rejects.toThrow(
+      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'eip155:1' })).rejects.toThrow(
         'resolve_wallet could not find a wallet source in config or env',
       )
     })
 
     it('throws when no wallet source (tron)', async () => {
-      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'tron' })).rejects.toThrow(
-        'resolve_wallet could not find a wallet source in config or env',
-      )
+      await expect(
+        resolveWallet({ dir: NONEXISTENT_DIR, network: 'tron:728126428' }),
+      ).rejects.toThrow('resolve_wallet could not find a wallet source in config or env')
     })
 
     it('throws when no network is specified and no env source exists', async () => {
@@ -89,7 +89,7 @@ describe('resolver – no valid wallet source', () => {
 
   describe('EnvWalletProvider – getActiveWallet always throws without valid source', () => {
     it('throws when neither privateKey nor mnemonic is provided', async () => {
-      const provider = new EnvWalletProvider({ network: 'evm' })
+      const provider = new EnvWalletProvider({ network: 'eip155:1' })
       await expect(provider.getActiveWallet()).rejects.toThrow(
         'resolve_wallet could not find a wallet source in config or env',
       )
@@ -113,7 +113,7 @@ describe('resolver – no valid wallet source', () => {
       process.env.AGENT_WALLET_PRIVATE_KEY = 'deadbeef'
       process.env.AGENT_WALLET_MNEMONIC =
         'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
-      const provider = new EnvWalletProvider({ network: 'evm' })
+      const provider = new EnvWalletProvider({ network: 'eip155:1' })
       await expect(provider.getActiveWallet()).rejects.toThrow(
         'Provide only one of AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC',
       )
@@ -138,7 +138,7 @@ describe('resolver – no valid wallet source', () => {
     it('throws WalletNotFoundError when config has zero wallets', async () => {
       saveConfig(tempDir, { active_wallet: null, wallets: {} })
       const provider = new ConfigWalletProvider(tempDir, {
-        network: 'eip155',
+        network: 'eip155:1',
       })
       await expect(provider.getActiveWallet()).rejects.toThrow(WalletNotFoundError)
       await expect(provider.getActiveWallet()).rejects.toThrow('No active wallet set')
@@ -147,7 +147,7 @@ describe('resolver – no valid wallet source', () => {
     it('throws WalletNotFoundError when active_wallet points to non-existent id', async () => {
       saveConfig(tempDir, { active_wallet: 'ghost', wallets: {} })
       const provider = new ConfigWalletProvider(tempDir, {
-        network: 'eip155',
+        network: 'eip155:1',
       })
       await expect(provider.getActiveWallet()).rejects.toThrow(WalletNotFoundError)
       await expect(provider.getActiveWallet()).rejects.toThrow("Wallet 'ghost' not found")
@@ -175,9 +175,9 @@ describe('resolver – no valid wallet source', () => {
     it('throws on getWallet with non-existent walletId', async () => {
       saveConfig(tempDir, { active_wallet: null, wallets: {} })
       const provider = new ConfigWalletProvider(tempDir, {
-        network: 'eip155',
+        network: 'eip155:1',
       })
-      await expect(provider.getWallet('nope', 'eip155')).rejects.toThrow(WalletNotFoundError)
+      await expect(provider.getWallet('nope', 'eip155:1')).rejects.toThrow(WalletNotFoundError)
     })
   })
 })

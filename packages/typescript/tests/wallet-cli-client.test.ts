@@ -50,6 +50,8 @@ function fakeChild(options: {
   exitCode?: number
   spawnError?: NodeJS.ErrnoException
   neverClose?: boolean
+  ignoreKillClose?: boolean
+  stdinError?: NodeJS.ErrnoException
 }) {
   const events = new EventEmitter()
   const stdout = new PassThrough()
@@ -75,7 +77,8 @@ function fakeChild(options: {
   const stdin = new Writable({
     write(chunk, _encoding, callback) {
       stdinChunks.push(Buffer.from(chunk))
-      callback()
+      if (options.stdinError) process.nextTick(() => callback(options.stdinError))
+      else callback()
     },
     final(callback) {
       complete()
@@ -87,7 +90,7 @@ function fakeChild(options: {
     stdout,
     stderr,
     kill: vi.fn((signal: string) => {
-      if (!completed && options.neverClose && signal === 'SIGKILL') {
+      if (!completed && options.neverClose && !options.ignoreKillClose && signal === 'SIGKILL') {
         completed = true
         events.emit('close', null)
       } else if (!completed && !options.neverClose) {
@@ -101,6 +104,19 @@ function fakeChild(options: {
 
 describe('WalletCliClient bounded runner', () => {
   beforeEach(() => mockSpawn.mockReset())
+
+  it('rejects a rewritten wallet-cli target before spawning', async () => {
+    const client = new WalletCliClient()
+    await expect(
+      client.ensureCompatible({
+        family: 'evm',
+        agentNetwork: 'eip155:1',
+        cliNetwork: 'evm:1',
+        requestedChainId: '1',
+      }),
+    ).rejects.toThrow(/unmodified canonical target/)
+    expect(mockSpawn).not.toHaveBeenCalled()
+  })
 
   it('maps JavaScript paths to Node and rejects unsafe Windows shell shims', () => {
     expect(
@@ -195,7 +211,7 @@ describe('WalletCliClient bounded runner', () => {
     for (const sample of [
       failure('auth_failed', 'wrong password', { command: 'account.remove' }),
       failure('auth_failed', 'wrong password', {
-        chain: { family: 'tron', network: 'tron:nile', chainId: 'nile' },
+        chain: { family: 'tron', network: 'tron:3448148188', chainId: '3448148188' },
       }),
     ]) {
       mockSpawn.mockReturnValueOnce(fakeChild({ stdout: sample, exitCode: 1 }).child)
@@ -226,7 +242,7 @@ describe('WalletCliClient bounded runner', () => {
       envelope({ address: 'T123' }, { command: 'list' }),
       envelope(
         { address: 'T123' },
-        { chain: { family: 'tron', network: 'tron:nile', chainId: 'nile' } },
+        { chain: { family: 'tron', network: 'tron:3448148188', chainId: '3448148188' } },
       ),
       envelope({ wrong: true }),
     ]) {
@@ -267,6 +283,23 @@ describe('WalletCliClient bounded runner', () => {
     })
     expect(Buffer.concat(stdinChunks).toString('utf8')).toBe('signed-transaction')
   })
+
+  it.each(['text payload', Buffer.from('buffer payload')])(
+    'classifies an asynchronous ordinary stdin EPIPE for %s',
+    async (stdin) => {
+      const error = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })
+      const { child } = fakeChild({ stdinError: error })
+      mockSpawn.mockReturnValueOnce(child)
+
+      await expect(
+        new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], {
+          ...contract,
+          stdin,
+        }),
+      ).rejects.toMatchObject({ code: 'stdin_write' })
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+    },
+  )
 
   it('classifies a lease stdin write failure without exposing the underlying message', async () => {
     const { child } = fakeChild({})
@@ -309,7 +342,7 @@ describe('WalletCliClient bounded runner', () => {
 
   it('escalates timeout from TERM to KILL and settles once', async () => {
     vi.useFakeTimers()
-    const { child } = fakeChild({ neverClose: true })
+    const { child } = fakeChild({ neverClose: true, ignoreKillClose: true })
     mockSpawn.mockReturnValueOnce(child)
     const promise = new WalletCliClient({
       binary: 'wallet-cli',

@@ -14,7 +14,7 @@ describe('module load smoke', () => {
         source: 'private_key',
         private_key: '0x' + '11'.repeat(32),
       },
-      'tron',
+      'tron:728126428',
     )
 
     expect(raw).toBeInstanceOf(LocalSigner)

@@ -4,9 +4,12 @@ import type { Wallet } from '../src/core/base.js'
 import type { WalletCliClient, WalletCliResult } from '../src/core/clients/wallet-cli.js'
 import { WalletCliExecutionError } from '../src/core/errors.js'
 
+const SOURCE_ADDRESS = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'
+const SOURCE_HEX = '41c8599111f29c1e1e061265b4af93ea1f274ad78a'
+
 function mockWallet(signedTxJson: string): Wallet {
   return {
-    getAddress: vi.fn().mockResolvedValue('TTest123'),
+    getAddress: vi.fn().mockResolvedValue(SOURCE_ADDRESS),
     signTransaction: vi.fn().mockResolvedValue({
       family: 'tron',
       transaction: JSON.parse(signedTxJson) as Record<string, unknown>,
@@ -32,8 +35,14 @@ function mockClient(): WalletCliClient {
   } as unknown as WalletCliClient
 }
 
-const UNSIGNED_TX = { txID: 'abc', raw_data_hex: 'deadbeef' }
-const SIGNED_TX_JSON = JSON.stringify({ txID: 'abc', raw_data_hex: 'deadbeef', signature: ['rsv'] })
+const UNSIGNED_TX = {
+  txID: 'abc',
+  raw_data_hex: 'deadbeef',
+  raw_data: {
+    contract: [{ parameter: { value: { owner_address: SOURCE_HEX } } }],
+  },
+}
+const SIGNED_TX_JSON = JSON.stringify({ ...UNSIGNED_TX, signature: ['rsv'] })
 
 function mockRunResult<T>(data: T, command = 'test'): WalletCliResult<T> {
   return { success: true, command, data }
@@ -61,12 +70,17 @@ describe('signAndBroadcast', () => {
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
       amount: '1',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
     })
 
     expect(result.txId).toBe('tx123')
     expect(result.stage).toBe('submitted')
     expect(wallet.signTransaction).toHaveBeenCalledWith(UNSIGNED_TX)
+    expect(client.run).toHaveBeenNthCalledWith(
+      1,
+      expect.arrayContaining(['--account', SOURCE_ADDRESS]),
+      expect.any(Object),
+    )
     expect(client.run).toHaveBeenCalledTimes(2)
   })
 
@@ -95,7 +109,7 @@ describe('signAndBroadcast', () => {
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
       amount: '1',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
       wait: true,
       waitTimeoutMs: 10_000,
     })
@@ -127,7 +141,7 @@ describe('signAndBroadcast', () => {
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
       amount: '1',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
       wait: true,
       waitTimeoutMs: 10_000,
     })
@@ -144,7 +158,7 @@ describe('signAndBroadcast', () => {
       signAndBroadcast(wallet, client, {
         to: 'T...',
         amount: '1',
-        network: 'tron:mainnet',
+        network: 'tron:728126428',
       }),
     ).rejects.toThrow('confirmMainnet')
   })
@@ -170,7 +184,7 @@ describe('signAndBroadcast', () => {
     const result = await signAndBroadcast(wallet, client, {
       to: 'T...',
       amount: '1',
-      network: 'tron:mainnet',
+      network: 'tron:728126428',
       confirmMainnet: true,
     })
 
@@ -197,8 +211,52 @@ describe('signAndBroadcast', () => {
       signAndBroadcast(wallet, client, {
         to: 'T...',
         amount: '1',
-        network: 'tron:nile',
+        network: 'tron:3448148188',
       }),
     ).resolves.toEqual({ txId: 'abc', stage: 'timeout' })
   })
+
+  it.each([1, 2])(
+    'preserves txId when status query %i fails after one broadcast',
+    async (failedAttempt) => {
+      const wallet = mockWallet(SIGNED_TX_JSON)
+      const client = mockClient()
+      const run = client.run as ReturnType<typeof vi.fn>
+      run
+        .mockResolvedValueOnce(
+          mockRunResult({
+            kind: 'send',
+            mode: 'dry-run',
+            tx: UNSIGNED_TX,
+            fee: {},
+            rawAmount: '1000000',
+            to: 'T...',
+          }),
+        )
+        .mockResolvedValueOnce(
+          mockRunResult({ kind: 'broadcast', stage: 'submitted', txId: 'known-tx-id' }),
+        )
+      if (failedAttempt === 2) {
+        run.mockResolvedValueOnce(
+          mockRunResult({ state: 'pending', confirmed: false, failed: false }),
+        )
+      }
+      run.mockRejectedValueOnce(new WalletCliExecutionError('status unavailable', 'timeout'))
+
+      await expect(
+        signAndBroadcast(wallet, client, {
+          to: 'T...',
+          amount: '1',
+          network: 'tron:3448148188',
+          wait: true,
+          waitTimeoutMs: 10_000,
+        }),
+      ).rejects.toMatchObject({ txId: 'known-tx-id', code: 'timeout' })
+
+      const broadcastCalls = run.mock.calls.filter(
+        ([args]) => Array.isArray(args) && args[0] === 'tx' && args[1] === 'broadcast',
+      )
+      expect(broadcastCalls).toHaveLength(1)
+    },
+  )
 })

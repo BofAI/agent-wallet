@@ -55,7 +55,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Resolve provider and active wallet
   // ----------------------------------------------------------------
-  const provider = resolveWalletProvider({ network: 'tron:nile', dir: '/tmp/test-wallet' })
+  const provider = resolveWalletProvider({ network: 'tron:3448148188', dir: '/tmp/test-wallet' })
 
   // ----------------------------------------------------------------
   // Step 2: Get wallet instance

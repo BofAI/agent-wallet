@@ -14,7 +14,7 @@ import { ConfigWalletProvider, resolveWalletProvider } from '../src/index.js'
 import { requireEip712Wallet } from './example-utils.js'
 
 const DIR = process.env.AGENT_WALLET_DIR ?? '/tmp/test-wallet'
-const NETWORK = process.env.AGENT_WALLET_NETWORK ?? 'tron:mainnet'
+const NETWORK = process.env.AGENT_WALLET_NETWORK ?? 'tron:728126428'
 
 function resolveConfigProvider(): ConfigWalletProvider {
   const provider = resolveWalletProvider({ dir: DIR, network: NETWORK })

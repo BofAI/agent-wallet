@@ -35,7 +35,7 @@ function client(): WalletCliClient {
       version: '4.13.0',
       catalog: { tool: 'wallet-cli', version: '4.13.0', globalFlags: [], commands: [] },
       networks: [],
-      network: { id: 'tron:nile', family: 'tron', chainId: 'nile' },
+      network: { id: 'tron:3448148188', family: 'tron', chainId: '3448148188' },
     }),
     currentAccount: vi.fn().mockResolvedValue(
       success('current', {
@@ -67,12 +67,12 @@ describe('wallet-cli standard resolver dependencies', () => {
     const wallet = await resolveWallet({
       dir,
       walletId: 'cli',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
       dependencies: { walletCli: { clientFactory, secretProviderFactory } },
     })
 
     await expect(wallet.getAddress()).resolves.toBe(TRON_ADDRESS)
-    expect(clientFactory).toHaveBeenCalledWith({ network: 'tron:nile', purpose: 'signing' })
+    expect(clientFactory).toHaveBeenCalledWith({ network: 'tron:3448148188', purpose: 'signing' })
     expect(secretProviderFactory).toHaveBeenCalledWith(conf.params.password, {
       label: 'wallet-cli password',
     })
@@ -118,7 +118,7 @@ describe('wallet-cli standard resolver dependencies', () => {
 
     const first = await resolveWallet({
       dir,
-      network: 'tron:nile',
+      network: 'tron:3448148188',
       dependencies: {
         walletCli: {
           clientFactory: () => firstClient,
@@ -128,7 +128,7 @@ describe('wallet-cli standard resolver dependencies', () => {
     })
     const second = await resolveWallet({
       dir,
-      network: 'tron:nile',
+      network: 'tron:3448148188',
       dependencies: {
         walletCli: {
           clientFactory: () => secondClient,
@@ -163,10 +163,10 @@ describe('wallet-cli standard resolver dependencies', () => {
         secretProviderFactory: () => secretProvider,
       },
     }
-    const provider = resolveWalletProvider({ dir, network: 'tron:nile', dependencies })
+    const provider = resolveWalletProvider({ dir, network: 'tron:3448148188', dependencies })
 
     dependencies.walletCli.clientFactory = () => secondClient
-    const wallet = await provider.getActiveWallet('tron:nile')
+    const wallet = await provider.getActiveWallet('tron:3448148188')
 
     await expect(wallet.getAddress()).resolves.toBe(TRON_ADDRESS)
     expect(firstClient.currentAccount).toHaveBeenCalledTimes(1)
@@ -192,13 +192,13 @@ describe('wallet-cli standard resolver dependencies', () => {
       },
     })
 
-    const first = await provider.getWallet('cli', 'tron:nile')
+    const first = await provider.getWallet('cli', 'tron:3448148188')
     provider.removeWallet('cli')
     provider.addWallet('cli', {
       type: 'wallet_cli',
       params: { account: 'new-account', password: newPassword },
     })
-    const recreated = await provider.getWallet('cli', 'tron:nile')
+    const recreated = await provider.getWallet('cli', 'tron:3448148188')
 
     expect(recreated).not.toBe(first)
     expect(secretProviderFactory).toHaveBeenNthCalledWith(1, oldPassword, {

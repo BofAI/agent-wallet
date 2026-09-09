@@ -103,13 +103,13 @@ afterAll(() => {
 describe('ConfigWalletProvider', () => {
   it('gets active raw_secret wallet', async () => {
     const provider = new ConfigWalletProvider(secretsDir, {})
-    const wallet = await provider.getActiveWallet('eip155')
+    const wallet = await provider.getActiveWallet('eip155:1')
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
   })
 
   it('uses provider default network', async () => {
     const provider = new ConfigWalletProvider(secretsDir, {
-      network: 'eip155',
+      network: 'eip155:1',
     })
     const wallet = await provider.getActiveWallet()
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
@@ -117,13 +117,13 @@ describe('ConfigWalletProvider', () => {
 
   it('throws on wallet not found', async () => {
     const provider = new ConfigWalletProvider(secretsDir, {})
-    await expect(provider.getWallet('missing', 'eip155')).rejects.toThrow(WalletNotFoundError)
+    await expect(provider.getWallet('missing', 'eip155:1')).rejects.toThrow(WalletNotFoundError)
   })
 
   it('resolves raw_secret private key config', async () => {
     writeRawPrivateKeyConfig(secretsDir)
     const provider = new ConfigWalletProvider(secretsDir, {})
-    const wallet = await provider.getActiveWallet('eip155')
+    const wallet = await provider.getActiveWallet('eip155:1')
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
   })
 
@@ -141,7 +141,7 @@ describe('ConfigWalletProvider', () => {
       },
     })
     const provider = new ConfigWalletProvider(secretsDir, {})
-    const wallet = await provider.getActiveWallet('eip155')
+    const wallet = await provider.getActiveWallet('eip155:1')
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
   })
 
@@ -216,23 +216,28 @@ describe('ConfigWalletProvider', () => {
 })
 
 describe('EnvWalletProvider', () => {
+  it('rejects a bare network before using AGENT_WALLET_PRIVATE_KEY', () => {
+    process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
+    expect(() => new EnvWalletProvider({ network: 'eip155' })).toThrow(/canonical CAIP-2/)
+  })
+
   it('resolves private key EVM wallet', async () => {
     process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     const wallet = await provider.getWallet()
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
   })
 
   it('resolves private key TRON wallet', async () => {
     process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
-    const provider = new EnvWalletProvider({ network: 'tron' })
+    const provider = new EnvWalletProvider({ network: 'tron:728126428' })
     const wallet = await provider.getWallet()
     expect(await wallet.getAddress()).toMatch(/^T/)
   })
 
   it('resolves mnemonic wallet', async () => {
     process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     const wallet = await provider.getWallet()
     expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS)
   })
@@ -240,7 +245,7 @@ describe('EnvWalletProvider', () => {
   it('resolves mnemonic wallet with account index', async () => {
     process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
     process.env.AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX = '1'
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     const wallet = await provider.getWallet()
     expect(await wallet.getAddress()).toBe(TEST_EVM_ADDRESS_INDEX_1)
   })
@@ -248,12 +253,12 @@ describe('EnvWalletProvider', () => {
   it('rejects when both private key and mnemonic are set', async () => {
     process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
     process.env.AGENT_WALLET_MNEMONIC = TEST_MNEMONIC
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     return expect(provider.getWallet()).rejects.toThrow(/Provide only one of/)
   })
 
   it('rejects missing sources on access', async () => {
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     await expect(provider.getWallet()).rejects.toThrow(/could not find a wallet source/)
   })
 
@@ -261,14 +266,14 @@ describe('EnvWalletProvider', () => {
     process.env.PRIVY_APP_ID = 'app-id'
     process.env.PRIVY_APP_SECRET = 'app-secret'
     process.env.PRIVY_WALLET_ID = 'wallet-id'
-    const provider = new EnvWalletProvider({ network: 'eip155' })
+    const provider = new EnvWalletProvider({ network: 'eip155:1' })
     await expect(provider.getWallet()).rejects.toThrow(/could not find a wallet source/)
   })
 })
 
 describe('resolver', () => {
   it('resolveWalletProvider prefers config', () => {
-    const provider = resolveWalletProvider({ dir: secretsDir, network: 'eip155' })
+    const provider = resolveWalletProvider({ dir: secretsDir, network: 'eip155:1' })
     expect(provider).toBeInstanceOf(ConfigWalletProvider)
   })
 
@@ -276,7 +281,7 @@ describe('resolver', () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'agent-wallet-registry-empty-'))
     try {
       process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
-      const provider = resolveWalletProvider({ dir: emptyDir, network: 'eip155' })
+      const provider = resolveWalletProvider({ dir: emptyDir, network: 'eip155:1' })
       expect(provider).toBeInstanceOf(EnvWalletProvider)
     } finally {
       rmSync(emptyDir, { recursive: true, force: true })
@@ -285,7 +290,7 @@ describe('resolver', () => {
 
   it('resolves active wallet from config', async () => {
     writeRawPrivateKeyConfig(secretsDir)
-    const wallet = await resolveWallet({ dir: secretsDir, network: 'eip155' })
+    const wallet = await resolveWallet({ dir: secretsDir, network: 'eip155:1' })
     expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
   })
 
@@ -293,7 +298,7 @@ describe('resolver', () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'agent-wallet-registry-empty-'))
     try {
       process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
-      const wallet = await resolveWallet({ dir: emptyDir, network: 'eip155' })
+      const wallet = await resolveWallet({ dir: emptyDir, network: 'eip155:1' })
       expect(await wallet.getAddress()).toBe(TEST_ENV_PRIVATE_KEY_ADDRESS)
     } finally {
       rmSync(emptyDir, { recursive: true, force: true })
@@ -314,7 +319,7 @@ describe('resolver', () => {
   it('throws when all sources are missing', async () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'agent-wallet-registry-empty-'))
     try {
-      await expect(resolveWallet({ dir: emptyDir, network: 'eip155' })).rejects.toThrow(
+      await expect(resolveWallet({ dir: emptyDir, network: 'eip155:1' })).rejects.toThrow(
         /could not find a wallet source/,
       )
     } finally {
@@ -337,7 +342,7 @@ describe('resolver', () => {
     )
     process.env.AGENT_WALLET_PRIVATE_KEY = TEST_PRIVATE_KEY
 
-    expect(() => resolveWalletProvider({ dir: secretsDir, network: 'eip155' })).toThrow()
+    expect(() => resolveWalletProvider({ dir: secretsDir, network: 'eip155:1' })).toThrow()
   })
 })
 

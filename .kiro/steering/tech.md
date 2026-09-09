@@ -70,6 +70,11 @@ cd packages/typescript && pnpm build
 ## Key Technical Decisions
 
 - The project supports both config-backed and env-backed wallet resolution
+- Every supplied signing network uses an exact canonical CAIP-2 identifier. Supported forms are
+  `eip155:<positive decimal chainId>` and `tron:<positive decimal chainId>` with at most 32
+  reference characters. Do not trim, case-fold, accept aliases/bare families, or rewrite namespaces.
+  A network may remain omitted only where the adapter contract already supports omission (currently
+  Privy); once supplied, the same validation applies to every provider and adapter.
 - External signers are preferred for production workflows; plaintext config and env-based resolution are development fallbacks
 - The core package signs data only; optional protocol integrations may orchestrate transaction building and broadcasting
 - Features touching providers, adapters, config resolution, or CLI behavior should be scoped to the TypeScript package

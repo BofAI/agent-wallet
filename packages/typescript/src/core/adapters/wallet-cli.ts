@@ -195,7 +195,9 @@ export class WalletCliAdapter implements Wallet, Eip712Capable {
 
 function stringifyPayload(payload: Record<string, unknown>, label: string): string {
   try {
-    return JSON.stringify(payload)
+    return JSON.stringify(payload, (_key, value: unknown) =>
+      typeof value === 'bigint' ? value.toString() : value,
+    )
   } catch {
     throw new SigningError(`wallet_cli ${label} is not JSON serializable`)
   }

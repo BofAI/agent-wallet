@@ -9,7 +9,12 @@ import {
   getTxStatus,
 } from '../src/integrations/wallet-cli/chain-ops.js'
 
-const NETWORK = { id: 'tron:nile', family: 'tron', chainId: 'nile' }
+const NETWORK = { id: 'tron:3448148188', family: 'tron', chainId: '3448148188' }
+const SOURCE_ADDRESS = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'
+const SOURCE_HEX = '41c8599111f29c1e1e061265b4af93ea1f274ad78a'
+const BUILT_TX = {
+  raw_data: { contract: [{ parameter: { value: { owner_address: SOURCE_HEX } } }] },
+}
 
 function client() {
   const ensureCompatible = vi.fn().mockResolvedValue({
@@ -24,7 +29,7 @@ function client() {
       success: true,
       command: contract.command,
       data: {},
-      chain: { family: 'tron', network: 'tron:nile', chainId: 'nile' },
+      chain: { family: 'tron', network: 'tron:3448148188', chainId: '3448148188' },
       meta: { durationMs: 1, warnings: [] },
     }),
   )
@@ -38,14 +43,29 @@ function client() {
 describe('wallet-cli TRON-only chain operations', () => {
   it('builds decimal-string transfers with an explicit command/context validator', async () => {
     const mock = client()
+    mock.run.mockResolvedValueOnce({
+      schema: 'wallet-cli.result.v1',
+      success: true,
+      command: 'tx.send',
+      data: {
+        kind: 'send',
+        mode: 'dry-run',
+        tx: BUILT_TX,
+        fee: {},
+        rawAmount: '1250000',
+        to: 'TRecipient',
+      },
+      meta: { durationMs: 1, warnings: [] },
+    })
     await buildTransfer(mock.value, {
+      from: SOURCE_ADDRESS,
       to: 'TRecipient',
       amount: '1.25',
       rawAmount: '1250000',
       token: 'USDT',
       contract: 'TContract',
       assetId: '1002000',
-      network: 'tron:nile',
+      network: 'tron:3448148188',
     })
 
     expect(mock.run).toHaveBeenCalledWith(
@@ -54,8 +74,10 @@ describe('wallet-cli TRON-only chain operations', () => {
         'send',
         '--to',
         'TRecipient',
+        '--account',
+        SOURCE_ADDRESS,
         '--network',
-        'tron:nile',
+        'tron:3448148188',
         '--dry-run',
         '-o',
         'json',
@@ -77,13 +99,42 @@ describe('wallet-cli TRON-only chain operations', () => {
     expect(mock.run.mock.calls[0][0]).not.toContain('--password-stdin')
   })
 
+  it('rejects a built transaction owned by a different account', async () => {
+    const mock = client()
+    mock.run.mockResolvedValueOnce({
+      schema: 'wallet-cli.result.v1',
+      success: true,
+      command: 'tx.send',
+      data: {
+        kind: 'send',
+        mode: 'dry-run',
+        tx: {
+          raw_data: { contract: [{ parameter: { value: { owner_address: '41'.repeat(21) } } }] },
+        },
+        fee: {},
+        rawAmount: '1',
+        to: 'TRecipient',
+      },
+      meta: { durationMs: 1, warnings: [] },
+    })
+
+    await expect(
+      buildTransfer(mock.value, {
+        from: SOURCE_ADDRESS,
+        to: 'TRecipient',
+        rawAmount: '1',
+        network: 'tron:3448148188',
+      }),
+    ).rejects.toMatchObject({ code: 'contract_mismatch' })
+  })
+
   it('broadcasts the signed artifact only through stdin', async () => {
     const mock = client()
     const signed = JSON.stringify({ txID: 'abc', signature: ['rsv'] })
-    await broadcast(mock.value, signed, 'tron:nile')
+    await broadcast(mock.value, signed, 'tron:3448148188')
 
     expect(mock.run).toHaveBeenCalledWith(
-      ['tx', 'broadcast', '--tx-stdin', '--network', 'tron:nile', '-o', 'json'],
+      ['tx', 'broadcast', '--tx-stdin', '--network', 'tron:3448148188', '-o', 'json'],
       expect.objectContaining({ command: 'tx.broadcast', chain: NETWORK, stdin: signed }),
     )
     expect(mock.run.mock.calls[0][0]).not.toContain(signed)
@@ -91,7 +142,7 @@ describe('wallet-cli TRON-only chain operations', () => {
 
   it('uses strict schemas for all four transaction status states', async () => {
     const mock = client()
-    await getTxStatus(mock.value, 'abc', 'tron:nile')
+    await getTxStatus(mock.value, 'abc', 'tron:3448148188')
     const contract = mock.run.mock.calls[0][1] as WalletCliRunContract<unknown>
 
     for (const state of ['confirmed', 'failed', 'pending', 'not_found']) {
@@ -114,17 +165,17 @@ describe('wallet-cli TRON-only chain operations', () => {
 
   it('provides command/context validators for balance and transaction info', async () => {
     const mock = client()
-    await getBalance(mock.value, 'tron:nile', 'fixture')
-    await getTxInfo(mock.value, 'abc', 'tron:nile')
+    await getBalance(mock.value, 'tron:3448148188', 'fixture')
+    await getTxInfo(mock.value, 'abc', 'tron:3448148188')
 
     expect(mock.run).toHaveBeenNthCalledWith(
       1,
-      ['account', 'balance', '--network', 'tron:nile', '-o', 'json', '--account', 'fixture'],
+      ['account', 'balance', '--network', 'tron:3448148188', '-o', 'json', '--account', 'fixture'],
       expect.objectContaining({ command: 'account.balance', chain: NETWORK }),
     )
     expect(mock.run).toHaveBeenNthCalledWith(
       2,
-      ['tx', 'info', '--txid', 'abc', '--network', 'tron:nile', '-o', 'json'],
+      ['tx', 'info', '--txid', 'abc', '--network', 'tron:3448148188', '-o', 'json'],
       expect.objectContaining({ command: 'tx.info', chain: NETWORK }),
     )
     const balanceContract = mock.run.mock.calls[0][1] as WalletCliRunContract<unknown>
@@ -132,7 +183,11 @@ describe('wallet-cli TRON-only chain operations', () => {
   })
 
   it.each([
-    ['build', (value: WalletCliClient) => buildTransfer(value, { to: '0x1', network: 'eip155:1' })],
+    [
+      'build',
+      (value: WalletCliClient) =>
+        buildTransfer(value, { from: SOURCE_ADDRESS, to: '0x1', network: 'eip155:1' }),
+    ],
     ['broadcast', (value: WalletCliClient) => broadcast(value, '{}', 'eip155:1')],
     ['status', (value: WalletCliClient) => getTxStatus(value, 'abc', 'eip155:1')],
     ['balance', (value: WalletCliClient) => getBalance(value, 'eip155:1')],

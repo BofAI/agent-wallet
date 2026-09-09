@@ -1,7 +1,23 @@
+const WALLET_ERROR_KINDS = Symbol.for('@bankofai/agent-wallet/error-kinds')
+type NamedConstructor = { readonly name: string }
+
 export class WalletError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'WalletError'
+    const kinds: string[] = []
+    let constructor: NamedConstructor | null = new.target
+    while (constructor && constructor !== (Error as NamedConstructor)) {
+      kinds.push(constructor.name)
+      constructor = Object.getPrototypeOf(constructor) as NamedConstructor | null
+    }
+    Object.defineProperty(this, WALLET_ERROR_KINDS, { value: kinds })
+  }
+
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false
+    const kinds = (value as Record<PropertyKey, unknown>)[WALLET_ERROR_KINDS]
+    return Array.isArray(kinds) && kinds.includes(this.name)
   }
 }
 
@@ -141,6 +157,25 @@ export class WalletCliExecutionError extends ExternalSignerExecutionError {
   constructor(message: string, code: string) {
     super(message, code)
     this.name = 'WalletCliExecutionError'
+  }
+}
+
+export class WalletCliSubmittedTransactionError extends WalletCliExecutionError {
+  readonly txId: string
+  readonly cause: unknown
+
+  constructor(txId: string, cause: unknown) {
+    const code =
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      typeof cause.code === 'string'
+        ? cause.code
+        : 'status_query_failed'
+    super(`Transaction '${txId}' was submitted, but its status could not be queried`, code)
+    this.name = 'WalletCliSubmittedTransactionError'
+    this.txId = txId
+    this.cause = cause
   }
 }
 

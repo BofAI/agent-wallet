@@ -31,7 +31,7 @@ wallet-cli keystore 密碼是外部簽名憑證，不是 agent-wallet 主密碼�
 
 ### Goals
 
-- 讓 `wallet_cli` 錢包在 `tron:<name>` 與 `eip155:<chainId>` 上提供與既有 Wallet/x402 相容的簽章結果。
+- 讓 `wallet_cli` 錢包在 canonical `tron:<chainId>` 與 `eip155:<chainId>` 上提供與既有 Wallet/x402 相容的簽章結果。
 - `WalletCliAdapter` 實作 `Wallet` 與 `Eip712Capable`；message signing 不納入 agent-wallet 公開介面。
 - 沿用既有 adapter/provider/config 模式（與 Privy 先例一致）：client 在 `core/clients/`、adapter 在 `core/adapters/`、config resolver 在 `core/providers/`、類型在 `core/config.ts`、`createAdapter` 分派。
 - 在標準 resolver/provider/builder 路徑注入 wallet-cli client 與 secret-provider factories。
@@ -52,7 +52,7 @@ wallet-cli keystore 密碼是外部簽名憑證，不是 agent-wallet 主密碼�
 ### 關鍵假設（flagged）
 
 1. **來源優先**：本次使用上一級 wallet-cli source/test 作為命令契約基準；其未建置或缺依賴不授權 agent-wallet 修改該 repo。
-2. **完整 network**：wallet-cli adapter 不接受裸 family；TRON 使用 canonical `tron:<name>`，EVM 由 `eip155:<id>` 映射成 `evm:<id>`。
+2. **全域 canonical network**：所有 agent-wallet network 入口只接受精確的 `tron:<正十進位 chainId>` 或 `eip155:<正十進位 chainId>`，不 trim、case-fold、接受 alias/裸 family 或改寫 namespace；Privy 原本可省略 network 的契約維持不變。
 3. **單一 keystore 擁有者**：TRON/EVM 私鑰只由 wallet-cli keystore 擁有，agent-wallet 不重簽或二次解鎖。
 4. **JavaScript 限制**：static password 已存在於 config string，無法可靠清零；設計重點是避免額外長期副本，並對 exec provider 使用可清除 Buffer。
 
@@ -208,15 +208,15 @@ export type SecretProviderFactory = (
 ```ts
 interface WalletCliNetworkTarget {
   family: "tron" | "evm";
-  agentNetwork: string; // tron:nile | eip155:56
-  cliNetwork: string; // tron:nile | evm:56
-  requestedChainId?: string; // EVM only
+  agentNetwork: string; // tron:3448148188 | eip155:56
+  cliNetwork: string; // tron:3448148188 | eip155:56
+  requestedChainId: string;
 }
 ```
 
-- `tron:<name>` 必須為非空 canonical id；存在性與實際 chainId 由 handshake network row 確認。
-- `eip155:<id>` 的 id 必須是正十進位整數、無前導符號且可安全轉為 viem `number`；映射成 `evm:<id>`。
-- 裸 `tron` / `eip155`、alias（如 `bsc`）、其他 CAIP namespace 與空白值同步 fail-fast。
+- 兩個 namespace 的 reference 都必須是 1–32 位正十進位整數、無前導零；存在性由 handshake network row 確認。
+- `eip155:<id>` 為 wallet-cli EVM 操作時仍須可安全轉為 JavaScript integer，但 argv 與 context 保持 `eip155:<id>`，不得映射成 `evm:<id>`。
+- 裸 `tron` / `eip155`、名稱 alias（如 `bsc` / `nile` / `mainnet`）、其他 CAIP namespace、大小寫及空白變體同步 fail-fast。
 - handshake 解析出的 network row 為 `{ id, family, chainId }`，必須與 target family/id 相符；所有 chain command 回應再與該 row 比對。
 
 #### 1.5 `WalletCliClient`（`core/clients/wallet-cli.ts`）
@@ -260,9 +260,9 @@ interface WalletCliResult<T> {
 
 程序 runner 的共同規則：
 
-1. 所有 spawn 使用 `shell: false`，stdin/stdout/stderr 為 pipe；寫入 lease 後關閉 stdin。
+1. 所有 spawn 使用 `shell: false`，stdin/stdout/stderr 為 pipe；寫入 lease 後關閉 stdin。普通 string/Buffer stdin 同樣監聽非同步 `error`、`finish` 與 premature `close`，把 EPIPE 收斂為 `stdin_write`。
 2. stdout/stderr 在接收 chunk 時即檢查上限，超限立即 TERM，經 grace period 後 KILL，後續 chunk 不再保存。
-3. timeout、abort、stdin EPIPE、spawn error 與 close 只能 settle promise 一次；timer 與 listener 必須清理。
+3. timeout、abort、stdin EPIPE、spawn error 與 close 只能 settle promise 一次；timer 與 listener 必須清理。POSIX 以獨立 process group 終止完整程序樹，Windows 以 `taskkill /T /F` 升級；grace 到期後銷毀本端 pipe 並直接 settle，避免後代持有 pipe 使 Promise 無限等待。
 4. invalid output 錯誤不附原始 stdout/stderr，只附 command、exit code、byte count、是否超限及穩定 code。
 5. 正常 envelope 的 `error.message` 先移除控制字元並截斷至 512 字元，再放入公開錯誤。
 
@@ -312,7 +312,7 @@ adapter 內有兩個共享 promise：
 
 - `getAddress()`：等待 compatibility + identity，回選定 family 的固定地址；不取得秘密。
 - `signTransaction(payload)`：先等待 readiness，再依 family codec 產生 CLI payload，取得 lease，呼叫窄 client method，`finally` dispose。
-- `signTypedData(data)`：EVM `domain.chainId` 若存在須等於 target chainId；TRON 不把 `tron:<name>` 與 TIP-712 numeric domain chainId混為一談，交由 wallet-cli family strategy 驗證。回傳去 `0x` 簽名。
+- `signTypedData(data)`：EVM `domain.chainId` 若存在須等於 target chainId；TRON canonical network chainId 與 TIP-712 domain chainId 均由 wallet-cli family strategy 驗證。回傳去 `0x` 簽名。
 
 EVM transaction codec 使用既有 `viem.serializeTransaction`：
 
@@ -414,7 +414,7 @@ export {
 
 #### 2.1 廣播 / 查詢方法
 
-- `buildTransfer(opts)` → `tx send --dry-run`：未簽 tx + fee 估算（不需密碼）。
+- `buildTransfer({ from, ...opts })` → `tx send --account <from> --dry-run`：未簽 tx + fee 估算（不需密碼）；回傳 owner contract 必須與 `from` 相同。
 - `broadcast(signedTx)` → `tx broadcast --tx-stdin`：已簽 tx JSON 走 stdin（不需密碼）。
 - `getTxStatus(txid)` → `tx status`：四態。
 - `getBalance(address?)` → `account balance`。
@@ -440,11 +440,11 @@ interface SignAndBroadcastParams {
 
 流程：
 
-1. `client.buildTransfer(...)` → 未簽 tx（`txID`/`raw_data_hex`）。
+1. 先取 `wallet.getAddress()`，再以該地址呼叫 `client.buildTransfer(...)` → 未簽 tx（`txID`/`raw_data_hex`）；不得依賴 wallet-cli active account，且驗證 owner 一致。
 2. `wallet.signTransaction(unsignedTx)` → 已簽 tx JSON（**agent-wallet 核心簽名**；若 `wallet` 為 `WalletCliAdapter`，則再委派 wallet-cli `tx sign`——密碼在此環節由 adapter 內部使用）。
 3. `client.broadcast(JSON.parse(signedTxJson))` → `txId`。
 4. `wait` 為真則輪詢 `client.getTxStatus(txId)` 至 `confirmed`/`failed`。
-5. 回傳 `{ txId, stage, confirmed?, failed? }`。
+5. 回傳 `{ txId, stage, confirmed?, failed? }`。broadcast 成功後若 status query 失敗，拋出 `WalletCliSubmittedTransactionError`，保留 `txId`、原始 code 與 cause，且不重送。
 
 > 關鍵：**密碼只在 adapter 內部以 lease 使用**；wallet-cli 建交易與廣播皆不 acquire secret。若傳入非 TRON network，integration 在任何 RPC/子程序前 fail-fast。
 
@@ -572,7 +572,7 @@ npm install -g @tron-walletcli/wallet-cli       # 上 PATH，無需環境變數
 ```
 
 - 先用 wallet-cli `create`/`import` 建立金鑰與帳戶。
-- 於 agent-wallet config 加 `wallet_cli` 條目；呼叫 resolver 時傳完整 `tron:<name>` 或 `eip155:<id>`。
+- 於 agent-wallet config 加 `wallet_cli` 條目；呼叫 resolver 時傳 canonical `tron:<chainId>` 或 `eip155:<chainId>`。
 
 **B. agent-wallet CLI 全域使用者（`npm install -g @bankofai/agent-wallet`）**
 
@@ -641,10 +641,10 @@ sequenceDiagram
 
   App->>Signer: signTransaction(TRON payload)
   Signer->>Signer: await readiness; validate TRON shape
-  Signer->>Secret: acquire(accountId, tron:nile)
+  Signer->>Secret: acquire(accountId, tron:3448148188)
   Secret-->>Signer: SecretLease
   Signer->>Client: signTronTransaction(txJson, lease, identity, target)
-  Client->>Cli: tx sign --transaction <json> --account <accountId> --network tron:nile --password-stdin -o json
+  Client->>Cli: tx sign --transaction <json> --account <accountId> --network tron:3448148188 --password-stdin -o json
   Note over Client,Cli: stdin: lease.writeTo(child.stdin)<br/>stdout/stderr: bounded
   alt 完整性檢查通過
     Cli-->>Client: result.v1 + chain + { data:{ address, signed:{ signature:[] } } }
@@ -673,8 +673,8 @@ sequenceDiagram
   Signer->>Signer: serializeTransaction(payload) → 0x unsigned hex
   Signer->>Secret: acquire(accountId, eip155:56)
   Secret-->>Signer: SecretLease
-  Signer->>Client: signEvmTransaction(hex, lease, identity, evm:56)
-  Client->>Cli: tx sign --hex <unsigned> --account <accountId> --network evm:56 --password-stdin -o json
+  Signer->>Client: signEvmTransaction(hex, lease, identity, eip155:56)
+  Client->>Cli: tx sign --hex <unsigned> --account <accountId> --network eip155:56 --password-stdin -o json
   Cli-->>Client: result.v1 + { data:{ address, signed:{ raw, hash } } }
   Client-->>Signer: validated EvmTxSignData
   Signer->>Signer: validate chain + pinned EVM address
@@ -696,11 +696,11 @@ sequenceDiagram
   participant Signer as WalletCliAdapter
   participant Cli as wallet-cli 子程序
 
-  App->>Orch: signAndBroadcast({ to, amount, network:"tron:nile", wait:true })
+  App->>Orch: signAndBroadcast({ to, amount, network:"tron:3448148188", wait:true })
 
   Note over Orch,Cli: 步驟 1：建交易（無密碼）
   Orch->>Client: buildTransfer({ to, amount, network })
-  Client->>Cli: spawn: tx send --to T... --amount 1 --network tron:nile --dry-run -o json
+  Client->>Cli: spawn: tx send --to T... --amount 1 --network tron:3448148188 --dry-run -o json
   Cli-->>Client: exit 0 + { data: { tx: { txID, raw_data_hex }, fee, rawAmount, to } }
   Client-->>Orch: unsignedTx + fee
 
@@ -716,7 +716,7 @@ sequenceDiagram
 
   Note over Orch,Cli: 步驟 3：廣播（已簽 tx 走 stdin，無密碼）
   Orch->>Client: broadcast(signedTx, network)
-  Client->>Cli: spawn: tx broadcast --tx-stdin --network tron:nile -o json
+  Client->>Cli: spawn: tx broadcast --tx-stdin --network tron:3448148188 -o json
   Note over Client,Cli: stdin: 寫入已簽 tx JSON（fd0 給 --tx-stdin）
   Cli-->>Client: exit 0 + { data: { txId, stage:"submitted" } }
   Client-->>Orch: { txId, stage:"submitted" }
@@ -724,7 +724,7 @@ sequenceDiagram
   Note over Orch,Cli: 步驟 4：追蹤確認（無密碼，輪詢）
   loop 直到 confirmed/failed 或 waitTimeoutMs
     Orch->>Client: getTxStatus(txId, network)
-    Client->>Cli: spawn: tx status --txid <id> --network tron:nile -o json
+    Client->>Cli: spawn: tx status --txid <id> --network tron:3448148188 -o json
     Cli-->>Client: exit 0 + { data: { state:"pending"|"confirmed"|"failed"|"not_found" } }
     Client-->>Orch: WalletCliResult<TxStatusResult>
   end
@@ -818,6 +818,7 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
 
 - 金額一律以十進位**字串**處理，絕不轉 JS number。
 - 簽名格式正規化集中於 adapter：TRON 回 JSON；EVM raw transaction 與 typed-data signature 去 `0x`。
+- typed-data JSON codec 遞迴將 bigint 轉為十進位字串，保持 EIP-712 digest 等價；循環引用仍 fail-fast。
 - EVM transaction 的 chainId 在 viem serialization 前驗證；wallet-cli envelope 的 chain 再次以 handshake network row 驗證。
 - 金鑰單一擁有者：wallet-cli keystore；agent-wallet 不解密、不重簽。
 - config 保存的是 `SecretValue`；exec secret 的 plaintext 只存在於單次 lease。
@@ -829,6 +830,7 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
 - **退出碼與 envelope 一致**：先解析 bounded envelope，再交叉驗證 exit code 與 success；矛盾回 `contract_mismatch`。
 - **錯誤碼開放非窮舉**：與 wallet-cli 一致；容忍未知 code 回退到所屬 exit-code 類別。
 - **timeout 語意**：exit 1 + `timeout` 時交易可能仍在飛→編排助手不自動重送，回傳「以 `tx status` 複核」狀態，由 caller 決策。
+- **提交後查詢失敗**：broadcast 已回 txId 後的 status 錯誤以 `WalletCliSubmittedTransactionError` 保留 txId/code/cause；caller 以該 txId 複核，不重送。
 - **契約 mismatch**：錯 command、chain、data shape、signer 或 account descriptor 一律拒絕結果，不做「盡量取值」。
 - **機密與不可信輸出**：錯誤不 echo password、secret stdout/stderr 或 raw invalid output；合法 envelope message 僅在控制字元移除與長度截斷後暴露。
 - **觀測**：可記錄 command id、exit code、error code、duration、byte count、truncated/timeout；不得記錄 argv payload、stdin、完整 env 或簽章資料。
@@ -845,7 +847,7 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
 ## 演進與遷移
 
 - 既有 `wallet_cli` config 不需改格式；明文 password 由 static provider 包裝，`SecretRef.exec` 從「resolve wallet 時一次」改為「每次簽章一次」。依賴 script side effect 的使用者需注意呼叫頻率變更。
-- `resolveWallet({ network })` 對 wallet-cli 現在要求完整 network；原先省略 network 而隱式使用 TRON 的呼叫必須改成 `tron:mainnet`、`tron:nile` 等明確值。
+- 所有 agent-wallet network 入口現在要求 canonical CAIP-2；既有 `tron`、`eip155`、`evm:1`、`tron:mainnet` 或 `tron:nile` 必須改成 `tron:728126428`、`tron:3448148188`、`eip155:1` 等明確值。Privy 可維持省略 network，但提供時亦須 canonical。
 - `WalletCliResult.meta.warnings` 從 `string[]` 擴為 `WalletCliWarning[]`；直接假設每項皆為 string 的 TypeScript consumer 需先判別型別。
 - EVM 使用者可沿用同一 wallet config，以 `eip155:<id>` resolve；無需複製 keystore 或建立 agent-wallet raw secret。
 - 舊於 4.12 或同版但 catalog 無所需 family commands 的產物會在 handshake 被拒絕，不再延後至簽章時失敗。
@@ -854,7 +856,8 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
 
 - `start/add wallet_cli` help 明示只連結既有 wallet-cli account，不建立或匯入 key；base probe 不取得密碼。
 - onboarding 在收集 password 前以同一 client 執行 `current [--account]`，驗證 account descriptor 並把 canonical `accountId` 寫入新 config；失敗時提示先以 wallet-cli 建立或匯入帳戶。手動建立或既有省略 account 的 config 仍沿用 adapter 首次解析 active account 的相容行為。
-- `sign tx` 與 `sign typed-data` 對 wallet-cli 要求 `--network` 為完整值，並顯示 adapter 的已分類錯誤。
+- 非互動 onboarding 若省略 account，直接以 `current` 解析 active account，不讀 stdin；沒有 active account 時以 `CliExit(1)` 結束。
+- `sign tx` 與 `sign typed-data` 對所有 provider 要求提供的 `--network` 為 canonical CAIP-2，並顯示 adapter 的已分類錯誤。
 - `resolve-address` 對 wallet-cli 顯示 EVM/TRON whitelist entries，使用 address-resolution dependencies，不要求 signing network、不取得密碼。
 - `inspect` 維持 secret redaction；不顯示 provider stdout、launch env 或 handshake raw catalog。
 
@@ -865,9 +868,9 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
   - secret providers：每次 acquire、既有 trim 語意、write/dispose、Buffer 清零、timeout/空輸出/非零/超限/Windows launch target、錯誤不含輸出。
   - network codec：接受 canonical TRON/EIP-155、正確映射，拒絕裸 family、alias、unsafe chainId 與未知 network。
   - client handshake：版本邊界、prerelease、catalog/version mismatch、family command 缺失、structured warnings、network row、共享 promise。
-  - bounded runner：exit 0/1/2、ENOENT、EPIPE、timeout、TERM→KILL、stdout/stderr cap、malformed JSON、settle-once 與錯誤脫敏。
+  - bounded runner：exit 0/1/2、普通/lease stdin 非同步 EPIPE、timeout、完整程序樹 TERM→KILL、後代持 pipe、stdout/stderr cap、malformed JSON、settle-once 與錯誤脫敏。
   - command schemas：current、TRON/EVM tx、typed-data 的 success/error、command/chain/data mismatch。
-  - adapter：並行 identity promise、active account pinning、family address、per-sign lease、signer 驗證、TRON JSON、EVM legacy/2930/1559 codec、typed-data chainId。
+  - adapter：並行 identity promise、active account pinning、family address、per-sign lease、signer 驗證、TRON JSON、EVM legacy/2930/1559 codec、typed-data chainId 與 bigint digest equivalence。
   - resolver DI/cache：從 `resolveWallet` 到 builder 的 factory 傳遞、預設 fallback、不同 provider/dependencies 隔離。
   - address resolution/CLI：雙地址 whitelist、不取得 secret 與 help。
 - **deterministic 程序整合**：`tests/fixtures/wallet-cli-fixture.mjs` 模擬真實 argv/stdin/envelope，覆蓋 handshake、TRON/EVM 正常簽章及錯誤/超限；以 Node launch target 執行，CI 必跑。
@@ -885,8 +888,8 @@ Zod 預設容許並剝除未知欄位，因此契約可加法演進；必要欄�
 - **短生命週期密碼**：config 只保存 `SecretValue`；adapter 保存 provider；每次 signing acquire/`finally` dispose。exec Buffer 清零，static string 明確標示 JS 限制。
 - **密碼傳遞**：lease 只經 `--password-stdin` 寫入，不進 argv/env/日誌/error/metadata；廣播/建交易不 acquire secret。
 - **單一 stdin consumer**：TRON JSON、EVM unsigned hex、typed-data 為非秘密 payload，依 wallet-cli 契約走 argv；這些值可能出現在 process listing，文件需明示。已簽 TRON broadcast 走 `--tx-stdin`。
-- **mainnet 防護**：編排助手在 `tron:mainnet` 動真錢時要求顯式確認旗標；預設測試用 `tron:nile`。
-- **程序信任邊界**：wallet-cli 與 secret script stdout/stderr 都不可信；全部有 byte/time limit、`shell: false` launch policy、控制字元處理與公開錯誤脫敏。
+- **mainnet 防護**：編排助手在 `tron:728126428` 動真錢時要求顯式確認旗標；預設測試用 `tron:3448148188`。
+- **程序信任邊界**：wallet-cli 與 secret script stdout/stderr 都不可信；全部有 byte/time limit、`shell: false` launch policy、程序樹終止、pipe 銷毀、控制字元處理與公開錯誤脫敏。
 - **回應完整性**：成功狀態不足以接受簽章；必須匹配 command、network、chainId、data schema 與 pinned signer。
 - **config 機密姿態**：密碼存於 config 明文，與 `app_secret` / `raw_secret.private_key` 一致；config 檔 `0600`。`inspect` 類輸出須 redact 密碼（與 Privy 對 app_secret 的 redaction 一致）。
 

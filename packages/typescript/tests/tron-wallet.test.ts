@@ -76,6 +76,11 @@ const EIP712_NO_VERSION = {
 // --- Address ---
 
 describe('Address', () => {
+  it('rejects non-canonical network aliases', () => {
+    expect(() => new TronSigner(TEST_KEY, 'tron:mainnet')).toThrow(/canonical CAIP-2/)
+    expect(() => new TronSigner(TEST_KEY, ' tron:728126428')).toThrow(/canonical CAIP-2/)
+  })
+
   it('should return correct address', async () => {
     const wallet = makeWallet()
     const addr = await wallet.getAddress()

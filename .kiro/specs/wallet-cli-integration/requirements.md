@@ -15,8 +15,8 @@
 #### 驗收準則
 
 1. 當使用者配置 `wallet_cli` 錢包類型時，agent-wallet 系統應透過 `WalletCliAdapter`（實作 `Wallet` 與 `Eip712Capable` 介面）提供簽名能力。
-2. 建構 `WalletCliAdapter` 時應要求完整 network：TRON 使用 `tron:<name>`，EVM 使用 `eip155:<十進位 chainId>`；裸 `tron`、裸 `eip155`、格式錯誤或不存在的 network 應 fail-fast，且不得暗自回退主網。
-3. 當 EVM network 傳給 wallet-cli 時，agent-wallet 系統應將 `eip155:<chainId>` 明確映射為 `evm:<chainId>`；TRON network 名稱應維持 `tron:<name>` 並以 wallet-cli network 清單確認存在。
+2. agent-wallet 的所有 network 入口應只接受精確 canonical CAIP-2：TRON 使用 `tron:<正十進位 chainId>`，EVM 使用 `eip155:<正十進位 chainId>`；裸 family、alias、大小寫或空白變體、格式錯誤及不存在的 network 應 fail-fast，且不得暗自回退主網。
+3. agent-wallet 應將 canonical network 原樣傳給 wallet-cli，不得將 `eip155` 改寫為 `evm` 或展開名稱 alias；並應以 wallet-cli network 清單確認該 ID 存在。
 4. 第一次需要帳戶身分時，adapter 應以共享的 in-flight promise 查詢一次 account descriptor，固定 canonical `accountId` 及可用的 TRON/EVM 地址；並行呼叫不得各自解析不同 active account。
 5. 每次簽章應明確傳遞固定的 `accountId` 與 canonical wallet-cli network，並驗證回應中的 family、network、chainId 及 signer address 與固定身分一致。
 6. 對 TRON 呼叫 `signTransaction(payload)` 時，應傳入 TRON 未簽交易 JSON，並回傳 `{ family: "tron", transaction: data.signed }`；EVM 應回傳 `{ family: "evm", rawTransaction }`，使呼叫端可用 discriminator 安全收窄。
@@ -52,7 +52,7 @@
 5. wallet cache key 或等效隔離機制應納入會改變 wallet-cli 實例行為的 network 與 dependencies，避免跨 network 或測試注入誤用同一 adapter。
 6. `resolveWalletAddresses` 對 wallet-cli 應直接查詢固定 account descriptor，不得以缺少 network 的 adapter 旁路建構；若 descriptor 同時提供 EVM 與 TRON 地址，應使用既有 `whitelist` 模式回傳兩個 entries。Privy 的 `single` 行為應保持不變。
 7. agent-wallet 系統應從 `@bankofai/agent-wallet/advanced` 匯出 `WalletCliAdapter`、`WalletCliClient`、`WalletCliConfigResolver` 與 secret-provider 契約；root entry 僅保留 resolver、provider、config、穩定型別與錯誤。
-8. 當 CLI 執行 `start/add wallet_cli` 時，應明示其只連結既有 wallet-cli account；在收集密碼前以無密碼的 `current [--account]` 確認 account descriptor，將 canonical `accountId` 寫入新 config，並在帳戶不存在時提示先以 wallet-cli 建立或匯入帳戶。
+8. 當 CLI 執行 `start/add wallet_cli` 時，應明示其只連結既有 wallet-cli account；在收集密碼前以無密碼的 `current [--account]` 確認 account descriptor，將 canonical `accountId` 寫入新 config，並在帳戶不存在時提示先以 wallet-cli 建立或匯入帳戶。非互動模式省略選填的 account 時應直接解析 active account，不得嘗試讀取 stdin；若 active account 不存在則應乾淨失敗。
 
 ### 需求 4：子程序互動與信封解析
 
@@ -69,7 +69,8 @@
 7. 當子程序退出碼為 1 時，應拋出 `WalletCliExecutionError` 並附帶開放式 `error.code`；退出碼為 2 時應拋出 `WalletCliUsageError`，不自動重試。
 8. 當 binary 或啟動目標不存在時，應拋出 `WalletCliNotFoundError` 並提供可採取行動的安裝或路徑提示。
 9. 當操作 timeout、子程序狀態不明或交易可能仍在飛行時，系統不得自動重送簽章或廣播。
-10. 子程序必須以 `shell: false` 啟動，並設置可配置且有界的 timeout、stdout/stderr 上限及終止升級；到達限制時應停止程序並回傳已分類、已脫敏的錯誤。
+10. 子程序必須以 `shell: false` 啟動，並設置可配置且有界的 timeout、stdout/stderr 上限及終止升級；到達限制時應終止完整程序樹、銷毀本端 pipe，並在 timeout 加 grace period 的界線內回傳已分類、已脫敏的錯誤，即使後代程序仍持有繼承的 pipe。
+11. 普通字串或 Buffer stdin 的非同步寫入錯誤（包含 EPIPE）應由 client Promise 捕捉並分類為 `stdin_write`，不得成為未處理的 stream error。
 
 ### 需求 5：錯誤處理與階層
 
@@ -83,6 +84,7 @@
 4. agent-wallet 系統應對 binary 缺失、密碼缺失、旗標互斥等情況 fail-fast 產生明確錯誤。
 5. 當遭遇未知 `error.code` 時，agent-wallet 系統應容忍並回退到其所屬退出碼類別（錯誤碼為開放非窮舉）。
 6. 當 envelope、command、context、data shape、signer 或輸出限制驗證失敗時，應回傳穩定的 wallet-cli 錯誤類別及 code，不得把未經處理的 stdout/stderr 直接拼入錯誤訊息。
+7. CJS consumer 混用 root、advanced 與 `integrations/wallet-cli` entry point 時，公開錯誤的 `instanceof` 分派及 timeout recovery 應保持有效，不得因 bundle 內重複類別定義而失效。
 
 ### 需求 6：擴充性——為後續外部錢包預留
 
@@ -119,13 +121,13 @@
 #### 驗收準則
 
 1. agent-wallet 系統應在獨立 `integrations/wallet-cli/` 層提供廣播、查詢與編排能力，且此層應可安全移除、不為 `resolveWallet` 所依賴。
-2. 當呼叫 `buildTransfer` 時，應以 `wallet-cli tx send --dry-run` 建未簽交易與估算手續費，且不需密碼。
+2. 當呼叫 `buildTransfer` 時，應以明確的 injected Wallet source address 作為 `--account` 執行 `wallet-cli tx send --dry-run`，建未簽交易與估算手續費且不需密碼；回傳交易的每個 owner contract 必須與該地址一致，否則拒絕。
 3. 當呼叫 `broadcast(signedTx)` 時，應以 `wallet-cli tx broadcast --tx-stdin` 廣播已簽交易（經 stdin），且不需密碼。
 4. 當呼叫 `getTxStatus(txid)` 時，應回傳四態（`confirmed`/`failed`/`pending`/`not_found`）。
 5. 當呼叫 `signAndBroadcast` 時，應依序執行建交易 → agent-wallet 簽名 → 廣播 → （可選）追蹤，且密碼僅在簽名環節使用。
 6. 當 `signAndBroadcast` 設 `wait: true` 時，應輪詢 `tx status` 至 `confirmed`/`failed` 或達 `waitTimeoutMs`。
-7. 當 `signAndBroadcast` 遭遇 timeout（交易可能在飛）時，不應自動重送，而應回傳「以 `tx status` 複核」的狀態。
-8. 當鏈操作涉及 `tron:mainnet`（動真錢）時，編排應要求顯式確認旗標。
+7. 當 broadcast 本身 timeout 且可從交易取得 txId 時，不應自動重送，而應回傳「以 `tx status` 複核」的狀態；當 broadcast 已成功且後續 status query 失敗時，應拋出帶已知 `txId` 與原始分類 code/cause 的錯誤，讓 caller 能安全恢復而不重送。
+8. 當鏈操作涉及 `tron:728126428`（動真錢）時，編排應要求顯式確認旗標。
 9. `integrations/wallet-cli/` 應明確標示為 TRON-only；本次不得新增 EVM 建交易、RPC、廣播或交易追蹤能力，核心 resolver 與 x402 路徑也不得依賴此層。
 
 ### 需求 9：安全與機密保護
@@ -139,7 +141,7 @@
 3. 當輸出 `wallet_cli` 錢包資訊（如 inspect 類操作）時，agent-wallet 系統應 redact 密碼（與 Privy `app_secret` 的 redaction 一致）。
 4. 當錯誤或日誌產生時，不應 echo 密碼、SecretRef stdout、未經處理的 stderr 或其他敏感值；可安全記錄 command、exit code、`error.code`、`durationMs` 與輸出是否遭截斷。
 5. 當廣播已簽交易時，應經 stdin（`--tx-stdin`）傳遞，而非 argv。
-6. 當 `tron:mainnet` 操作發生時，預設測試應使用 `tron:nile`，且 mainnet 操作須顯式確認。
+6. 當 `tron:728126428` 操作發生時，預設測試應使用 `tron:3448148188`，且 mainnet 操作須顯式確認。
 7. agent-wallet 系統應將 wallet-cli 子程序的 stderr 與未預期輸出視為不可信資料，不應解析為指令。
 8. `SecretRef.exec` 應維持「可執行檔案路徑而非 inline shell command」的限制，並受獨立 timeout、stdout/stderr 上限、空輸出檢查與錯誤脫敏保護。
 9. wallet-cli 與 secret-provider 子程序的輸出累積必須有硬上限；超限後不得繼續將資料保留於記憶體。
@@ -158,6 +160,7 @@
 5. 當未簽/已簽 TRON 交易物件在 agent-wallet 與 wallet-cli 間傳遞時，應無需格式轉換即可接合。
 6. `WalletCliWarning` 應作為公開的開放 union 型別保留 structured warning，不得只留下 message 而遺失 code。
 7. 當 `wallet_cli` 錢包被使用時，金鑰的單一擁有者應為 wallet-cli keystore，agent-wallet 不應重複簽名或二次解鎖。
+8. typed-data 中合法的 bigint（包含 domain、巢狀 struct 與 array）應在 JSON 邊界無損轉為十進位字串，且轉換前後 EIP-712 digest 必須相同；循環引用仍應拒絕。
 
 ### 需求 11：相容性與驗證
 

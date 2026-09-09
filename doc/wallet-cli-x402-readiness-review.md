@@ -115,7 +115,7 @@ envelope chain context；缺值、裸 family 與 alias 在 acquire/spawn 前 fai
 修復前，`WalletCliAdapter` 雖然收到 x402 傳入的 network，但只在 `getAddress()` 用它選擇地址 family。`WalletCliClient.signTransaction()` 和 `signTypedData()` 都沒有向 wallet-cli 傳遞：
 
 ```text
---network tron:nile
+--network tron:3448148188
 ```
 
 因此修復前的真正簽名仍依賴 wallet-cli 全域預設 network，可能造成：

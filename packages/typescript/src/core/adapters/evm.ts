@@ -7,12 +7,15 @@ import type {
   Wallet,
 } from '../base.js'
 import { SigningError } from '../errors.js'
+import { Network } from '../base.js'
+import { assertNetworkFamily } from '../utils/network.js'
 
 export class EvmSigner implements Wallet, Eip712Capable {
   private readonly account: ReturnType<typeof privateKeyToAccount>
   private readonly network: string
 
-  constructor(privateKey: Uint8Array, network: string = 'eip155') {
+  constructor(privateKey: Uint8Array, network: string = 'eip155:1') {
+    assertNetworkFamily(network, Network.EVM)
     const hex = `0x${Buffer.from(privateKey).toString('hex')}` as `0x${string}`
     this.account = privateKeyToAccount(hex)
     this.network = network

@@ -90,7 +90,7 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 1: Resolve provider and active wallet
   // ----------------------------------------------------------------
-  const provider = resolveWalletProvider({ network: 'tron:mainnet' })
+  const provider = resolveWalletProvider({ network: 'tron:728126428' })
   const wallet = requireEip712Wallet(await provider.getActiveWallet())
   const address = await wallet.getAddress()
   console.log(`Address: ${address}`)

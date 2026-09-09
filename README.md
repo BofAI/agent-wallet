@@ -67,6 +67,8 @@ If `wallets_config.json` is missing or contains no wallets, the SDK can resolve 
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Account index used when deriving from `AGENT_WALLET_MNEMONIC`. |
 
 - A non-empty wallet config takes precedence. Invalid or incomplete config fails explicitly instead of silently falling back to environment variables.
+- Environment secrets do not imply a chain. Pass an exact canonical CAIP-2 network such as
+  `eip155:1` or `tron:728126428`; bare families and aliases such as `tron:mainnet` are rejected.
 
 ### CLI
 

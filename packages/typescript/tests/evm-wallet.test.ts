@@ -72,6 +72,11 @@ const EIP712_NO_VERSION = {
 // --- Address ---
 
 describe('Address', () => {
+  it('rejects non-canonical network aliases', () => {
+    expect(() => new EvmSigner(TEST_KEY, 'ethereum')).toThrow(/canonical CAIP-2/)
+    expect(() => new EvmSigner(TEST_KEY, 'EIP155:1')).toThrow(/canonical CAIP-2/)
+  })
+
   it('should return correct address', async () => {
     const wallet = makeWallet()
     const addr = await wallet.getAddress()

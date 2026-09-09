@@ -74,7 +74,7 @@
 ## 4. 簽名適配器
 
 - [x] 4.1 新增嚴格 network codec 與 account identity pinning
-  - 建構 adapter 時要求 `tron:<name>` 或 `eip155:<positive safe integer>`；同步拒絕裸 family/alias/非法值，EVM 映射 `evm:<id>`
+  - 共用 network codec 要求 canonical `tron:<positive integer>` 或 `eip155:<positive safe integer>`；同步拒絕裸 family/alias/大小寫/空白/非法值，且不改寫 namespace
   - handshake 確認 canonical network row；第一次 `current` 固定 canonical `accountId` 與 addresses，共用並行 promise
   - `getAddress()` 依 family 回固定地址；後續 active account 改變不得切換 signer
   - 所有簽章結果驗證 command、network row 與 pinned address；EVM checksum normalization、TRON exact compare
@@ -134,14 +134,14 @@
 - [x] 6.1 將既有 `chain-ops.ts` 對齊 bounded client 契約
   - 保留 `buildTransfer`、`broadcast`、`getTxStatus`、`getBalance`、`getTxInfo` 的現有公開行為與十進位字串金額
   - generic run 呼叫提供預期 command/context/data validator；`broadcast` 仍以 `--tx-stdin` 傳已簽交易
-  - 在任何子程序前同步拒絕非 `tron:<name>` network，不新增 EVM RPC、建交易、廣播或追蹤
+  - 在任何子程序前同步拒絕非 canonical `tron:<chainId>` network，不新增 EVM RPC、建交易、廣播或追蹤
   - 更新 mock 測試覆蓋四態、validator mismatch、stdin broadcast、無 secret acquire 與 EVM fail-fast
   - _Requirements: 4.4-4.5, 8.1-8.4, 8.9, 9.5, 10.1_
 
 - [x] 6.2 回歸 `signAndBroadcast` 安全編排
   - 維持建交易 → agent-wallet 簽名 → 廣播 → 選用追蹤的順序，密碼只在 adapter 簽名階段取得
   - `wait: true` 保留 confirmed/failed/pending/timeout 分支；timeout 或狀態不明不得自動重簽/重廣播，回傳可用 `tx status` 複核的狀態
-  - `tron:mainnet` 仍要求顯式確認；預設測試使用 `tron:nile`
+  - `tron:728126428` 仍要求顯式確認；預設測試使用 `tron:3448148188`
   - _Requirements: 4.9, 8.5-8.9, 9.6_
 
 ## 7. 程序整合與回歸測試
@@ -164,6 +164,13 @@
   - 驗證未引入動態 params schema plugin，內部 registry 與中央 schema 維持同步
   - _Requirements: 6.7, 7.2, 7.5-7.7, 10.2-10.6, 11.6_
 
+- [x] 7.4 修復 PR #20 跨入口與恢復邊界
+  - canonical network/mainnet guard 全面套用到所有 provider；CJS root/advanced/integration entry points 以共享錯誤品牌保持 `instanceof` 與 broadcast timeout recovery
+  - 普通 stdin 非同步 EPIPE 收斂為 `stdin_write`；wallet-cli/secret exec 終止完整程序樹並在 grace 到期後銷毀 pipe、直接 settle
+  - 非互動 start/add 省略 account 時解析 active account；typed-data bigint 遞迴轉十進位字串並驗證 digest 等價
+  - build 明確綁定 injected Wallet address 並驗證 owner；提交後 status query 錯誤保留 txId/code/cause，且所有恢復路徑不重送
+  - _Requirements: 1.2-1.5, 3.8, 4.9-4.11, 5.7, 8.2, 8.7-8.8, 10.8_
+
 ## 8. 品質閘與驗證摘要
 
 - [x] 8.1 執行 wallet-cli 相關 targeted tests
@@ -178,6 +185,7 @@
   - 2026-08-25 onboarding 補強後：Vitest 21 files passed、1 file skipped，263 tests passed、2 opt-in skipped；`tsc --noEmit`、ESLint、tsup build 與本次變更檔 Prettier check 均通過
   - 完整 `prettier --check src/ tests/` 另列出 11 個未由本期修改的既有格式檔案，未批次重排無關程式
   - 2026-08-26 架構收斂後：Vitest 22 files passed、1 file skipped，268 tests passed、2 opt-in skipped；src/examples TypeScript、ESLint、完整 Prettier check 與 ESM/CJS/DTS build 均通過
+  - 2026-09-09 PR #20 修復後：coverage run 23 files / 325 tests 通過，1 file / 2 個 opt-in tests skipped；`pnpm test`、`pnpm test:coverage`、`pnpm lint`、`pnpm build`、`pnpm format:check`、build 後 CJS 多入口 probe 與 `git diff --check` 均通過
   - _Requirements: 全域品質閘_
 
 - [x] 8.3 執行或明確 skip 上一級本地 wallet-cli 實測

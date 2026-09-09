@@ -14,7 +14,7 @@ export class EnvWalletProvider implements WalletProvider {
   private readonly _env: NodeJS.ProcessEnv
 
   constructor(options: { network?: string; env?: NodeJS.ProcessEnv }) {
-    this._network = options.network
+    this._network = resolveNetwork(undefined, options.network)
     this._env = options.env ?? process.env
   }
 

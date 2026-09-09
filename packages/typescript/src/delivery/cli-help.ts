@@ -83,7 +83,7 @@ export function showCommandHelp(command: string, subcommand: string | undefined,
       '',
       'Options:',
       '  --wallet-id, -w <id>  Wallet ID (uses active wallet if omitted)',
-      '  --network, -n <net>   Target network (e.g. eip155:1, tron:nile)',
+      '  --network, -n <net>   Canonical CAIP-2 network (e.g. eip155:1, tron:3448148188)',
       DIR,
       HELP,
     ])

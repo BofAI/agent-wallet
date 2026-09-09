@@ -31,7 +31,7 @@ TRON/EVM transaction 與 typed-data 簽章委派給外部
 ```ts
 import { resolveWallet } from '@bankofai/agent-wallet'
 
-const wallet = await resolveWallet({ network: 'tron:nile' })
+const wallet = await resolveWallet({ network: 'tron:3448148188' })
 const signedTx = await wallet.signTransaction({ txID: '...', raw_data: {} })
 if (signedTx.family === 'tron') console.log(signedTx.transaction)
 ```
@@ -68,6 +68,12 @@ import {
 } from '@bankofai/agent-wallet/integrations/wallet-cli'
 ```
 
+直接呼叫 `buildTransfer` 時必須提供 `from`（TRON source address）；helper 會把它傳給
+wallet-cli 的 `--account`，並拒絕 owner 不一致的未簽交易。`signAndBroadcast` 會自動使用
+注入 `Wallet` 的 `getAddress()`。若 broadcast 已成功、後續 status query 失敗，會拋出
+`WalletCliSubmittedTransactionError`，其中保留已知 `txId`、原始 `code` 與 `cause`，caller
+應用該 txId 查詢，不應重送。
+
 ### resolveWallet
 
 Returns a ready-to-sign `Wallet` for the given network:
@@ -89,7 +95,7 @@ const provider = resolveWalletProvider({ network: 'eip155:1' })
 const wallet = await provider.getActiveWallet()
 
 // Or a specific wallet (ConfigWalletProvider only)
-const wallet2 = await provider.getWallet('my_wallet', 'tron:nile')
+const wallet2 = await provider.getWallet('my_wallet', 'tron:3448148188')
 ```
 
 ### Provider resolution order
@@ -137,17 +143,23 @@ master password。設定可保存明文字串以維持相容，但建議使用
 
 ## Network Routing
 
-| Network string                 | Adapter             | Mnemonic derivation       |
-| ------------------------------ | ------------------- | ------------------------- |
-| `eip155` or `eip155:<chainId>` | EVM                 | `m/44'/60'/0'/0/{index}`  |
-| `tron` or `tron:<chain>`       | TRON (`raw_secret`) | `m/44'/195'/0'/0/{index}` |
+agent-wallet 的所有 network 入口只接受精確的 canonical CAIP-2 字串，不做 trim、
+大小寫正規化、alias 展開或 namespace 改寫。
+
+| Network string                   | Adapter             | Mnemonic derivation       |
+| -------------------------------- | ------------------- | ------------------------- |
+| `eip155:<positive-chain-id>`     | EVM                 | `m/44'/60'/0'/0/{index}`  |
+| `tron:<positive-chain-id>`       | TRON (`raw_secret`) | `m/44'/195'/0'/0/{index}` |
+
+例如 Ethereum mainnet 為 `eip155:1`，TRON mainnet 為 `tron:728126428`，Nile 為
+`tron:3448148188`。裸 `eip155` / `tron`、`evm:1`、`tron:mainnet`、前後空白與
+大小寫變體都會被拒絕。Privy 可依既有契約省略 network；一旦提供也適用相同規則。
 
 Privy wallet 會以遠端 `chain_type` 驗證呼叫端要求的 network family；例如 EVM Privy
-wallet 不可透過 `network: 'tron:mainnet'` 使用。
+wallet 不可透過 `network: 'tron:728126428'` 使用。
 
-`wallet_cli` 不使用本機 mnemonic routing，並且比其他 adapter 更嚴格：必須傳完整
-`tron:<name>` 或 `eip155:<positive-chain-id>`。裸 `tron`、裸 `eip155`、alias 與預設
-mainnet 都會在啟動子程序前被拒絕；EVM target 會映射成 wallet-cli 的 `evm:<chain-id>`。
+`wallet_cli` 不使用本機 mnemonic routing，會把相同 canonical ID 原樣傳給 wallet-cli，
+並以 network registry 與每次回應的 chain context 驗證 family、network 與 chainId。
 
 ## wallet-cli 發布契約
 
@@ -179,6 +191,10 @@ mainnet 都會在啟動子程序前被拒絕；EVM target 會映射成 wallet-cl
 | `AGENT_WALLET_PRIVATE_KEY`            | Env fallback private key (hex)                                    |
 | `AGENT_WALLET_MNEMONIC`               | Env fallback mnemonic phrase                                      |
 | `AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX` | Mnemonic account index (default `0`)                              |
+
+`AGENT_WALLET_PRIVATE_KEY` 與 `AGENT_WALLET_MNEMONIC` 仍受支援；它們只定義秘密來源，
+不隱含 network。解析錢包時仍須傳 canonical network，例如 `eip155:1` 或
+`tron:728126428`。
 
 `@tron-walletcli/wallet-cli` 是 **optional peer dependency**，只有使用
 `wallet_cli` 時才需安裝相容的 4.x：

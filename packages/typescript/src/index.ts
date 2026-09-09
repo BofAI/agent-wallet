@@ -35,6 +35,7 @@ export {
   WalletCliNotFoundError,
   WalletCliUsageError,
   WalletCliExecutionError,
+  WalletCliSubmittedTransactionError,
 } from './core/errors.js'
 
 // Provider layer

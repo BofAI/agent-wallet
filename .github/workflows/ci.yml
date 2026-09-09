@@ -47,10 +47,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Test CJS entry points
+        run: pnpm test:cjs
+
       - name: Smoke test CLI
         env:
           AGENT_WALLET_DIR: ${{ runner.temp }}/agent-wallet-typescript-smoke
         run: |
           node dist/delivery/bin.js start raw_secret -w wallet_1 -k 0x4c0883a69102937d6231471b5dbb6204fe512961708279f3e27e8e4ce3e66c3b
-          node dist/delivery/bin.js sign typed-data '{"types":{"EIP712Domain":[{"name":"name","type":"string"}],"Mail":[{"name":"from","type":"string"}]},"primaryType":"Mail","domain":{"name":"Test"},"message":{"from":"hi"}}' -n tron:nile -w wallet_1
+          node dist/delivery/bin.js sign typed-data '{"types":{"EIP712Domain":[{"name":"name","type":"string"}],"Mail":[{"name":"from","type":"string"}]},"primaryType":"Mail","domain":{"name":"Test"},"message":{"from":"hi"}}' -n tron:3448148188 -w wallet_1
           node -e "const fs = require('node:fs'); const path = require('node:path'); const dir = process.env.AGENT_WALLET_DIR; const expected = ['wallets_config.json']; const missing = expected.filter((name) => !fs.existsSync(path.join(dir, name))); if (missing.length) { throw new Error('Missing files in ' + dir + ': ' + missing.join(', ')) } console.log(fs.readdirSync(dir).sort())"

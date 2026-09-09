@@ -25,13 +25,16 @@ import type {
 } from '../base.js'
 import { SigningError } from '../errors.js'
 import { stripHexPrefix } from '../utils/hex.js'
+import { Network } from '../base.js'
+import { assertNetworkFamily } from '../utils/network.js'
 
 export class TronSigner implements Wallet, Eip712Capable {
   private readonly privateKeyBytes: Uint8Array
   private readonly address: string
   private readonly network: string
 
-  constructor(privateKey: Uint8Array, network: string = 'tron') {
+  constructor(privateKey: Uint8Array, network: string = 'tron:728126428') {
+    assertNetworkFamily(network, Network.TRON)
     this.privateKeyBytes = privateKey
     this.network = network
 

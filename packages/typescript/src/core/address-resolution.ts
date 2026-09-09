@@ -39,8 +39,8 @@ export async function resolveWalletAddresses(
   const privateKey = loadRawSecretPrivateKey(conf.params)
 
   const [evmAddress, tronAddress] = await Promise.all([
-    new EvmSigner(privateKey.eip155, 'eip155').getAddress(),
-    new TronSigner(privateKey.tron, 'tron').getAddress(),
+    new EvmSigner(privateKey.eip155, 'eip155:1').getAddress(),
+    new TronSigner(privateKey.tron, 'tron:728126428').getAddress(),
   ])
 
   return {

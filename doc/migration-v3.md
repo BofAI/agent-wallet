@@ -48,6 +48,12 @@ Node.js >=20。
 SDK env fallback 只讀取右欄的 `AGENT_WALLET_*` 名稱。CLI config 存在且至少包含一個
 wallet 時，resolver 會優先使用 `ConfigWalletProvider`。
 
+3.0 的所有 network 參數只接受精確 canonical CAIP-2：`eip155:<positive-chain-id>` 或
+`tron:<positive-chain-id>`。請將 `eip155`、`tron`、`evm:1`、`tron:mainnet`、`tron:nile`
+等舊值分別改為實際 chain ID（例如 `eip155:1`、`tron:728126428`、
+`tron:3448148188`）。`AGENT_WALLET_PRIVATE_KEY` 與 Privy credential 本身不需變更；
+只有傳入的 network 需要遷移。Privy 仍可省略 network，但提供時也必須 canonical。
+
 ## 4. 更新 transaction signing 結果
 
 2.x 把 EVM raw transaction 或 JSON-encoded TRON transaction 都放在 `string` 中：
@@ -102,7 +108,7 @@ wallet-cli transport/secret provider 時，透過 `dependencies` 注入：
 ```ts
 const provider = resolveWalletProvider({
   dir,
-  network: "tron:nile",
+  network: "tron:3448148188",
   dependencies: { walletCli: { clientFactory, secretProviderFactory } },
 });
 ```

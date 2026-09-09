@@ -144,7 +144,7 @@ describe('wallet-cli deterministic process integration', () => {
     ])
 
     expect(first.version).toBe('4.13.0')
-    expect(second.network?.id).toBe('evm:1')
+    expect(second.network?.id).toBe('eip155:1')
     expect(third.catalog.commands.some((command) => command.id === 'typed-data.sign')).toBe(true)
     expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual([
       'version',
@@ -215,15 +215,15 @@ describe('wallet-cli deterministic process integration', () => {
     expect(result.data.addresses).toEqual({ tron: TRON_ADDRESS, evm: EVM_ADDRESS })
     expect(result.chain).toEqual({
       family: 'tron',
-      network: 'tron:mainnet',
-      chainId: 'mainnet',
+      network: 'tron:728126428',
+      chainId: '728126428',
     })
   })
 
   it('pins current to the requested signing network and requires its 4.13 chain context', async () => {
     const target = parseWalletCliNetwork('eip155:1')
     const result = await fixtureClient().currentAccount('fixture', target)
-    expect(result.chain).toEqual({ family: 'evm', network: 'evm:1', chainId: '1' })
+    expect(result.chain).toEqual({ family: 'evm', network: 'eip155:1', chainId: '1' })
 
     await expect(
       fixtureClient('missing-current-chain').currentAccount('fixture', target),
@@ -235,7 +235,7 @@ describe('wallet-cli deterministic process integration', () => {
       { account: 'fixture', password: 'fixture-password' },
       fixtureClient(),
       new StaticSecretProvider('fixture-password'),
-      'tron:nile',
+      'tron:3448148188',
     )
     const unsigned = { txID: 'abc', raw_data: { contract: [] }, raw_data_hex: 'deadbeef' }
     const signed = await adapter.signTransaction(unsigned)
@@ -298,7 +298,7 @@ describe('wallet-cli deterministic process integration', () => {
   })
 
   it('signs typed data for both families', async () => {
-    for (const network of ['tron:nile', 'eip155:1']) {
+    for (const network of ['tron:3448148188', 'eip155:1']) {
       const adapter = new WalletCliAdapter(
         { account: 'fixture', password: 'fixture-password' },
         fixtureClient(),
@@ -329,7 +329,7 @@ describe('wallet-cli deterministic process integration', () => {
       { account: 'fixture', password: 'fixture-password' },
       fixtureClient(),
       provider,
-      'tron:nile',
+      'tron:3448148188',
     )
 
     await adapter.signTypedData({
@@ -409,7 +409,7 @@ describe('wallet-cli deterministic process integration', () => {
     ])
 
     const client = fixtureClient()
-    const target = parseWalletCliNetwork('tron:nile')
+    const target = parseWalletCliNetwork('tron:3448148188')
     const identity = await client.currentAccount('fixture')
     const wrongLease = await new StaticSecretProvider('wrong-password').acquire({
       label: 'wallet-cli password',

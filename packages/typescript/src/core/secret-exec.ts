@@ -3,9 +3,16 @@ import { accessSync, constants } from 'node:fs'
 import { extname, win32 as win32Path } from 'node:path'
 
 import { ExternalSignerConfigError } from './errors.js'
+import {
+  destroyProcessPipes,
+  forceKillProcessTree,
+  shouldDetachProcess,
+  signalProcessTree,
+} from './utils/process-tree.js'
 
 export const DEFAULT_SECRET_EXEC_STDOUT_LIMIT = 64 * 1024
 export const DEFAULT_SECRET_EXEC_STDERR_LIMIT = 16 * 1024
+export const DEFAULT_SECRET_EXEC_KILL_GRACE_MS = 3_000
 
 export interface SecretExecOptions {
   env?: NodeJS.ProcessEnv
@@ -13,6 +20,7 @@ export interface SecretExecOptions {
   maxStderrBytes?: number
   platform?: NodeJS.Platform
   comspec?: string
+  killGraceMs?: number
   defaultTimeoutMs: number
 }
 
@@ -46,12 +54,14 @@ export function executeSecretSource(
   const timeoutMs = ref.timeout ?? options.defaultTimeoutMs
   const maxStdoutBytes = options.maxStdoutBytes ?? DEFAULT_SECRET_EXEC_STDOUT_LIMIT
   const maxStderrBytes = options.maxStderrBytes ?? DEFAULT_SECRET_EXEC_STDERR_LIMIT
+  const killGraceMs = options.killGraceMs ?? DEFAULT_SECRET_EXEC_KILL_GRACE_MS
 
   return new Promise<Buffer>((resolve, reject) => {
     const child = spawn(launchTarget.command, launchTarget.args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: options.env ?? process.env,
       shell: false,
+      detached: shouldDetachProcess(platform),
       windowsVerbatimArguments: launchTarget.windowsVerbatimArguments,
     })
     const stdout: Buffer[] = []
@@ -78,8 +88,24 @@ export function executeSecretSource(
     const terminate = () => {
       if (terminating) return
       terminating = true
-      child.kill('SIGTERM')
-      killTimer = setTimeout(() => child.kill('SIGKILL'), 3_000)
+      signalProcessTree(child, 'SIGTERM', platform)
+      killTimer = setTimeout(() => {
+        forceKillProcessTree(child, platform)
+        destroyProcessPipes(child)
+        if (exceeded) {
+          finish(
+            new ExternalSignerConfigError(
+              `${label}: secret source exceeded ${exceeded} limit: ${ref.exec}`,
+            ),
+          )
+        } else {
+          finish(
+            new ExternalSignerConfigError(
+              `${label}: secret source timed out after ${timeoutMs}ms: ${ref.exec}`,
+            ),
+          )
+        }
+      }, killGraceMs)
       killTimer.unref?.()
     }
     const timer = setTimeout(() => {

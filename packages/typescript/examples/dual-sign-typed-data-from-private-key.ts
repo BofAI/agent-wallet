@@ -10,7 +10,7 @@
  *
  * Then it resolves two wallet providers:
  *
- *   - TRON via `resolveWalletProvider({ network: "tron:mainnet" })`
+ *   - TRON via `resolveWalletProvider({ network: "tron:728126428" })`
  *   - EVM via `resolveWalletProvider({ network: "eip155:1" })`
  *
  * Usage:
@@ -55,7 +55,7 @@ const PAYMENT_PERMIT = {
 async function main() {
   configureEnvWalletSource()
 
-  const tronProvider = resolveWalletProvider({ network: 'tron:mainnet' })
+  const tronProvider = resolveWalletProvider({ network: 'tron:728126428' })
   const tronWallet = requireEip712Wallet(await tronProvider.getActiveWallet())
   const tronAddress = await tronWallet.getAddress()
   const tronSignature = await tronWallet.signTypedData(PAYMENT_PERMIT)

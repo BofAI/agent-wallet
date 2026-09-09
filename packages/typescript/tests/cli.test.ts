@@ -489,6 +489,49 @@ describe('non-interactive prompt guards', () => {
     ).rejects.toThrow(CliExit)
     expect(out(io)).toContain('Cannot prompt for privy app id')
   })
+
+  it.each(['start', 'add'] as const)(
+    '%s wallet_cli uses the active account when --account is omitted',
+    async (command) => {
+      const io = mockIO([], false)
+      const options = {
+        walletType: 'wallet_cli',
+        walletId: `cli-${command}`,
+        cliPassword: 'KsPass123!',
+      }
+
+      if (command === 'start') await cmdStart(secretsDir, io, options)
+      else await cmdAdd(secretsDir, io, options)
+
+      expect(WalletCliClient.prototype.currentAccount).toHaveBeenCalledWith(undefined)
+      expect(readConfig(secretsDir).wallets[`cli-${command}`].params.account).toBe(
+        'active-account-id',
+      )
+    },
+  )
+
+  it.each(['start', 'add'] as const)(
+    '%s wallet_cli fails cleanly when no active account exists in non-interactive mode',
+    async (command) => {
+      vi.mocked(WalletCliClient.prototype.currentAccount).mockRejectedValueOnce(
+        new WalletCliExecutionError('no active account', 'missing_wallet_address'),
+      )
+      const io = mockIO([], false)
+      const options = {
+        walletType: 'wallet_cli',
+        walletId: `missing-${command}`,
+        cliPassword: 'KsPass123!',
+      }
+
+      await expect(
+        command === 'start' ? cmdStart(secretsDir, io, options) : cmdAdd(secretsDir, io, options),
+      ).rejects.toThrow(CliExit)
+      expect(out(io)).toContain('Could not link wallet-cli account (active)')
+      if (existsSync(join(secretsDir, 'wallets_config.json'))) {
+        expect(readConfig(secretsDir).wallets).not.toHaveProperty(`missing-${command}`)
+      }
+    },
+  )
 })
 
 describe('cmdAdd / active wallet', () => {

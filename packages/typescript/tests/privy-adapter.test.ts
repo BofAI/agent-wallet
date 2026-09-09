@@ -47,6 +47,21 @@ class FakePrivyClient {
 }
 
 describe('PrivyAdapter', () => {
+  it.each(['', 'ethereum', 'eip155', 'tron:mainnet'])(
+    'rejects a non-canonical requested network %s',
+    (network) => {
+      const client = new FakePrivyClient({ chainType: 'ethereum' })
+      expect(
+        () =>
+          new PrivyAdapter(
+            { appId: 'app', appSecret: 'secret', walletId: 'wallet-1' },
+            client,
+            network,
+          ),
+      ).toThrow(/canonical CAIP-2/)
+    },
+  )
+
   it('maps signTransaction to eth_signTransaction', async () => {
     const client = new FakePrivyClient()
     const adapter = new PrivyAdapter(
@@ -156,7 +171,7 @@ describe('PrivyAdapter', () => {
         walletId: 'wallet-1',
       },
       client,
-      'tron:mainnet',
+      'tron:728126428',
     )
 
     await expect(adapter.getAddress()).rejects.toThrow(

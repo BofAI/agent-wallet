@@ -11,14 +11,28 @@
  */
 
 import type { WalletCliClient, WalletCliSuccessResult } from '../../core/clients/wallet-cli.js'
+import { WalletCliExecutionError } from '../../core/errors.js'
 import { assertTronWalletCliNetwork } from '../../core/wallet-cli-network.js'
+import bs58checkModule from 'bs58check'
 import { z } from 'zod'
+
+type Bs58checkLike = {
+  decode?: (input: string) => Uint8Array
+  default?: typeof bs58checkModule
+}
+
+const bs58checkInterop = bs58checkModule as Bs58checkLike
+const bs58check: typeof bs58checkModule =
+  typeof bs58checkInterop.decode === 'function'
+    ? bs58checkModule
+    : (bs58checkInterop.default ?? bs58checkModule)
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface BuildTransferParams {
+  from: string
   to: string
   amount?: string
   rawAmount?: string
@@ -115,8 +129,10 @@ export async function buildTransfer(
     'send',
     '--to',
     params.to,
+    '--account',
+    params.from,
     '--network',
-    params.network,
+    target.cliNetwork,
     '--dry-run',
     '-o',
     'json',
@@ -126,11 +142,13 @@ export async function buildTransfer(
   if (params.token) args.push('--token', params.token)
   if (params.contract) args.push('--contract', params.contract)
   if (params.assetId) args.push('--asset-id', params.assetId)
-  return client.run(args, {
+  const result = await client.run(args, {
     command: 'tx.send',
     dataSchema: BuildTransferSchema,
     chain: compatibility.network!,
   })
+  assertTransferOwner(result.data.tx, params.from)
+  return result
 }
 
 export async function broadcast(
@@ -140,7 +158,7 @@ export async function broadcast(
 ): Promise<WalletCliSuccessResult<BroadcastResult>> {
   const target = assertTronWalletCliNetwork(network)
   const compatibility = await client.ensureCompatible(target)
-  const args = ['tx', 'broadcast', '--tx-stdin', '--network', network, '-o', 'json']
+  const args = ['tx', 'broadcast', '--tx-stdin', '--network', target.cliNetwork, '-o', 'json']
   return client.run(args, {
     command: 'tx.broadcast',
     dataSchema: BroadcastSchema,
@@ -156,7 +174,7 @@ export async function getTxStatus(
 ): Promise<WalletCliSuccessResult<TxStatusResult>> {
   const target = assertTronWalletCliNetwork(network)
   const compatibility = await client.ensureCompatible(target)
-  const args = ['tx', 'status', '--txid', txid, '--network', network, '-o', 'json']
+  const args = ['tx', 'status', '--txid', txid, '--network', target.cliNetwork, '-o', 'json']
   return client.run(args, {
     command: 'tx.status',
     dataSchema: TxStatusSchema,
@@ -171,7 +189,7 @@ export async function getBalance(
 ): Promise<WalletCliSuccessResult<AccountBalanceResult>> {
   const target = assertTronWalletCliNetwork(network)
   const compatibility = await client.ensureCompatible(target)
-  const args = ['account', 'balance', '--network', network, '-o', 'json']
+  const args = ['account', 'balance', '--network', target.cliNetwork, '-o', 'json']
   if (accountRef) args.push('--account', accountRef)
   return client.run(args, {
     command: 'account.balance',
@@ -187,10 +205,60 @@ export async function getTxInfo(
 ): Promise<WalletCliSuccessResult<unknown>> {
   const target = assertTronWalletCliNetwork(network)
   const compatibility = await client.ensureCompatible(target)
-  const args = ['tx', 'info', '--txid', txid, '--network', network, '-o', 'json']
+  const args = ['tx', 'info', '--txid', txid, '--network', target.cliNetwork, '-o', 'json']
   return client.run(args, {
     command: 'tx.info',
     dataSchema: z.unknown(),
     chain: compatibility.network!,
   })
+}
+
+function assertTransferOwner(transaction: Record<string, unknown>, expectedAddress: string): void {
+  const expected = tronAddressHex(expectedAddress)
+  const rawData = transaction.raw_data
+  const contracts =
+    rawData && typeof rawData === 'object'
+      ? (rawData as Record<string, unknown>).contract
+      : undefined
+  if (!Array.isArray(contracts) || contracts.length === 0) {
+    throw new WalletCliExecutionError(
+      'wallet-cli built a transaction without an owner contract',
+      'contract_mismatch',
+    )
+  }
+
+  const owners = contracts.map((contract) => {
+    if (!contract || typeof contract !== 'object') return undefined
+    const parameter = (contract as Record<string, unknown>).parameter
+    if (!parameter || typeof parameter !== 'object') return undefined
+    const value = (parameter as Record<string, unknown>).value
+    if (!value || typeof value !== 'object') return undefined
+    return (value as Record<string, unknown>).owner_address
+  })
+  if (
+    owners.some(
+      (owner) =>
+        typeof owner !== 'string' ||
+        (owner === expectedAddress ? expected : owner.replace(/^0x/i, '').toLowerCase()) !==
+          expected,
+    )
+  ) {
+    throw new WalletCliExecutionError(
+      'wallet-cli built a transaction for a different owner than the injected wallet',
+      'contract_mismatch',
+    )
+  }
+}
+
+function tronAddressHex(address: string): string {
+  try {
+    const decoded = Buffer.from(bs58check.decode(address))
+    if (decoded.length !== 21 || decoded[0] !== 0x41) throw new Error('invalid TRON address')
+    return decoded.toString('hex').toLowerCase()
+  } catch {
+    throw new WalletCliExecutionError(
+      'The injected wallet returned an invalid TRON address',
+      'contract_mismatch',
+    )
+  }
 }
