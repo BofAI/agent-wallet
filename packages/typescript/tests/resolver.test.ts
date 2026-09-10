@@ -8,7 +8,6 @@ import { EnvWalletProvider } from '../src/core/providers/env-provider.js'
 import { ConfigWalletProvider } from '../src/core/providers/config-provider.js'
 import { WalletNotFoundError } from '../src/core/errors.js'
 import { saveConfig, type WalletsTopology } from '../src/core/config.js'
-import { loadLocalSecret } from '../src/local/secret-loader.js'
 
 /**
  * These tests verify that resolveWalletProvider / resolveWallet / getActiveWallet
@@ -17,14 +16,10 @@ import { loadLocalSecret } from '../src/local/secret-loader.js'
  */
 
 const ENV_KEYS = [
-  'AGENT_WALLET_PASSWORD',
   'AGENT_WALLET_DIR',
   'AGENT_WALLET_PRIVATE_KEY',
-  'TRON_PRIVATE_KEY',
   'AGENT_WALLET_MNEMONIC',
-  'TRON_MNEMONIC',
   'AGENT_WALLET_MNEMONIC_ACCOUNT_INDEX',
-  'TRON_ACCOUNT_INDEX',
   'PRIVY_APP_ID',
   'PRIVY_APP_SECRET',
   'PRIVY_WALLET_ID',
@@ -72,15 +67,15 @@ describe('resolver – no valid wallet source', () => {
 
   describe('resolveWallet', () => {
     it('throws when no wallet source (evm)', async () => {
-      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'evm' })).rejects.toThrow(
+      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'eip155:1' })).rejects.toThrow(
         'resolve_wallet could not find a wallet source in config or env',
       )
     })
 
     it('throws when no wallet source (tron)', async () => {
-      await expect(resolveWallet({ dir: NONEXISTENT_DIR, network: 'tron' })).rejects.toThrow(
-        'resolve_wallet could not find a wallet source in config or env',
-      )
+      await expect(
+        resolveWallet({ dir: NONEXISTENT_DIR, network: 'tron:728126428' }),
+      ).rejects.toThrow('resolve_wallet could not find a wallet source in config or env')
     })
 
     it('throws when no network is specified and no env source exists', async () => {
@@ -94,7 +89,7 @@ describe('resolver – no valid wallet source', () => {
 
   describe('EnvWalletProvider – getActiveWallet always throws without valid source', () => {
     it('throws when neither privateKey nor mnemonic is provided', async () => {
-      const provider = new EnvWalletProvider({ network: 'evm' })
+      const provider = new EnvWalletProvider({ network: 'eip155:1' })
       await expect(provider.getActiveWallet()).rejects.toThrow(
         'resolve_wallet could not find a wallet source in config or env',
       )
@@ -108,7 +103,8 @@ describe('resolver – no valid wallet source', () => {
     })
 
     it('throws when network is missing even with a valid mnemonic', async () => {
-      process.env.AGENT_WALLET_MNEMONIC = 'test test test test test test test test test test test junk'
+      process.env.AGENT_WALLET_MNEMONIC =
+        'test test test test test test test test test test test junk'
       const provider = new EnvWalletProvider({})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
@@ -117,7 +113,7 @@ describe('resolver – no valid wallet source', () => {
       process.env.AGENT_WALLET_PRIVATE_KEY = 'deadbeef'
       process.env.AGENT_WALLET_MNEMONIC =
         'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
-      const provider = new EnvWalletProvider({ network: 'evm' })
+      const provider = new EnvWalletProvider({ network: 'eip155:1' })
       await expect(provider.getActiveWallet()).rejects.toThrow(
         'Provide only one of AGENT_WALLET_PRIVATE_KEY or AGENT_WALLET_MNEMONIC',
       )
@@ -141,9 +137,8 @@ describe('resolver – no valid wallet source', () => {
 
     it('throws WalletNotFoundError when config has zero wallets', async () => {
       saveConfig(tempDir, { active_wallet: null, wallets: {} })
-      const provider = new ConfigWalletProvider(tempDir, undefined, {
-        network: 'eip155',
-        secretLoader: loadLocalSecret,
+      const provider = new ConfigWalletProvider(tempDir, {
+        network: 'eip155:1',
       })
       await expect(provider.getActiveWallet()).rejects.toThrow(WalletNotFoundError)
       await expect(provider.getActiveWallet()).rejects.toThrow('No active wallet set')
@@ -151,50 +146,11 @@ describe('resolver – no valid wallet source', () => {
 
     it('throws WalletNotFoundError when active_wallet points to non-existent id', async () => {
       saveConfig(tempDir, { active_wallet: 'ghost', wallets: {} })
-      const provider = new ConfigWalletProvider(tempDir, undefined, {
-        network: 'eip155',
-        secretLoader: loadLocalSecret,
+      const provider = new ConfigWalletProvider(tempDir, {
+        network: 'eip155:1',
       })
       await expect(provider.getActiveWallet()).rejects.toThrow(WalletNotFoundError)
       await expect(provider.getActiveWallet()).rejects.toThrow("Wallet 'ghost' not found")
-    })
-
-    it('throws when all wallets are local_secure but no password is provided', async () => {
-      const config: WalletsTopology = {
-        active_wallet: null,
-        wallets: {
-          secure1: { type: 'local_secure', params: { secret_ref: 'sec1' } },
-          secure2: { type: 'local_secure', params: { secret_ref: 'sec2' } },
-        },
-      }
-      saveConfig(tempDir, config)
-      const provider = new ConfigWalletProvider(tempDir, undefined, {
-        network: 'eip155',
-        secretLoader: loadLocalSecret,
-      })
-      await expect(provider.getActiveWallet()).rejects.toThrow(
-        'Password required for local_secure wallets',
-      )
-    })
-
-    it('throws when active_wallet is local_secure and password is wrong (no fallback)', async () => {
-      const config: WalletsTopology = {
-        active_wallet: 'secure',
-        wallets: {
-          secure: { type: 'local_secure', params: { secret_ref: 'secure' } },
-          hot: {
-            type: 'raw_secret',
-            params: { source: 'private_key', private_key: '0xdeadbeef' },
-          },
-        },
-      }
-      saveConfig(tempDir, config)
-      // active_wallet is 'secure' — it should NOT silently fall back to 'hot'
-      const provider = new ConfigWalletProvider(tempDir, 'wrong-pw', {
-        network: 'eip155',
-        secretLoader: loadLocalSecret,
-      })
-      await expect(provider.getActiveWallet()).rejects.toThrow()
     })
 
     it('throws when network is missing', async () => {
@@ -212,19 +168,16 @@ describe('resolver – no valid wallet source', () => {
       }
       saveConfig(tempDir, config)
       // No network in constructor or getActiveWallet call
-      const provider = new ConfigWalletProvider(tempDir, undefined, {
-        secretLoader: loadLocalSecret,
-      })
+      const provider = new ConfigWalletProvider(tempDir, {})
       await expect(provider.getActiveWallet()).rejects.toThrow('network is required')
     })
 
     it('throws on getWallet with non-existent walletId', async () => {
       saveConfig(tempDir, { active_wallet: null, wallets: {} })
-      const provider = new ConfigWalletProvider(tempDir, undefined, {
-        network: 'eip155',
-        secretLoader: loadLocalSecret,
+      const provider = new ConfigWalletProvider(tempDir, {
+        network: 'eip155:1',
       })
-      await expect(provider.getWallet('nope', 'eip155')).rejects.toThrow(WalletNotFoundError)
+      await expect(provider.getWallet('nope', 'eip155:1')).rejects.toThrow(WalletNotFoundError)
     })
   })
 })

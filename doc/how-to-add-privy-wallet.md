@@ -60,7 +60,7 @@ This lets you add multiple Privy wallets without retyping your app secret.
 ### 1) Sign a Message
 
 ```bash
-agent-wallet sign msg "hello" --wallet-id <your_privy_wallet_id> --dir /path/to/wallet-dir
+agent-wallet sign typed-data '{"types":{},"primaryType":"Message","domain":{},"message":{}}' --wallet-id <your_privy_wallet_id> --dir /path/to/wallet-dir
 ```
 
 ### 2) Sign a Transaction (EVM)
@@ -93,6 +93,29 @@ agent-wallet sign tx '{
 
 ---
 
+## Using Exec Scripts for App Secret
+
+Instead of passing `--app-secret` directly, you can reference an exec script that fetches the secret from a tool like 1Password CLI:
+
+```bash
+agent-wallet add privy \
+  --wallet-id my_privy_wallet \
+  --app-id <privy_app_id> \
+  --app-secret-exec /path/to/fetch-app-secret.sh \
+  --privy-wallet-id <privy_wallet_id>
+```
+
+The script must be executable and print the secret to stdout. It inherits `process.env`, so `OP_SESSION_*` works automatically.
+
+Example script:
+
+```bash
+#!/bin/sh
+op read 'op://Private/privy-app-secret/secret'
+```
+
+---
+
 ## FAQ
 
 ### 1) Can I reuse the same App ID with different Wallet IDs?
@@ -112,15 +135,6 @@ Use the verification scripts to recover the TRON address and compare:
 
 ```bash
 AGENT_WALLET_DIR=/path/to/wallet-dir \
-AGENT_WALLET_PASSWORD='<your_password>' \
-python packages/python/examples/verify_tron_privy_typed_data.py
-```
-
-TypeScript version:
-
-```bash
-AGENT_WALLET_DIR=/path/to/wallet-dir \
-AGENT_WALLET_PASSWORD='<your_password>' \
 npx tsx packages/typescript/examples/verify-tron-privy-typed-data.ts
 ```
 

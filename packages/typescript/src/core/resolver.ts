@@ -6,17 +6,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import type { Wallet } from './base.js'
-import { ENV_AGENT_WALLET_DIR, ENV_AGENT_WALLET_PASSWORD } from './base.js'
-import {
-  ConfigNotFoundError,
-  loadConfig,
-  loadRuntimeSecretsPassword,
-  type WalletsTopology,
-} from './config.js'
+import { ENV_AGENT_WALLET_DIR } from './base.js'
+import { ConfigNotFoundError, loadConfig, type WalletsTopology } from './config.js'
 import { ConfigWalletProvider } from './providers/config-provider.js'
 import { EnvWalletProvider } from './providers/env-provider.js'
 import { cleanEnvValue } from './utils/env.js'
-import { loadLocalSecret } from '../local/secret-loader.js'
+import type { WalletDependencies } from './providers/wallet-builder.js'
 
 const DEFAULT_SECRETS_DIR = join(homedir(), '.agent-wallet')
 
@@ -25,22 +20,15 @@ export type ResolvedWalletProvider = ConfigWalletProvider | EnvWalletProvider
 export function resolveWalletProvider(options?: {
   network?: string
   dir?: string
+  dependencies?: WalletDependencies
 }): ResolvedWalletProvider {
   const resolvedDir = resolveDir(options?.dir)
-  const password = resolvePassword(resolvedDir)
-
-  if (password) {
-    return new ConfigWalletProvider(resolvedDir, password, {
-      network: options?.network,
-      secretLoader: loadLocalSecret,
-    })
-  }
 
   const config = loadConfigSafe(resolvedDir)
   if (hasAvailableConfigWallet(config)) {
-    return new ConfigWalletProvider(resolvedDir, undefined, {
+    return new ConfigWalletProvider(resolvedDir, {
       network: options?.network,
-      secretLoader: loadLocalSecret,
+      dependencies: options?.dependencies,
     })
   }
 
@@ -53,8 +41,13 @@ export async function resolveWallet(options?: {
   network?: string
   dir?: string
   walletId?: string
+  dependencies?: WalletDependencies
 }): Promise<Wallet> {
-  const provider = resolveWalletProvider({ network: options?.network, dir: options?.dir })
+  const provider = resolveWalletProvider({
+    network: options?.network,
+    dir: options?.dir,
+    dependencies: options?.dependencies,
+  })
 
   if (provider instanceof ConfigWalletProvider) {
     return options?.walletId
@@ -83,12 +76,6 @@ function resolveDir(dir: string | undefined): string {
   const envDir = cleanEnvValue(process.env[ENV_AGENT_WALLET_DIR])
   if (envDir) return expandTilde(envDir)
   return DEFAULT_SECRETS_DIR
-}
-
-function resolvePassword(secretsDir: string): string | null {
-  const filePassword = loadRuntimeSecretsPassword(secretsDir)
-  if (filePassword) return filePassword
-  return cleanEnvValue(process.env[ENV_AGENT_WALLET_PASSWORD]) ?? null
 }
 
 function loadConfigSafe(secretsDir: string): WalletsTopology | null {

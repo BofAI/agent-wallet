@@ -1,14 +1,4 @@
 repos:
-  # Python: ruff lint + format
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
-    hooks:
-      - id: ruff
-        args: [--fix]
-        files: ^packages/python/
-      - id: ruff-format
-        files: ^packages/python/
-
   # TypeScript: prettier format check
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8

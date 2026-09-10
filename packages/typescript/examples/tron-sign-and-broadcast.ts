@@ -13,7 +13,7 @@
  *
  * Prerequisites:
  *   - Either configure a wallet via the CLI:
- *       agent-wallet start local_secure --wallet-id wallet-b
+ *       agent-wallet start raw_secret --wallet-id wallet-b
  *       agent-wallet start raw_secret --wallet-id wallet-b --mnemonic "..."
  *   - Or provide env fallback:
  *       AGENT_WALLET_PRIVATE_KEY=<hex>
@@ -24,6 +24,7 @@
  */
 
 import { resolveWalletProvider } from '../src/index.js'
+import { reportExampleError, requireEip712Wallet } from './example-utils.js'
 
 // Transfer parameters
 const TO_ADDRESS = 'TUJ1C4ybdcueXbi8Wmrqscteux5eGvrCh6'
@@ -36,16 +37,30 @@ const TRONGRID_URLS: Record<string, string> = {
   shasta: 'https://api.shasta.trongrid.io',
 }
 
+const MESSAGE_TYPED_DATA = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+    ],
+    Message: [{ name: 'contents', type: 'string' }],
+  },
+  primaryType: 'Message',
+  domain: { name: 'AgentWallet', version: '1', chainId: 728126428 },
+  message: { contents: 'hello' },
+}
+
 async function main() {
   // ----------------------------------------------------------------
   // Step 1: Resolve provider and active wallet
   // ----------------------------------------------------------------
-  const provider = resolveWalletProvider({ network: 'tron', dir: '/tmp/test-wallet' })
+  const provider = resolveWalletProvider({ network: 'tron:3448148188', dir: '/tmp/test-wallet' })
 
   // ----------------------------------------------------------------
   // Step 2: Get wallet instance
   // ----------------------------------------------------------------
-  const wallet = await provider.getActiveWallet()
+  const wallet = requireEip712Wallet(await provider.getActiveWallet())
   const address = await wallet.getAddress()
   console.log(`Address:      ${address}`)
   console.log()
@@ -53,9 +68,8 @@ async function main() {
   // ----------------------------------------------------------------
   // Step 3: Sign a message (pure local, no network)
   // ----------------------------------------------------------------
-  const message = Buffer.from('Hello from agent-wallet!')
-  const msgSig = await wallet.signMessage(message)
-  console.log(`Message signature: ${msgSig}`)
+  const msgSig = await wallet.signTypedData(MESSAGE_TYPED_DATA)
+  console.log(`Typed-data signature: ${msgSig}`)
   console.log()
 
   // ----------------------------------------------------------------
@@ -77,8 +91,9 @@ async function main() {
   console.log(`Unsigned TX: ${JSON.stringify(unsignedTx)}`)
 
   // 5b. SDK signs the unsigned tx
-  const signedTxJson = await wallet.signTransaction(unsignedTx)
-  const signedTx = JSON.parse(signedTxJson) as Record<string, unknown>
+  const signed = await wallet.signTransaction(unsignedTx)
+  if (signed.family !== 'tron') throw new Error('Expected a TRON signed transaction')
+  const signedTx = signed.transaction
   console.log(`Signature: ${(signedTx.signature as string[])[0]}`)
   console.log(`Raw SignedTx: ${JSON.stringify(signedTx)}`)
 
@@ -135,4 +150,4 @@ async function broadcastTransaction(
   throw new Error(`Broadcast rejected: ${JSON.stringify(result)}`)
 }
 
-main().catch(console.error)
+main().catch(reportExampleError)

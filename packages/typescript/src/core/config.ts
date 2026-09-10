@@ -1,14 +1,14 @@
 /**
  * Storage layer: wallets_config.json loading and validation.
  *
- * JSON keys use snake_case to match the Python implementation exactly,
- * ensuring cross-language config file compatibility.
+ * JSON keys use snake_case for consistency with the on-disk config format.
  */
 
 import { chmodSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { WALLETS_CONFIG_FILENAME, RUNTIME_SECRETS_FILENAME } from './constants.js'
+import { WALLETS_CONFIG_FILENAME } from './constants.js'
+import type { SecretRef, SecretValue } from './secret-resolver.js'
 
 export class ConfigNotFoundError extends Error {
   constructor(path: string) {
@@ -19,11 +19,14 @@ export class ConfigNotFoundError extends Error {
 
 // ---------------------------------------------------------------------------
 // Zod schemas — params models
-// ---------------------------------------------------------------------------
 
-export const LocalSecureWalletParamsSchema = z.object({
-  secret_ref: z.string(),
+export const SecretRefSchema = z.object({
+  exec: z.string(),
+  timeout: z.number().int().positive().optional(),
 })
+
+export const SecretValueSchema = z.union([z.string(), SecretRefSchema])
+// ---------------------------------------------------------------------------
 
 export const RawSecretPrivateKeyParamsSchema = z.object({
   source: z.literal('private_key'),
@@ -43,28 +46,33 @@ export const RawSecretParamsSchema = z.discriminatedUnion('source', [
 
 export const PrivyWalletParamsSchema = z.object({
   app_id: z.string(),
-  app_secret: z.string(),
+  app_secret: SecretValueSchema,
   wallet_id: z.string(),
+})
+
+export const WalletCliWalletParamsSchema = z.object({
+  account: z.string().optional(),
+  password: SecretValueSchema,
 })
 
 // ---------------------------------------------------------------------------
 // Zod schemas — WalletConfig (unified type + params)
 // ---------------------------------------------------------------------------
 
-export const WalletConfigSchema = z
-  .object({
-    type: z.enum(['local_secure', 'raw_secret', 'privy']),
-    params: z.union([LocalSecureWalletParamsSchema, RawSecretParamsSchema, PrivyWalletParamsSchema]),
-  })
-  .refine(
-    (data) => {
-      if (data.type === 'local_secure') return 'secret_ref' in data.params
-      if (data.type === 'raw_secret') return 'source' in data.params
-      if (data.type === 'privy') return 'app_id' in data.params
-      return false
-    },
-    { message: 'params must match wallet type' },
-  )
+export const WalletConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('raw_secret'),
+    params: RawSecretParamsSchema,
+  }),
+  z.object({
+    type: z.literal('privy'),
+    params: PrivyWalletParamsSchema,
+  }),
+  z.object({
+    type: z.literal('wallet_cli'),
+    params: WalletCliWalletParamsSchema,
+  }),
+])
 
 export const WalletsTopologySchema = z.object({
   active_wallet: z.string().nullable().optional().default(null),
@@ -75,11 +83,12 @@ export const WalletsTopologySchema = z.object({
 // Type exports
 // ---------------------------------------------------------------------------
 
-export type LocalSecureWalletParams = z.infer<typeof LocalSecureWalletParamsSchema>
 export type RawSecretPrivateKeyParams = z.infer<typeof RawSecretPrivateKeyParamsSchema>
 export type RawSecretMnemonicParams = z.infer<typeof RawSecretMnemonicParamsSchema>
 export type RawSecretParams = z.infer<typeof RawSecretParamsSchema>
 export type PrivyWalletParams = z.infer<typeof PrivyWalletParamsSchema>
+export type WalletCliWalletParams = z.infer<typeof WalletCliWalletParamsSchema>
+export type { SecretRef, SecretValue }
 export type WalletConfig = z.infer<typeof WalletConfigSchema>
 export type WalletsTopology = z.infer<typeof WalletsTopologySchema>
 
@@ -111,37 +120,6 @@ export function saveConfig(secretsDir: string, config: WalletsTopology): void {
   } catch {
     // ignore on platforms without chmod support
   }
-}
-
-export function loadRuntimeSecretsPassword(secretsDir: string): string | null {
-  const path = join(secretsDir, RUNTIME_SECRETS_FILENAME)
-  let text: string
-  try {
-    text = readFileSync(path, 'utf-8')
-  } catch {
-    return null
-  }
-
-  let data: unknown
-  try {
-    data = JSON.parse(text)
-  } catch (error) {
-    throw new Error(`Invalid JSON in ${RUNTIME_SECRETS_FILENAME}: ${(error as Error).message}`, {
-      cause: error,
-    })
-  }
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-    throw new Error(`${RUNTIME_SECRETS_FILENAME} must contain a JSON object`)
-  }
-
-  const password = (data as Record<string, unknown>).password
-  if (password === undefined || password === null) return null
-  if (typeof password !== 'string') {
-    throw new Error(`${RUNTIME_SECRETS_FILENAME}.password must be a string`)
-  }
-
-  const normalized = password.trim()
-  return normalized || null
 }
 
 // ---------------------------------------------------------------------------

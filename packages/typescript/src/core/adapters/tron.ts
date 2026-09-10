@@ -1,4 +1,3 @@
-import { keccak256 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import bs58checkModule from 'bs58check'
@@ -17,16 +16,25 @@ const bs58check: typeof bs58checkModule =
     ? bs58checkModule
     : (bs58checkInterop.default ?? bs58checkModule)
 
-import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
+import type {
+  Eip712Capable,
+  SignOptions,
+  TransactionPayload,
+  TronSignedTransactionArtifact,
+  Wallet,
+} from '../base.js'
 import { SigningError } from '../errors.js'
 import { stripHexPrefix } from '../utils/hex.js'
+import { Network } from '../base.js'
+import { assertNetworkFamily } from '../utils/network.js'
 
 export class TronSigner implements Wallet, Eip712Capable {
   private readonly privateKeyBytes: Uint8Array
   private readonly address: string
   private readonly network: string
 
-  constructor(privateKey: Uint8Array, network: string = 'tron') {
+  constructor(privateKey: Uint8Array, network: string = 'tron:728126428') {
+    assertNetworkFamily(network, Network.TRON)
     this.privateKeyBytes = privateKey
     this.network = network
 
@@ -42,14 +50,6 @@ export class TronSigner implements Wallet, Eip712Capable {
     return this.address
   }
 
-  async signRaw(rawTx: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      return this.ecdsaSign(rawTx)
-    } catch (e) {
-      throw new SigningError(`Tron sign_raw failed: ${e}`)
-    }
-  }
-
   /**
    * Sign a pre-built unsigned transaction from TronGrid.
    *
@@ -57,7 +57,10 @@ export class TronSigner implements Wallet, Eip712Capable {
    * If txID is missing, compute SHA256(raw_data_hex) locally.
    * Sign the txID directly with secp256k1 and return the signed tx with signature attached.
    */
-  async signTransaction(payload: Record<string, unknown>, _options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    _options?: SignOptions,
+  ): Promise<TronSignedTransactionArtifact> {
     try {
       if (!payload.raw_data_hex) {
         throw new Error(
@@ -71,18 +74,10 @@ export class TronSigner implements Wallet, Eip712Capable {
       const txIdBytes = Buffer.from(txIdHex, 'hex')
       const signature = this.signDigest(txIdBytes)
       const signedTx = { ...payload, txID: txIdHex, signature: [signature] }
-      return JSON.stringify(signedTx)
+      return { family: 'tron', transaction: signedTx }
     } catch (e) {
       if (e instanceof SigningError) throw e
       throw new SigningError(`Tron sign_transaction failed: ${e}`)
-    }
-  }
-
-  async signMessage(msg: Uint8Array, _options?: SignOptions): Promise<string> {
-    try {
-      return this.ecdsaSign(msg)
-    } catch (e) {
-      throw new SigningError(`Tron sign_message failed: ${e}`)
     }
   }
 
@@ -112,16 +107,6 @@ export class TronSigner implements Wallet, Eip712Capable {
     } catch (e) {
       throw new SigningError(`Tron sign_typed_data failed: ${e}`)
     }
-  }
-
-  /**
-   * Raw ECDSA sign: keccak256(data) → secp256k1 sign → r || s || v (65 bytes hex)
-   * This matches tronpy's PrivateKey.sign_msg() behavior.
-   */
-  private ecdsaSign(data: Uint8Array): string {
-    const hash = keccak256(data)
-    const hashBytes = Buffer.from(hash.slice(2), 'hex')
-    return this.signDigest(hashBytes)
   }
 
   /**

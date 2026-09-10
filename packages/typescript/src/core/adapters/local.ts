@@ -2,10 +2,16 @@
  * Local signer facade — dispatches to EVM or TRON signer by network.
  */
 
-import type { Wallet, Eip712Capable, SignOptions } from '../base.js'
+import type {
+  Eip712Capable,
+  SignedTransactionArtifact,
+  SignOptions,
+  TransactionPayload,
+  Wallet,
+} from '../base.js'
 import { Network } from '../base.js'
 import { UnsupportedOperationError } from '../errors.js'
-import { parseNetworkFamily } from '../utils/network.js'
+import { parseCanonicalNetwork } from '../utils/network.js'
 import { EvmSigner } from './evm.js'
 import { TronSigner } from './tron.js'
 
@@ -22,16 +28,11 @@ export class LocalSigner implements Wallet, Eip712Capable {
     return this._impl.getAddress()
   }
 
-  async signRaw(rawTx: Uint8Array, options?: SignOptions): Promise<string> {
-    return this._impl.signRaw(rawTx, options)
-  }
-
-  async signTransaction(payload: Record<string, unknown>, options?: SignOptions): Promise<string> {
+  async signTransaction(
+    payload: TransactionPayload,
+    options?: SignOptions,
+  ): Promise<SignedTransactionArtifact> {
     return this._impl.signTransaction(payload, options)
-  }
-
-  async signMessage(msg: Uint8Array, options?: SignOptions): Promise<string> {
-    return this._impl.signMessage(msg, options)
   }
 
   async signTypedData(data: Record<string, unknown>, options?: SignOptions): Promise<string> {
@@ -46,8 +47,8 @@ export class LocalSigner implements Wallet, Eip712Capable {
 }
 
 function createSigner(privateKey: Uint8Array, network?: string): Wallet {
-  const family = parseNetworkFamily(network)
-  if (family === Network.EVM) return new EvmSigner(privateKey, network)
-  if (family === Network.TRON) return new TronSigner(privateKey, network)
+  const target = parseCanonicalNetwork(network)
+  if (target.family === Network.EVM) return new EvmSigner(privateKey, target.id)
+  if (target.family === Network.TRON) return new TronSigner(privateKey, target.id)
   throw new Error(`Unknown network: ${network}`)
 }

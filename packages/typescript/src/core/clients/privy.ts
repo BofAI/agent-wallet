@@ -63,8 +63,8 @@ export class PrivyClient {
       'POST',
       `/v1/wallets/${walletId}/rpc`,
       {
-      method,
-      params,
+        method,
+        params,
       },
       options,
     ) as Promise<PrivyRpcResponse>

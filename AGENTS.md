@@ -9,6 +9,15 @@ Project memory keeps persistent guidance (steering, specs notes, component docs)
 - Use local `AGENTS.md` files for feature or library context (e.g. `src/lib/payments/AGENTS.md`): describe domain assumptions, API contracts, or testing conventions specific to that folder. Codex auto-loads these when working in the matching path.
 - Specs notes stay with each spec (under `.kiro/specs/`) to guide specification-level workflows.
 
+## Documentation Ownership
+
+- `AGENTS.md`: AI 工作流程與專案規則，不重複產品或 API 細節。
+- `.kiro/steering/`: 長期有效的產品、技術與目錄原則。
+- `.kiro/specs/<active-feature>/`: 只保留 active spec 的 `requirements.md`、`design.md`、`tasks.md`、`spec.json`；研究與驗證材料完成後移入該 spec 的 `archive/`。
+- `README.md`、`packages/typescript/README.md`、`doc/`: 使用者文件；根 README 放概覽、package README 放發布契約、`doc/` 放詳細操作。
+- `doc/archive/`: 凍結的歷史材料。不得將其視為現行需求，也不隨程式修改同步更新。
+- 避免在多份文件複製完整 API 清單；以連結指向負責該內容的唯一文件。
+
 ## Project Context
 
 ### Paths

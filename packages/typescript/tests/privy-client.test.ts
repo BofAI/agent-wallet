@@ -13,9 +13,7 @@ function mockResponse(status: number, body: unknown): Response {
 describe('PrivyClient', () => {
   it('includes required auth headers', async () => {
     const originalFetch = globalThis.fetch
-    const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(200, { data: { signature: '0xabc' } }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, { data: { signature: '0xabc' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const client = new PrivyClient({
@@ -35,9 +33,7 @@ describe('PrivyClient', () => {
 
   it('calls raw_sign endpoint', async () => {
     const originalFetch = globalThis.fetch
-    const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(200, { data: { signature: '0xabc' } }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, { data: { signature: '0xabc' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const client = new PrivyClient({
@@ -76,9 +72,7 @@ describe('PrivyClient', () => {
 
   it('throws on non-retryable errors', async () => {
     const originalFetch = globalThis.fetch
-    const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(500, { error: { message: 'oops' } }),
-    )
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(500, { error: { message: 'oops' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const client = new PrivyClient({

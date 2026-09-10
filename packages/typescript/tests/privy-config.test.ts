@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { PrivyConfigError, PrivyConfigResolver } from '../src/core/providers/privy-config.js'
 
 describe('PrivyConfigResolver', () => {
-  it('resolves required config values from the selected source', () => {
+  it('resolves required config values from the selected source', async () => {
     const resolver = new PrivyConfigResolver({
       source: {
         app_id: ' cfg-app ',
@@ -12,13 +12,13 @@ describe('PrivyConfigResolver', () => {
       },
     })
 
-    const resolved = resolver.resolve()
+    const resolved = await resolver.resolve()
     expect(resolved.appId).toBe('cfg-app')
     expect(resolved.appSecret).toBe('cfg-secret')
     expect(resolved.walletId).toBe('cfg-wallet')
   })
 
-  it('reports missing required fields without leaking secrets', () => {
+  it('reports missing required fields without leaking secrets', async () => {
     const resolver = new PrivyConfigResolver({
       source: {
         app_id: 'cfg-app',
@@ -28,7 +28,7 @@ describe('PrivyConfigResolver', () => {
 
     expect(resolver.isEnabled()).toBe(false)
     try {
-      resolver.resolve()
+      await resolver.resolve()
     } catch (err) {
       const error = err as PrivyConfigError
       expect(error.message).toMatch(/missing required/i)

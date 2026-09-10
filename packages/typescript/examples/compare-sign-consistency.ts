@@ -1,26 +1,24 @@
 /**
- * Compare sign input/output consistency across default_secure (EVM/TRON)
+ * Compare sign input/output consistency across raw_secret (EVM/TRON)
  * and privy wallets (privy_evm / privy_tron_2).
  *
  * Usage:
- *   AGENT_WALLET_DIR=/tmp/test-wallet \
- *   AGENT_WALLET_PASSWORD='Abc12345!@' \
- *   npx tsx examples/compare-sign-consistency.ts
+ *   AGENT_WALLET_DIR=/tmp/test-wallet npx tsx examples/compare-sign-consistency.ts
  */
 
-import { ConfigWalletProvider, type Eip712Capable, resolveWalletProvider } from '../src/index.js'
+import {
+  ConfigWalletProvider,
+  resolveWalletProvider,
+  type SignedTransactionArtifact,
+} from '../src/index.js'
+import { requireEip712Wallet } from './example-utils.js'
 
 const DIR = process.env.AGENT_WALLET_DIR ?? '/tmp/test-wallet'
-const PASSWORD = process.env.AGENT_WALLET_PASSWORD ?? ''
-const DEFAULT_SECURE_ID = process.env.DEFAULT_SECURE_WALLET_ID ?? 'default_secure'
+const RAW_SECRET_ID = process.env.RAW_SECRET_WALLET_ID ?? 'default_raw'
 const PRIVY_EVM_ID = process.env.PRIVY_EVM_WALLET_ID ?? 'privy_evm'
 const PRIVY_TRON_ID = process.env.PRIVY_TRON_WALLET_ID ?? 'privy_tron_2'
 const EVM_NETWORK = process.env.EVM_NETWORK ?? 'eip155:1'
-const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron'
-
-if (!PASSWORD) {
-  throw new Error('AGENT_WALLET_PASSWORD is required for default_secure testing.')
-}
+const TRON_NETWORK = process.env.TRON_NETWORK ?? 'tron:728126428'
 
 const provider = resolveWalletProvider({ dir: DIR })
 if (!(provider instanceof ConfigWalletProvider)) {
@@ -89,6 +87,12 @@ function describeOutput(value: string): SignOutput {
   }
 }
 
+function describeTransactionOutput(artifact: SignedTransactionArtifact): SignOutput {
+  return describeOutput(
+    artifact.family === 'evm' ? artifact.rawTransaction : JSON.stringify(artifact.transaction),
+  )
+}
+
 function compareHex(a: SignOutput, b: SignOutput) {
   return a.kind === 'hex' && b.kind === 'hex' && a.has0x === b.has0x
 }
@@ -100,8 +104,8 @@ function compareJson(a: SignOutput, b: SignOutput) {
 }
 
 async function signAll() {
-  const defaultSecureEvm = await provider.getWallet(DEFAULT_SECURE_ID, EVM_NETWORK)
-  const defaultSecureTron = await provider.getWallet(DEFAULT_SECURE_ID, TRON_NETWORK)
+  const rawSecretEvm = await provider.getWallet(RAW_SECRET_ID, EVM_NETWORK)
+  const rawSecretTron = await provider.getWallet(RAW_SECRET_ID, TRON_NETWORK)
   const privyEvm = await provider.getWallet(PRIVY_EVM_ID)
   const privyTron = await provider.getWallet(PRIVY_TRON_ID)
 
@@ -110,28 +114,16 @@ async function signAll() {
   console.log('TRON tx payload (both):', JSON.stringify(tronTxPayload))
   console.log()
 
-  console.log('== sign msg ==')
-  const msg = Buffer.from('hello', 'utf-8')
-  const msgDefaultEvm = describeOutput(await defaultSecureEvm.signMessage(msg))
-  const msgPrivyEvm = describeOutput(await privyEvm.signMessage(msg))
-  const msgDefaultTron = describeOutput(await defaultSecureTron.signMessage(msg))
-  const msgPrivyTron = describeOutput(await privyTron.signMessage(msg))
-  console.log('EVM default_secure:', msgDefaultEvm)
-  console.log('EVM privy:', msgPrivyEvm)
-  console.log('TRON default_secure:', msgDefaultTron)
-  console.log('TRON privy:', msgPrivyTron)
-  console.log('EVM consistent:', compareHex(msgDefaultEvm, msgPrivyEvm))
-  console.log('TRON consistent:', compareHex(msgDefaultTron, msgPrivyTron))
-  console.log()
-
   console.log('== sign tx ==')
-  const txDefaultEvm = describeOutput(await defaultSecureEvm.signTransaction(evmTxPayload))
-  const txPrivyEvm = describeOutput(await privyEvm.signTransaction(evmTxPayload))
-  const txDefaultTron = describeOutput(await defaultSecureTron.signTransaction(tronTxPayload))
-  const txPrivyTron = describeOutput(await privyTron.signTransaction(tronTxPayload))
-  console.log('EVM default_secure:', txDefaultEvm)
+  const txDefaultEvm = describeTransactionOutput(await rawSecretEvm.signTransaction(evmTxPayload))
+  const txPrivyEvm = describeTransactionOutput(await privyEvm.signTransaction(evmTxPayload))
+  const txDefaultTron = describeTransactionOutput(
+    await rawSecretTron.signTransaction(tronTxPayload),
+  )
+  const txPrivyTron = describeTransactionOutput(await privyTron.signTransaction(tronTxPayload))
+  console.log('EVM raw_secret:', txDefaultEvm)
   console.log('EVM privy:', txPrivyEvm)
-  console.log('TRON default_secure:', txDefaultTron)
+  console.log('TRON raw_secret:', txDefaultTron)
   console.log('TRON privy:', txPrivyTron)
   console.log('EVM consistent:', compareHex(txDefaultEvm, txPrivyEvm))
   console.log('TRON consistent:', compareJson(txDefaultTron, txPrivyTron))
@@ -139,20 +131,20 @@ async function signAll() {
 
   console.log('== sign typed-data ==')
   const tdDefaultEvm = describeOutput(
-    await (defaultSecureEvm as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(rawSecretEvm).signTypedData(cloneTypedData()),
   )
   const tdPrivyEvm = describeOutput(
-    await (privyEvm as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(privyEvm).signTypedData(cloneTypedData()),
   )
   const tdDefaultTron = describeOutput(
-    await (defaultSecureTron as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(rawSecretTron).signTypedData(cloneTypedData()),
   )
   const tdPrivyTron = describeOutput(
-    await (privyTron as unknown as Eip712Capable).signTypedData(cloneTypedData()),
+    await requireEip712Wallet(privyTron).signTypedData(cloneTypedData()),
   )
-  console.log('EVM default_secure:', tdDefaultEvm)
+  console.log('EVM raw_secret:', tdDefaultEvm)
   console.log('EVM privy:', tdPrivyEvm)
-  console.log('TRON default_secure:', tdDefaultTron)
+  console.log('TRON raw_secret:', tdDefaultTron)
   console.log('TRON privy:', tdPrivyTron)
   console.log('EVM consistent:', compareHex(tdDefaultEvm, tdPrivyEvm))
   console.log('TRON consistent:', compareHex(tdDefaultTron, tdPrivyTron))

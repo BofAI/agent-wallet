@@ -1,6 +1,6 @@
 {
   "name": "@bankofai/agent-wallet",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "Universal multi-chain secure signing SDK for AI agents",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -11,6 +11,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./advanced": {
+      "types": "./dist/advanced.d.ts",
+      "import": "./dist/advanced.js",
+      "require": "./dist/advanced.cjs"
+    },
+    "./integrations/wallet-cli": {
+      "types": "./dist/integrations/wallet-cli.d.ts",
+      "import": "./dist/integrations/wallet-cli.js",
+      "require": "./dist/integrations/wallet-cli.cjs"
     }
   },
   "bin": {
@@ -19,11 +29,12 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "test:cjs": "node scripts/test-cjs-entrypoints.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "tsc --noEmit && eslint src/ examples/",
-    "format": "prettier --write src/ tests/",
-    "format:check": "prettier --check src/ tests/",
+    "lint": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json && eslint src/ examples/",
+    "format": "prettier --write src/ tests/ examples/",
+    "format:check": "prettier --check src/ tests/ examples/",
     "prepublishOnly": "pnpm build",
     "publish:beta": "pnpm publish --tag beta --access public",
     "publish:latest": "pnpm publish --access public"
@@ -56,11 +67,19 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@inquirer/prompts": "^8.3.0",
+    "@inquirer/prompts": "^7.10.1",
     "@noble/curves": "^1.9.1",
     "bs58check": "^4.0.0",
     "viem": "^2.0.0",
     "zod": "^3.22.0"
+  },
+  "peerDependencies": {
+    "@tron-walletcli/wallet-cli": ">=4.13.0 <5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tron-walletcli/wallet-cli": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

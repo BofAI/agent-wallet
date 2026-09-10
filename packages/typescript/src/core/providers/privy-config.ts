@@ -1,4 +1,10 @@
 import { PrivyConfigError } from '../errors.js'
+import {
+  ExternalSignerConfigResolver,
+  normalizeValue,
+  requireFields,
+} from './external-signer-config.js'
+import type { SecretValue } from '../secret-resolver.js'
 
 export type PrivyConfig = {
   appId: string
@@ -8,68 +14,43 @@ export type PrivyConfig = {
 
 export type PrivyConfigSource = {
   app_id?: string
-  app_secret?: string
+  app_secret?: SecretValue
   wallet_id?: string
 }
 
-export class PrivyConfigResolver {
-  private readonly source: PrivyConfigSource | undefined
+const REQUIRED_KEYS = ['app_id', 'app_secret', 'wallet_id'] as const
 
-  constructor(opts: {
-    source?: PrivyConfigSource
-  }) {
-    this.source = opts.source
-  }
-
+export class PrivyConfigResolver extends ExternalSignerConfigResolver<
+  PrivyConfig,
+  PrivyConfigSource
+> {
   isEnabled(): boolean {
     const merged = this.merge()
-    if (!merged.app_id || !merged.app_secret || !merged.wallet_id) return false
-    return true
+    return Boolean(merged.app_id && merged.app_secret && merged.wallet_id)
   }
 
-  resolve(): PrivyConfig {
+  async resolve(): Promise<PrivyConfig> {
     const merged = this.merge()
-    const missing = requiredMissing(merged)
+    const missing = requireFields(merged as Record<string, unknown>, [...REQUIRED_KEYS])
     if (missing.length > 0) {
       throw new PrivyConfigError(`Missing required Privy config keys: ${missing.join(', ')}`)
     }
 
+    const appSecret = await this.resolveCredential(merged.app_secret, 'privy app_secret')
+
     return {
       appId: merged.app_id!,
-      appSecret: merged.app_secret!,
+      appSecret: appSecret!,
       walletId: merged.wallet_id!,
     }
   }
 
   private merge(): PrivyConfigSource {
-    const source = normalizeSource(this.source)
+    const source = this.source
     return {
-      app_id: source.app_id,
-      app_secret: source.app_secret,
-      wallet_id: source.wallet_id,
+      app_id: normalizeValue(source?.app_id),
+      app_secret: source?.app_secret,
+      wallet_id: normalizeValue(source?.wallet_id),
     }
   }
 }
-
-function normalizeSource(input: PrivyConfigSource | undefined): PrivyConfigSource {
-  return {
-    app_id: normalizeValue(input?.app_id),
-    app_secret: normalizeValue(input?.app_secret),
-    wallet_id: normalizeValue(input?.wallet_id),
-  }
-}
-
-function normalizeValue(value: string | undefined): string | undefined {
-  const trimmed = value?.trim()
-  return trimmed ? trimmed : undefined
-}
-
-function requiredMissing(config: PrivyConfigSource): string[] {
-  const missing: string[] = []
-  if (!config.app_id) missing.push('app_id')
-  if (!config.app_secret) missing.push('app_secret')
-  if (!config.wallet_id) missing.push('wallet_id')
-  return missing
-}
-
-// NOTE: base URL is fixed to Privy API; no validation required.

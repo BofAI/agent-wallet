@@ -1,6 +1,17 @@
 // Core types
 export { Network, WalletType } from './core/base.js'
-export type { Wallet, Eip712Capable, WalletProvider, SignOptions } from './core/base.js'
+export type {
+  Wallet,
+  TransactionPayload,
+  EvmTransactionPayload,
+  TronTransactionPayload,
+  SignedTransactionArtifact,
+  EvmSignedTransactionArtifact,
+  TronSignedTransactionArtifact,
+  Eip712Capable,
+  WalletProvider,
+  SignOptions,
+} from './core/base.js'
 
 // Error classes
 export {
@@ -15,37 +26,37 @@ export {
   PrivyRequestError,
   PrivyRateLimitError,
   PrivyAuthError,
+  ExternalSignerError,
+  ExternalSignerConfigError,
+  ExternalSignerExecutionError,
+  ExternalSignerUsageError,
+  ExternalSignerNotFoundError,
+  WalletCliConfigError,
+  WalletCliNotFoundError,
+  WalletCliUsageError,
+  WalletCliExecutionError,
+  WalletCliSubmittedTransactionError,
 } from './core/errors.js'
-
-// Wallet adapters
-export { EvmSigner } from './core/adapters/evm.js'
-export { TronSigner } from './core/adapters/tron.js'
-export { LocalSigner } from './core/adapters/local.js'
-export { LocalSecureSigner } from './core/adapters/local-secure.js'
-export { RawSecretSigner } from './core/adapters/raw-secret.js'
-export { PrivyAdapter } from './core/adapters/privy.js'
 
 // Provider layer
 export { ConfigWalletProvider, EnvWalletProvider } from './core/providers/index.js'
-export type { SecretLoaderFn } from './core/providers/index.js'
+
+// Secret resolver
+export type { SecretRef, SecretValue } from './core/secret-resolver.js'
 
 // Resolver
 export { resolveWallet, resolveWalletProvider } from './core/resolver.js'
 export type { ResolvedWalletProvider } from './core/resolver.js'
 
 // Config types and functions
-export { loadConfig, saveConfig, loadRuntimeSecretsPassword } from './core/config.js'
+export { loadConfig, saveConfig } from './core/config.js'
 export type {
   WalletConfig,
   WalletsTopology,
-  LocalSecureWalletParams,
   RawSecretPrivateKeyParams,
   RawSecretMnemonicParams,
   RawSecretParams,
   PrivyWalletParams,
+  WalletCliWalletParams,
 } from './core/config.js'
-export { PrivyConfigResolver } from './core/providers/privy-config.js'
-export { PrivyClient } from './core/clients/privy.js'
-
-// KV Store
-export { SecureKVStore, encryptBytes, decryptBytes } from './local/kv-store.js'
+export type { WalletDependencies, WalletCliDependencies } from './core/providers/wallet-builder.js'
