@@ -5,9 +5,9 @@
 
 Universal multi-chain signing SDK for AI agents — TypeScript implementation.
 
-> **Release status:** this branch targets `3.0.0`, which is not yet published. Until the 3.0.0
-> release, unversioned npm install commands resolve to the current `2.4.0` release and do not
-> include the v3 APIs documented here.
+> **Current release:** `3.0.0`. This is a breaking upgrade from 2.x; review the
+> [3.0 migration guide](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)
+> before upgrading.
 
 從 2.x 升級請先閱讀
 [3.0 遷移指南](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)與

@@ -3,7 +3,7 @@
 本文件記錄 `@bankofai/agent-wallet` 的使用者可見變更。版本遵循
 [Semantic Versioning](https://semver.org/)。
 
-## [3.0.0] - Unreleased
+## [3.0.0] - 2026-09-10
 
 ### Breaking changes
 
