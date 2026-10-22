@@ -172,8 +172,8 @@ wallet 不可透過 `network: 'tron:728126428'` 使用。
 - startup migration 完成、取消或需密碼時，原命令不會自動重送；client 保留
   `migration_completed`、`migration_cancelled`、`migration_required` 分類並允許 caller
   在處理 migration 後重試。
-- JavaScript entrypoint 使用目前的 Node 執行，需 Node.js >=20；一般 agent-wallet
-  功能仍維持 package 的 Node.js >=18 契約。
+- JavaScript entrypoint 使用目前的 Node 執行，與一般 agent-wallet 功能皆需要
+  Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`。
 - `WalletCliClient` 只接受 `wallet-cli.result.v1`，交叉檢查 exit status、command、
   chain context 與 command-specific data；未知加法欄位與 warning code 保持相容。
 - 預設程序界線為 60 秒 timeout、5 秒 TERM→KILL grace、2 MiB stdout、64 KiB stderr；
@@ -215,8 +215,7 @@ npm install '@tron-walletcli/wallet-cli@^4.13.0'
 
 ## Development
 
-The published runtime supports Node.js >=18. Repository development uses ESLint 10 and therefore
-requires Node.js `^20.19.0 || ^22.13.0 || >=24`.
+套件執行與儲存庫開發皆需要 Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`。
 
 ```bash
 pnpm install

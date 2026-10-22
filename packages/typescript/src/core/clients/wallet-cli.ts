@@ -27,7 +27,7 @@ export const DEFAULT_WALLET_CLI_STDOUT_LIMIT = 2 * 1024 * 1024
 export const DEFAULT_WALLET_CLI_STDERR_LIMIT = 64 * 1024
 
 const ENV_WALLET_CLI_PATH = 'AGENT_WALLET_WALLET_CLI_PATH'
-const MIN_NODE_MAJOR = 20
+const NODE_RUNTIME_RANGE = '^22.23.4 || ^24.22.1 || >=26.12.1'
 
 export interface WalletCliLaunchTarget {
   command: string
@@ -785,10 +785,16 @@ export function assertWalletCliNodeRuntime(
   nodePath = process.execPath,
 ): void {
   if (target.command !== nodePath) return
-  const major = Number.parseInt(nodeVersion.slice(1).split('.')[0], 10)
-  if (major < MIN_NODE_MAJOR) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(nodeVersion)
+  const [major, minor, patch] = match ? match.slice(1).map(Number) : []
+  const minimum = major === 22 ? [23, 4] : major === 24 ? [22, 1] : major === 26 ? [12, 1] : null
+  const supported =
+    match &&
+    (major > 26 ||
+      (minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1]))))
+  if (!supported) {
     throw new WalletCliExecutionError(
-      `wallet-cli JavaScript entrypoint requires Node.js >=${MIN_NODE_MAJOR}; current runtime is ${nodeVersion}`,
+      `wallet-cli JavaScript entrypoint requires Node.js ${NODE_RUNTIME_RANGE}; current runtime is ${nodeVersion}`,
       'unsupported_runtime',
     )
   }

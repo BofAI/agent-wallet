@@ -1,7 +1,7 @@
 # agent-wallet
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Node.js](https://img.shields.io/badge/Node.js-≥18-339933)
+![Node.js 安全修補版本](https://img.shields.io/badge/Node.js-security_patched-339933)
 
 **Wallet signing for AI agents and apps** — store keys safely (or use env for quick tests), pick an active wallet, and **sign** transactions and typed data on **TRON** and **EVM** chains.
 
@@ -259,8 +259,7 @@ Architecture, resolution order (`ConfigWalletProvider` / `EnvWalletProvider`), a
 cd packages/typescript && pnpm test
 ```
 
-The published runtime supports Node.js >=18. Repository development uses ESLint 10 and therefore
-requires Node.js `^20.19.0 || ^22.13.0 || >=24`.
+套件執行與儲存庫開發皆需要 Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`。
 
 ## License
 
