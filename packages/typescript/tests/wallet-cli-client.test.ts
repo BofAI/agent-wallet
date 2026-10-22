@@ -134,7 +134,49 @@ describe('WalletCliClient bounded runner', () => {
         'v18.20.0',
         'node.exe',
       ),
-    ).toThrow(/Node\.js >=20/)
+    ).toThrow(/Node\.js \^22\.23\.4/)
+  })
+
+  it.each([
+    'v22.23.4',
+    'v22.23.5',
+    'v22.24.0',
+    'v24.22.1',
+    'v24.23.0',
+    'v26.12.1',
+    'v26.13.0',
+    'v27.0.0',
+    'v28.0.0',
+  ])('accepts patched Node.js runtime %s', (version) => {
+    expect(() =>
+      assertWalletCliNodeRuntime({ command: 'node', argsPrefix: ['index.js'] }, version, 'node'),
+    ).not.toThrow()
+  })
+
+  it.each([
+    'v18.20.8',
+    'v20.20.0',
+    'v22.23.0',
+    'v22.23.3',
+    'v23.11.0',
+    'v24.22.0',
+    'v25.9.0',
+    'v26.12.0',
+    'v26.12.1-rc.1',
+    'v27.0.0-rc.1',
+    'invalid',
+    'v24.22',
+  ])('rejects unsupported Node.js runtime %s before spawning', (version) => {
+    expect(() =>
+      assertWalletCliNodeRuntime({ command: 'node', argsPrefix: ['index.js'] }, version, 'node'),
+    ).toThrow(WalletCliExecutionError)
+    expect(mockSpawn).not.toHaveBeenCalled()
+  })
+
+  it('leaves native wallet-cli executables independent of the parent Node.js runtime', () => {
+    expect(() =>
+      assertWalletCliNodeRuntime({ command: '/safe/wallet-cli' }, 'v20.20.0', 'node'),
+    ).not.toThrow()
   })
 
   it('accepts a valid success envelope and always uses shell:false', async () => {

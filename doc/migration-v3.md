@@ -18,8 +18,8 @@ npm install @bankofai/agent-wallet@^3.0.0
 npm install '@tron-walletcli/wallet-cli@^4.13.0'
 ```
 
-agent-wallet 需要 Node.js >=18；使用 wallet-cli 的 JavaScript entrypoint 時需要
-Node.js >=20。
+agent-wallet 與 wallet-cli 的 JavaScript entrypoint 皆需要
+Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`。
 
 ## 2. 遷移 wallet 設定
 

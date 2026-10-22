@@ -3,6 +3,14 @@
 本文件記錄 `@bankofai/agent-wallet` 的使用者可見變更。版本遵循
 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Breaking changes
+
+- 套件執行、開發環境與 wallet-cli JavaScript entrypoint 的 Node.js 版本要求提高為
+  `^22.23.4 || ^24.22.1 || >=26.12.1`，排除已停止維護及尚未套用 2026 年 10 月安全修補的版本。
+- CI 改用 Node.js 24.22.1；wallet-cli 執行前會檢查完整版本並拒絕預發布版。
+
 ## [3.0.0] - 2026-09-10
 
 ### Breaking changes

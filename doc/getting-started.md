@@ -9,7 +9,7 @@ This guide walks you through every CLI command in `@bankofai/agent-wallet` — f
 
 ## Prerequisites
 
-- Node.js >= 18.0.0
+- Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`
 - npm or pnpm
 
 ## 1. Install

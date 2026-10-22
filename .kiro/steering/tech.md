@@ -7,7 +7,7 @@ The project is a TypeScript SDK and CLI codebase. Core responsibilities are wall
 ## Core Technologies
 
 - **Language**: TypeScript 5.x
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`
 - **Package Layout**: Single TypeScript package under `packages/typescript/`
 
 ## Key Libraries
@@ -47,7 +47,7 @@ If a check is not run, explicitly state why and provide a follow-up plan.
 
 ### Required Tools
 
-- Node.js `^20.19.0 || ^22.13.0 || >=24` for repository development; the published runtime contract remains Node.js 18+
+- 套件執行與儲存庫開發皆需要 Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`
 - pnpm
 
 ### Common Commands

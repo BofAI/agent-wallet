@@ -35,7 +35,8 @@ agent-wallet 首次使用時還會驗證 `--json-schema` 與 `networks -o json`�
 缺少目標 family 的簽章能力時仍會 fail-fast。
 
 若 `wallet-cli` 不在 `PATH`，請設定 `AGENT_WALLET_WALLET_CLI_PATH`。JavaScript
-entrypoint（`.js`/`.mjs`/`.cjs`）會由目前的 Node 執行且需要 Node.js >=20；Windows
+entrypoint（`.js`/`.mjs`/`.cjs`）會由目前的 Node 執行且需要
+Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`；Windows
 請指定 package 的 JavaScript entrypoint，不要指定會經 shell 展開的 `.cmd`/`.bat` shim。
 
 ### 2. 建立或匯入 wallet-cli account
