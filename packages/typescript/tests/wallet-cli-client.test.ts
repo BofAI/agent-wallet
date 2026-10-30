@@ -190,6 +190,39 @@ describe('WalletCliClient bounded runner', () => {
     expect(mockSpawn.mock.calls[0][2]).toMatchObject({ shell: false })
   })
 
+  it.each(['max', 'length'] as const)(
+    'rejects oversized data before running child validators for a %s-constrained contract',
+    async (bound) => {
+      let visited = 0
+      const dataSchema = z
+        .array(
+          z.string().superRefine(() => {
+            visited++
+          }),
+        )
+        [bound](2)
+      mockSpawn.mockReturnValueOnce(fakeChild({ stdout: envelope(Array(32).fill('item')) }).child)
+
+      await expect(
+        new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], {
+          ...contract,
+          dataSchema,
+        }),
+      ).rejects.toMatchObject({ code: 'contract_mismatch' })
+      expect(visited).toBe(0)
+    },
+  )
+
+  it('returns transformed data for a valid bounded contract', async () => {
+    mockSpawn.mockReturnValueOnce(fakeChild({ stdout: envelope(['one', 'four']) }).child)
+    const result = await new WalletCliClient({ binary: 'wallet-cli' }).run(['current'], {
+      ...contract,
+      dataSchema: z.array(z.string().transform((value) => value.length)).max(2),
+    })
+
+    expect(result.data).toEqual([3, 4])
+  })
+
   it('resolves launch target precedence before binary and environment overrides', async () => {
     const env = {
       ...process.env,

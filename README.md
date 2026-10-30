@@ -9,8 +9,11 @@
 > code or another tool; the optional `integrations/wallet-cli` entrypoint provides TRON-only
 > build/broadcast/status orchestration.
 
-> **Current release:** `3.0.0`. This is a breaking upgrade from 2.x; review the
+> **Current release:** `3.1.0`. This is a breaking upgrade from 2.x; review the
 > [3.0 migration guide](./doc/migration-v3.md) before upgrading.
+
+> **3.1 升級提醒：**已升級至原生 Zod 4，並更新 WebSocket 安全修補依賴。
+> 自訂 `WalletCliClient.run` schema 也必須使用 Zod `>=4.6.6`。
 
 ## Contents
 
