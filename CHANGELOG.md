@@ -5,11 +5,37 @@
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-30
+
+### Changed
+
+- 將 `3.1.0-beta.1` 的 Zod 4、WebSocket 安全修補與 ESM/CJS 型別修正納入正式版。
+- 自訂 `WalletCliClient.run` 的 `dataSchema` 必須使用 Zod `>=4.6.6`；
+  錢包設定格式與預設值維持不變。
+- Node.js 需求為 `^22.23.4 || ^24.22.1 || >=26.12.1`。
+
+## [3.1.0-beta.1] - 2026-10-29
+
 ### Breaking changes
 
+- Upgrade to native Zod 4 (`>=4.6.6`). Caller-defined `WalletCliClient.run`
+  `dataSchema` values must also use Zod 4. Wallet configuration formats and
+  default values are preserved.
 - 套件執行、開發環境與 wallet-cli JavaScript entrypoint 的 Node.js 版本要求提高為
   `^22.23.4 || ^24.22.1 || >=26.12.1`，排除已停止維護及尚未套用 2026 年 10 月安全修補的版本。
 - CI 改用 Node.js 24.22.1；wallet-cli 執行前會檢查完整版本並拒絕預發布版。
+
+### Fixed
+
+- Upgrade viem and the TronWeb test dependency so both dependency chains use
+  `ws@8.21.0`, addressing fragment/chunk memory exhaustion and TypedArray
+  close-reason memory disclosure.
+- Resolve matching ESM and CommonJS declarations for every public entry point.
+- Reject oversized bounded schema collections before validating child elements.
+
+## [4.0.0-beta.1] - 2026-10-29
+
+- Deprecated prerelease. Use `3.1.0-beta.1` for the Zod 4 and WebSocket security updates.
 
 ## [3.0.0] - 2026-09-10
 

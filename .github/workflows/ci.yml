@@ -50,6 +50,9 @@ jobs:
       - name: Test CJS entry points
         run: pnpm test:cjs
 
+      - name: Test packed ESM and CJS consumers
+        run: pnpm test:package
+
       - name: Smoke test CLI
         env:
           AGENT_WALLET_DIR: ${{ runner.temp }}/agent-wallet-typescript-smoke

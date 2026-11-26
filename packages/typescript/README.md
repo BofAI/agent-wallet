@@ -1,13 +1,16 @@
 # agent-wallet (TypeScript)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
-![Node](https://img.shields.io/badge/node-≥18-blue.svg)
+![Node](https://img.shields.io/badge/node-patched%2022%20%2F%2024%20%2F%2026%2B-blue.svg)
 
 Universal multi-chain signing SDK for AI agents — TypeScript implementation.
 
-> **Current release:** `3.0.0`. This is a breaking upgrade from 2.x; review the
+> **Current release:** `3.1.0`. This is a breaking upgrade from 2.x; review the
 > [3.0 migration guide](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)
 > before upgrading.
+
+> **3.1 升級提醒：**已升級至原生 Zod 4，並更新 WebSocket 安全修補依賴。
+> 自訂 `WalletCliClient.run` schema 也必須使用 Zod `>=4.6.6`。
 
 從 2.x 升級請先閱讀
 [3.0 遷移指南](https://github.com/BofAI/agent-wallet/blob/main/doc/migration-v3.md)與
@@ -20,6 +23,8 @@ npm install @bankofai/agent-wallet
 # or
 pnpm add @bankofai/agent-wallet
 ```
+
+Requires Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`.
 
 包含 CLI（`agent-wallet`）、EVM 與 TRON 支援。`wallet_cli` wallet type 會將
 TRON/EVM transaction 與 typed-data 簽章委派給外部
@@ -56,6 +61,10 @@ import {
   ExternalSignerConfigResolver, // base class for external signer config resolvers
 } from '@bankofai/agent-wallet/advanced'
 ```
+
+Custom `WalletCliClient.run` contracts use Zod 4 (`zod >=4.6.6`). When upgrading,
+migrate caller-defined `dataSchema` values to Zod 4 as well. The wallet config
+file format and default values are unchanged.
 
 wallet-cli 的選用鏈操作從獨立 subpath 匯出，而且刻意維持 **TRON-only**：
 

@@ -78,7 +78,7 @@ const BuildTransferSchema = z
   .object({
     kind: z.string(),
     mode: z.string(),
-    tx: z.record(z.unknown()),
+    tx: z.record(z.string(), z.unknown()),
     fee: z.unknown(),
     rawAmount: z.string(),
     to: z.string(),
