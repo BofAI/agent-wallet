@@ -4,3 +4,14 @@ packages:
 allowBuilds:
   esbuild: true
 autoInstallPeers: false
+
+overrides:
+  "axios@1.x <1.21.1": "1.21.1"
+  "brace-expansion@2.x <2.1.6": "2.1.6"
+  "brace-expansion@5.x <5.0.11": "5.0.11"
+  "flatted@3.x <3.4.2": "3.4.2"
+  "form-data@4.x <4.0.6": "4.0.6"
+  "nanoid@3.x <3.3.18": "3.3.18"
+  "picomatch@4.x <4.0.4": "^4.0.4"
+  "postcss@8.x <8.5.18": "8.5.18"
+  "source-map-js@1.x <1.2.2": "1.2.2"
